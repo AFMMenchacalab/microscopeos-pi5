@@ -2,7 +2,7 @@ import sys, os, glob
 import tifffile, cv2, numpy as np
 
 # Buscar la carpeta de timelapse mas reciente
-carpetas = sorted(glob.glob("timelapse_2026*"), key=os.path.getmtime)
+carpetas = sorted(glob.glob("timelapse_*"), key=os.path.getmtime)
 if not carpetas:
     print("No se encontraron carpetas de timelapse.")
     sys.exit()
