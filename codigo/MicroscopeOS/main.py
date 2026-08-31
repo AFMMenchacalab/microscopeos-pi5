@@ -130,7 +130,14 @@ if __name__ == "__main__":
     # INICIALIZAR HARDWARE
     # ==============================
     camera = CameraController()
-    illumination = IlluminationController()
+
+    # TimelapseManager y server/api.py indexan por camara: illuminations[cam].
+    # En Pi 4 aqui se pasaba un unico IlluminationController, lo que rompia
+    # esos dos modulos (solo run_web.py lo construia bien).
+    illumination = {
+        0: IlluminationController(port="/dev/matriz_cam0"),
+        1: IlluminationController(port="/dev/matriz_cam1"),
+    }
 
     camera.set_exposure(
         config.camera.exposure_us,
@@ -159,3 +166,8 @@ if __name__ == "__main__":
 
     finally:
         camera.stop()
+        for luz in illumination.values():
+            try:
+                luz.close()
+            except Exception:
+                pass
