@@ -10,7 +10,17 @@ import tifffile
 import asyncio
 import json
 import sys
-sys.path.insert(0, '/home/microscope1/MicroscopeOS')
+from pathlib import Path
+
+# Raiz del proyecto, deducida de la ubicacion de este archivo.
+# Antes era sys.path.insert(0, '/home/microscope1/MicroscopeOS'), que ataba
+# el codigo al usuario y la ruta de la Pi 4.
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+STATIC_DIR = BASE_DIR / "server" / "static"
+
 from temperature_controller import temperature_controller
 
 
@@ -28,6 +38,9 @@ class TimelapseReq(BaseModel):
     stabilization: float = 0.3
     nombre: str = ""
     camaras: list = [0, 1]
+    # Captura de las dos camaras a la vez (solo Pi 5). Por defecto False:
+    # requiere que los canales opticos esten aislados. Ver TODO_HW.md.
+    simultaneo: bool = False
 
 class SetpointPayload(BaseModel):
     value: float
@@ -135,6 +148,43 @@ def create_app(camera, illuminations, timelapse):
             luz.off()
         return {"saved": guardados}
 
+    @app.post("/capture/both/{modo}")
+    def capture_both(modo: str):
+        """Captura las dos camaras en paralelo (Pi 5, sin mux).
+
+        Enciende AMBAS matrices a la vez. Ver TODO_HW.md (prioridad 2)
+        antes de usarlo con datos que importen.
+        """
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        from datetime import datetime
+        folder = "capturas_unicas"
+        os.makedirs(folder, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if modo == "dpc":
+            patrones = [("_L", "left"), ("_R", "right"),
+                        ("_T", "top"), ("_B", "bottom")]
+        else:
+            patrones = [("", "on")]
+        cams = sorted(illuminations.keys())
+        guardados = []
+        for sufijo, metodo in patrones:
+            for cam in cams:
+                luz = illuminations.get(cam)
+                if luz:
+                    getattr(luz, metodo)()
+            time.sleep(0.3)
+            res = camera.capture_both(
+                folder=folder,
+                filenames={c: f"{folder}/cam{c}_{ts}{sufijo}.tif" for c in cams},
+                camera_nums=cams)
+            guardados += [os.path.basename(v) for v in res.values()]
+            for cam in cams:
+                luz = illuminations.get(cam)
+                if luz:
+                    luz.off()
+        return {"saved": guardados}
+
     # ===============================
     # Exposicion / Brillo
     # ===============================
@@ -161,7 +211,8 @@ def create_app(camera, illuminations, timelapse):
             interval_seconds=req.interval,
             duration_seconds=req.duration,
             stabilization_time=req.stabilization,
-            camaras=req.camaras
+            camaras=req.camaras,
+            simultaneo=req.simultaneo
         )
         return {"status": "started"}
 
@@ -208,11 +259,11 @@ def create_app(camera, illuminations, timelapse):
     # ===============================
     # Interfaz
     # ===============================
-    app.mount("/static", StaticFiles(directory="server/static"), name="static")
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     def index():
-        with open("server/static/index.html", "r") as f:
+        with open(STATIC_DIR / "index.html", "r") as f:
             return f.read()
 
     return app

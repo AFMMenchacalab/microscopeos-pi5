@@ -14,6 +14,11 @@ dtparam=audio=on
 # /boot/firmware/overlays/README
 
 # Automatically load overlays for detected cameras
+# Pi 5: las dos IMX219 van a los DOS puertos CSI nativos, sin multiplexor.
+# Se declaran explicitamente en vez de usar autodeteccion, para fijar que
+# camara es cam0 y cual cam1.
+# TODO-HW: si `rpicam-hello --list-cameras` no ve las dos, probar
+# camera_auto_detect=1 y quitar los dos dtoverlay=imx219 de abajo.
 camera_auto_detect=0
 
 # Automatically load overlays for detected DSI displays
@@ -39,15 +44,27 @@ disable_overscan=1
 # Run as fast as firmware / board allows
 arm_boost=1
 
-[cm4]
-# Enable host mode on the 2711 built-in XHCI USB controller.
-# This line should be removed if the legacy DWC2 controller is required
-# (e.g. for USB device mode) or if USB support is not required.
-otg_mode=1
-
-[cm5]
-dtoverlay=dwc2,dr_mode=host
+# Los bloques [cm4]/[cm5] del config.txt de Pi 4 se conservan comentados:
+# solo aplican a Compute Modules, no a una Raspberry Pi 5 de placa normal.
+# [cm4]
+# otg_mode=1
+# [cm5]
+# dtoverlay=dwc2,dr_mode=host
 
 [all]
-enable_uart=1
-dtoverlay=camera-mux-4port,cam0-imx219,cam1-imx219
+# GPIO14/15 (UART) quedan LIBRES en Pi 5.
+# En Pi 4 estaban ocupados por enable_uart=1 + console=serial0 en cmdline.txt.
+# Ambos eliminados. Si vuelves a necesitar consola serie, re-anade
+# `enable_uart=1` aqui y `console=serial0,115200` en cmdline.txt, pero
+# entonces GPIO14/15 dejan de estar disponibles.
+
+# Multiplexor Arducam Multi Camera Adapter V2.2 ELIMINADO.
+# En Pi 4B era necesario porque la placa tiene un solo puerto CSI:
+#     dtoverlay=camera-mux-4port,cam0-imx219,cam1-imx219
+# El Pi 5 tiene dos puertos CSI nativos, asi que cada sensor va directo.
+# TODO-HW: anotar que GPIOs liberaba el overlay del mux con
+#     dtoverlay -h camera-mux-4port
+# antes de reasignarlos; motortest.py usa BCM 20/21 y podian estar en
+# conflicto. Ver TODO_HW.md (prioridad 3).
+dtoverlay=imx219,cam0
+dtoverlay=imx219,cam1

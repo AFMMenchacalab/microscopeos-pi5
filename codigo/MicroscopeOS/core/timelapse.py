@@ -106,8 +106,86 @@ class TimelapseManager:
         except Exception as e:
             self._log(f"Error generando gráfica: {e}")
 
+    def _capturar_secuencial(self, patrones, camaras, ts, stabilization_time):
+        """Una camara y una matriz encendida a la vez.
+
+        Es el comportamiento del montaje de Pi 4 y el unico seguro si los
+        dos canales opticos no estan aislados entre si.
+        """
+        for cam in camaras:
+            cam_folder = os.path.join(self.base_folder, f"cam{cam}")
+            luz = self.illuminations.get(cam)
+
+            for sufijo, metodo_luz in patrones:
+                try:
+                    if luz is not None:
+                        getattr(luz, metodo_luz)()
+                        time.sleep(stabilization_time)
+
+                    filename = os.path.join(
+                        cam_folder, f"img_{ts}{sufijo}.tif")
+                    self.camera.capture_image(
+                        camera_num=cam,
+                        folder=cam_folder,
+                        filename=filename)
+
+                    self._log(f"  cam{cam}{sufijo}: OK")
+
+                except Exception as e:
+                    self._log(f"  cam{cam}{sufijo}: ERROR -> {e}")
+                finally:
+                    if luz is not None:
+                        try:
+                            luz.off()
+                        except Exception:
+                            pass
+
+    def _capturar_simultaneo(self, patrones, camaras, ts, stabilization_time):
+        """Las dos camaras disparan a la vez, con las dos matrices encendidas.
+
+        Solo posible en Pi 5 (dos puertos CSI nativos). Reduce el ciclo DPC
+        de 8 capturas secuenciales a 4 pasos paralelos.
+
+        # TODO-HW: requiere que la matriz de cam0 no ilumine el sensor de
+        # cam1 ni viceversa. Si hay diafonia optica, esto contamina los
+        # datos sin dar ningun error. Ver TODO_HW.md (prioridad 2).
+        """
+        for sufijo, metodo_luz in patrones:
+            luces = [self.illuminations.get(cam) for cam in camaras]
+            try:
+                encendidas = False
+                for luz in luces:
+                    if luz is not None:
+                        getattr(luz, metodo_luz)()
+                        encendidas = True
+                if encendidas:
+                    time.sleep(stabilization_time)
+
+                filenames = {
+                    cam: os.path.join(self.base_folder, f"cam{cam}",
+                                      f"img_{ts}{sufijo}.tif")
+                    for cam in camaras
+                }
+                self.camera.capture_both(
+                    folder=self.base_folder,
+                    filenames=filenames,
+                    camera_nums=camaras)
+
+                for cam in camaras:
+                    self._log(f"  cam{cam}{sufijo}: OK")
+
+            except Exception as e:
+                self._log(f"  cam*{sufijo}: ERROR -> {e}")
+            finally:
+                for luz in luces:
+                    if luz is not None:
+                        try:
+                            luz.off()
+                        except Exception:
+                            pass
+
     def _run(self, modo, interval_seconds, duration_seconds,
-             stabilization_time, camaras):
+             stabilization_time, camaras, simultaneo):
 
         self.state = TimelapseState.RUNNING
         patrones = MODOS[modo]
@@ -124,7 +202,8 @@ class TimelapseManager:
             f.write("timestamp,ciclo,temperatura,setpoint,pwm\n")
 
         self._log(f"Timelapse iniciado | modo={modo} | camaras={camaras} | "
-                  f"intervalo={interval_seconds}s | duracion={duration_seconds}s")
+                  f"intervalo={interval_seconds}s | duracion={duration_seconds}s | "
+                  f"captura={'simultanea' if simultaneo else 'secuencial'}")
 
         start_time = time.monotonic()
         next_capture_time = start_time
@@ -145,33 +224,12 @@ class TimelapseManager:
                 # Registrar temperatura al inicio de cada ciclo
                 self._log_temp(ciclo, ts)
 
-                for cam in camaras:
-                    cam_folder = os.path.join(self.base_folder, f"cam{cam}")
-                    luz = self.illuminations.get(cam)
-
-                    for sufijo, metodo_luz in patrones:
-                        try:
-                            if luz is not None:
-                                getattr(luz, metodo_luz)()
-                                time.sleep(stabilization_time)
-
-                            filename = os.path.join(
-                                cam_folder, f"img_{ts}{sufijo}.tif")
-                            self.camera.capture_image(
-                                camera_num=cam,
-                                folder=cam_folder,
-                                filename=filename)
-
-                            self._log(f"  cam{cam}{sufijo}: OK")
-
-                        except Exception as e:
-                            self._log(f"  cam{cam}{sufijo}: ERROR -> {e}")
-                        finally:
-                            if luz is not None:
-                                try:
-                                    luz.off()
-                                except Exception:
-                                    pass
+                if simultaneo:
+                    self._capturar_simultaneo(patrones, camaras, ts,
+                                              stabilization_time)
+                else:
+                    self._capturar_secuencial(patrones, camaras, ts,
+                                              stabilization_time)
 
                 next_capture_time += interval_seconds
 
@@ -189,7 +247,7 @@ class TimelapseManager:
         self.state = TimelapseState.STOPPED
 
     def start(self, modo="blanco", interval_seconds=300, duration_seconds=3600,
-              stabilization_time=0.3, camaras=[0, 1]):
+              stabilization_time=0.3, camaras=[0, 1], simultaneo=False):
         if self.state == TimelapseState.RUNNING:
             print("Timelapse ya esta corriendo.")
             return
@@ -200,7 +258,7 @@ class TimelapseManager:
         self.thread = threading.Thread(
             target=self._run,
             args=(modo, interval_seconds, duration_seconds,
-                  stabilization_time, camaras),
+                  stabilization_time, camaras, simultaneo),
             daemon=True
         )
         self.thread.start()
