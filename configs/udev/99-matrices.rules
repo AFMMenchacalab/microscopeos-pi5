@@ -1,0 +1,2 @@
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{serial}=="e663b03597616739", SYMLINK+="matriz_cam0"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{serial}=="e663b03597762a39", SYMLINK+="matriz_cam1"

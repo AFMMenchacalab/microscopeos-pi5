@@ -1,0 +1,64 @@
+# requirements_pi4.txt
+# Generado leyendo los .dist-info / .egg-info directamente en la microSD.
+# NO se ejecuto pip en ningun momento (regla del usuario).
+#
+# El venv del proyecto se creo con:
+#   python3 -m venv --system-site-packages /home/microscope1/MicroscopeOS/venv
+# (ver venv/pyvenv.cfg). Esto significa que el entorno real = paquetes del
+# venv (abajo) + paquetes del sistema (site-packages de apt), porque
+# include-system-site-packages = true. Los paquetes de hardware
+# (picamera2, RPi.GPIO, opencv, numpy, pyserial) NO estan en el venv:
+# vienen del sistema via apt. Por eso hay dos secciones.
+
+# ============================================================
+# SECCION 1 — paquetes instalados con pip DENTRO del venv
+# (venv/lib/python3.13/site-packages/*.dist-info)
+# ============================================================
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.12.1
+fastapi==0.128.8
+h11==0.16.0
+mpremote==1.28.0
+pip==25.1.1
+pydantic==2.12.5
+pydantic_core==2.41.5
+PyQt6==6.10.2
+PyQt6_Qt6==6.10.2
+PyQt6_sip==13.11.0
+starlette==0.52.1
+tifffile==2026.1.28
+typing_extensions==4.15.0
+typing_inspection==0.4.2
+uvicorn==0.40.0
+
+# ============================================================
+# SECCION 2 — paquetes del SISTEMA (instalados via apt, heredados
+# por el venv gracias a --system-site-packages=true).
+# Filtrado a solo los que el codigo del proyecto realmente importa
+# o de los que dependen directamente (se detecto via grep de imports
+# en core/, server/, interfaces/, main.py, motortest.py).
+# En Pi 5 estos se instalan con apt, NO con pip, para conservar los
+# bindings nativos (libcamera, GPIO chip, etc).
+# ============================================================
+# Camara (stack libcamera/picamera2 - Pi4 usa unicam, Pi5 usa CFE/PiSP)
+picamera2==0.3.34
+# Vision / procesamiento de imagen
+opencv==4.10.0
+numpy==2.2.4
+# GPIO -- IMPORTANTE: ya es el shim compatible con Pi5, ver inventario.md
+rpi-lgpio==0.6
+lgpio==0.2.2.0
+gpiod==2.2.0
+# opcional, no se ve importado directo pero suele acompañar a rpi-lgpio/lgpio
+gpiozero==2.0.1
+# Serial (comunicacion con las placas RP2040 de las matrices LED)
+pyserial==3.5
+
+# ============================================================
+# Paquetes usados por firmware/scripts fuera de MicroscopeOS/
+# (ver codigo/extras/). No se listan versiones porque corren en el
+# RP2040 (MicroPython), no en la Pi.
+# ============================================================
+# - mpremote (ya listado arriba, seccion 1) se usa para flashear/hablar
+#   con las placas RP2040 (micropython_rp2040.uf2)

@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MicroscopeOS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap');
+  :root{
+    --bg:#0a0e0d;--panel:#111816;--panel2:#0d1413;--line:#1f2e2a;
+    --txt:#c8d6d0;--dim:#5f7269;--green:#3ddc84;--amber:#ffb454;--red:#ff5c5c;
+    --glow:rgba(61,220,132,.15);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:14px;
+    background-image:radial-gradient(circle at 20% 10%,#0f1a17 0%,var(--bg) 55%);min-height:100vh;padding:18px}
+  .head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:18px}
+  .head h1{font-family:'Space Grotesk',sans-serif;font-size:22px;letter-spacing:1px;color:#fff;font-weight:700}
+  .head h1 span{color:var(--green)}
+  .badge{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 14px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim);transition:.3s}
+  .dot.idle{background:var(--green);box-shadow:0 0 8px var(--green)}
+  .dot.run{background:var(--red);box-shadow:0 0 10px var(--red);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .grid{display:grid;grid-template-columns:1fr 360px;gap:18px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .panel h2{font-family:'Space Grotesk',sans-serif;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .panel h2::before{content:'';width:14px;height:2px;background:var(--green)}
+  .view{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:10px;aspect-ratio:4/3;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .view img{width:100%;height:100%;object-fit:contain;display:none}
+  .view .ph{color:var(--dim);font-size:13px;text-align:center;padding:20px}
+  .scan{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(0,0,0,.12) 3px 4px);opacity:.4}
+  .camtag{position:absolute;top:10px;left:10px;font-size:11px;background:rgba(0,0,0,.6);padding:4px 10px;border-radius:5px;color:var(--green);border:1px solid var(--line);letter-spacing:1px}
+  .live{position:absolute;top:10px;right:10px;font-size:11px;background:rgba(0,0,0,.6);padding:4px 10px;border-radius:5px;color:var(--red);border:1px solid var(--line);display:none;align-items:center;gap:6px}
+  .live::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--red);animation:pulse 1s infinite}
+  .camsel{display:flex;gap:8px;margin-top:12px}
+  .camsel button{flex:1}
+  button{font-family:'JetBrains Mono',monospace;font-size:13px;cursor:pointer;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:11px 14px;transition:.15s;letter-spacing:.5px}
+  button:hover:not(:disabled){border-color:var(--green);color:#fff;background:#16211d}
+  button:disabled{opacity:.3;cursor:not-allowed}
+  button.active{border-color:var(--green);color:var(--green);background:var(--glow)}
+  button.primary{background:var(--green);color:#04130a;border-color:var(--green);font-weight:700}
+  button.primary:hover:not(:disabled){background:#5ef29a}
+  button.danger{background:transparent;color:var(--red);border-color:#3a1f1f}
+  button.danger:hover:not(:disabled){background:var(--red);color:#fff;border-color:var(--red)}
+  button.lit{background:var(--amber);color:#1a1100;border-color:var(--amber);font-weight:700}
+  button.lit:hover:not(:disabled){background:#ffc673}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;color:var(--dim);margin-bottom:6px;letter-spacing:1px;text-transform:uppercase}
+  .field input,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:10px;color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:13px}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--green)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .slider{display:flex;align-items:center;gap:10px}
+  .slider input[type=range]{flex:1;accent-color:var(--amber)}
+  .slider .val{min-width:42px;text-align:right;color:var(--amber);font-weight:700}
+  .stat{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}
+  .stat:last-child{border:0}
+  .stat .k{color:var(--dim)}
+  .stat .v.hot{color:var(--amber)}
+  .actions{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--panel);border:1px solid var(--green);color:var(--green);padding:12px 22px;border-radius:8px;font-size:13px;transition:.3s;z-index:50}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .valve-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 10px;border-radius:20px;border:1px solid var(--line)}
+  .valve-pill .vdot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .valve-pill.open{color:var(--green);border-color:var(--green);background:var(--glow)}
+  .valve-pill.closed{color:var(--dim);border-color:var(--line)}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>MICROSCOPE<span>OS</span></h1>
+  <div class="badge"><span class="dot idle" id="dot"></span><span id="state">IDLE</span></div>
+</div>
+<div class="grid">
+  <div class="panel">
+    <h2>Vista / Posicionamiento</h2>
+    <div class="view">
+      <span class="ph" id="ph">Selecciona una cámara para ver</span>
+      <img id="img">
+      <div class="scan"></div>
+      <div class="camtag" id="camtag" style="display:none">CAM 0</div>
+      <div class="live" id="liveTag">EN VIVO</div>
+    </div>
+    <div class="camsel">
+      <button id="cam0" onclick="verCam(0)">◉ Cámara 0</button>
+      <button id="cam1" onclick="verCam(1)">◉ Cámara 1</button>
+    </div>
+    <div class="camsel">
+      <button id="liveBtn" onclick="toggleLive()">▶ En vivo</button>
+      <button id="refresh" onclick="refrescar()">⟳ Refrescar</button>
+    </div>
+
+    <h2 style="margin-top:22px">Luz manual</h2>
+    <div class="camsel">
+      <button id="lightBtn" onclick="toggleLuz()">💡 Encender luz</button>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Intensidad LED</label>
+      <div class="slider">
+        <input type="range" id="bright" min="0" max="100" value="80" oninput="brightLabel()">
+        <span class="val" id="brightVal">80%</span>
+      </div>
+    </div>
+
+    <h2 style="margin-top:14px">Captura única</h2>
+    <div class="field">
+      <label>Modo de foto</label>
+      <select id="capModo"><option value="normal">Normal (1 foto)</option><option value="dpc">DPC (4 fotos L/R/T/B)</option></select>
+    </div>
+    <button id="snap" onclick="capturar()" style="width:100%">📷 Tomar foto</button>
+  </div>
+
+  <div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Cámara</h2>
+      <div class="row">
+        <div class="field"><label>Exposición µs</label><input type="number" id="exp" value="12000"></div>
+        <div class="field"><label>Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
+      </div>
+      <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Timelapse</h2>
+      <div class="field"><label>Nombre experimento</label><input type="text" id="nombre" placeholder="ej. celulas_dia1"></div>
+      <div class="field"><label>Modo iluminación</label>
+        <select id="modo"><option value="blanco">Blanco (1 foto)</option><option value="dpc">DPC (4 fotos)</option></select>
+      </div>
+      <div class="row">
+        <div class="field"><label>Intervalo s</label><input type="number" id="intv" value="300"></div>
+        <div class="field"><label>Duración s</label><input type="number" id="dur" value="3600"></div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="start" onclick="iniciar()">▶ Iniciar Timelapse</button>
+        <button class="danger" id="stop" onclick="detener()" disabled>■ STOP de emergencia</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Temperatura</h2>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:12px">
+        <span id="tVal" style="font-size:2.2rem;font-weight:700;color:var(--txt);min-width:5ch;text-align:right">--.-</span>
+        <span style="color:var(--dim)">°C</span>
+        <span id="tDot" style="width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:8px;display:inline-block"></span>
+      </div>
+      <div class="stat"><span class="k">Setpoint</span><span class="v" id="tSp">-- °C</span></div>
+      <div class="stat"><span class="k">PWM calefactor</span><span class="v" id="tPwm">--</span></div>
+      <div style="background:var(--panel2);border-radius:3px;height:4px;margin:10px 0">
+        <div id="tBar" style="background:var(--amber);height:100%;width:0%;border-radius:3px;transition:width .4s"></div>
+      </div>
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label>Setpoint objetivo</label>
+        <div class="slider">
+          <input type="range" id="spSlider" min="20" max="80" step="0.5" value="37" oninput="document.getElementById('spPrev').textContent=parseFloat(this.value).toFixed(1)">
+          <span class="val" id="spPrev">37.0</span>
+        </div>
+      </div>
+      <button onclick="aplicarSetpoint()" style="width:100%;margin-top:8px">Aplicar setpoint</button>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>CO2</h2>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:12px">
+        <span id="cVal" style="font-size:2.2rem;font-weight:700;color:var(--txt);min-width:5ch;text-align:right">--.-</span>
+        <span style="color:var(--dim)">ppm</span>
+        <span id="cDot" style="width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:8px;display:inline-block"></span>
+      </div>
+      <div class="stat"><span class="k">Setpoint</span><span class="v" id="cSp">-- ppm</span></div>
+      <div class="stat"><span class="k">Válvula solenoide</span><span class="v"><span class="valve-pill closed" id="valvePill"><span class="vdot"></span><span id="valveTxt">--</span></span></span></div>
+      <div class="stat"><span class="k">Duty cycle válvula</span><span class="v" id="cDuty">--</span></div>
+      <div style="background:var(--panel2);border-radius:3px;height:4px;margin:10px 0">
+        <div id="cBar" style="background:#4dabf7;height:100%;width:0%;border-radius:3px;transition:width .4s"></div>
+      </div>
+      <div class="stat"><span class="k">Temp. ambiente (SCD30)</span><span class="v" id="cAmbient">-- °C</span></div>
+      <div class="stat"><span class="k">Humedad</span><span class="v" id="cHum">-- %</span></div>
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label>Setpoint CO2</label>
+        <div class="slider">
+          <input type="range" id="co2Slider" min="400" max="100000" step="500" value="40000" oninput="document.getElementById('co2Prev').textContent=parseInt(this.value)">
+          <span class="val" id="co2Prev">40000</span>
+        </div>
+      </div>
+      <button onclick="aplicarCo2Setpoint()" style="width:100%;margin-top:8px">Aplicar setpoint CO2</button>
+    </div>
+    <div class="panel">
+      <h2>Estado</h2>
+      <div class="stat"><span class="k">Estado</span><span class="v" id="s_state">IDLE</span></div>
+      <div class="stat"><span class="k">Ciclo actual</span><span class="v" id="s_ciclo">—</span></div>
+      <div class="stat"><span class="k">Cámara activa</span><span class="v" id="s_cam">—</span></div>
+      <div class="stat"><span class="k">Carpeta</span><span class="v" id="s_folder" style="font-size:10px">—</span></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+let running=false,activeCam=0,liveOn=false,luzOn=false,liveTimer=null;
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function brightLabel(){document.getElementById('brightVal').textContent=document.getElementById('bright').value+'%';}
+
+async function verCam(n){
+  if(running)return;
+  activeCam=n;
+  document.getElementById('cam0').classList.toggle('active',n===0);
+  document.getElementById('cam1').classList.toggle('active',n===1);
+  await refrescar();
+}
+async function refrescar(){
+  if(running){toast('Timelapse en curso');return;}
+  const ph=document.getElementById('ph'),img=document.getElementById('img');
+  if(img.style.display!=='block'){ph.textContent='Capturando...';ph.style.display='block';}
+  try{
+    const r=await fetch('/preview/'+activeCam+'?t='+Date.now());
+    if(r.status===409)return;
+    const blob=await r.blob();
+    img.src=URL.createObjectURL(blob);img.style.display='block';ph.style.display='none';
+    const tag=document.getElementById('camtag');tag.textContent='CAM '+activeCam;tag.style.display='block';
+  }catch(e){ph.textContent='Error';}
+}
+async function toggleLive(){
+  if(running)return;
+  liveOn=!liveOn;
+  const btn=document.getElementById('liveBtn');
+  const img=document.getElementById('img');
+  const ph=document.getElementById('ph');
+  btn.classList.toggle('active',liveOn);
+  btn.textContent=liveOn?'⏸ Detener vivo':'▶ En vivo';
+  document.getElementById('liveTag').style.display=liveOn?'flex':'none';
+  document.getElementById('cam0').disabled=liveOn;
+  document.getElementById('cam1').disabled=liveOn;
+  document.getElementById('refresh').disabled=liveOn;
+  document.getElementById('snap').disabled=liveOn;
+
+  if(liveOn){
+    await fetch('/live/start/'+activeCam,{method:'POST'});
+    ph.style.display='none';
+    img.style.display='block';
+    img.src='/live/stream?t='+Date.now();   // stream MJPEG continuo
+    const tag=document.getElementById('camtag');
+    tag.textContent='CAM '+activeCam;tag.style.display='block';
+  }else{
+    img.src='';
+    await fetch('/live/stop',{method:'POST'});
+    document.getElementById('cam'+activeCam).disabled=false;
+    document.getElementById('cam'+(activeCam===0?1:0)).disabled=false;
+    document.getElementById('refresh').disabled=false;
+    document.getElementById('snap').disabled=false;
+    refrescar();
+  }
+}
+async function toggleLuz(){
+  if(running)return;
+  luzOn=!luzOn;
+  const b=document.getElementById('lightBtn');
+  if(luzOn){
+    await fetch('/brightness',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({percent:+document.getElementById('bright').value})});
+    await fetch('/light/on',{method:'POST'});
+    b.classList.add('lit');b.textContent='💡 Apagar luz';
+  }else{
+    await fetch('/light/off',{method:'POST'});
+    b.classList.remove('lit');b.textContent='💡 Encender luz';
+  }
+}
+async function capturar(){
+  if(running)return;
+  if(liveOn)await toggleLive();   // apaga el vivo antes de capturar
+  const modo=document.getElementById('capModo').value;
+  toast('Capturando ('+modo+')...');
+  const r=await fetch('/capture/'+activeCam+'/'+modo,{method:'POST'});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Guardado: '+(Array.isArray(d.saved)?d.saved.length+' fotos':d.saved));
+  luzOn=false;document.getElementById('lightBtn').classList.remove('lit');document.getElementById('lightBtn').textContent='💡 Encender luz';
+}
+async function aplicarCamara(){
+  await fetch('/exposure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exposure:+document.getElementById('exp').value,gain:+document.getElementById('gain').value})});
+  toast('Exposición aplicada');
+}
+async function iniciar(){
+  if(liveOn)toggleLive();
+  const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1]};
+  const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Timelapse iniciado');
+}
+async function detener(){await fetch('/timelapse/stop',{method:'POST'});toast('Detenido');}
+function setRunning(on){
+  running=on;
+  document.getElementById('dot').className='dot '+(on?'run':'idle');
+  document.getElementById('state').textContent=on?'RUNNING':'IDLE';
+  document.getElementById('s_state').textContent=on?'RUNNING':'IDLE';
+  ['cam0','cam1','refresh','snap','start','liveBtn','lightBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  document.getElementById('stop').disabled=!on;
+  if(on&&liveOn){liveOn=false;clearInterval(liveTimer);document.getElementById('liveTag').style.display='none';document.getElementById('liveBtn').textContent='▶ En vivo';document.getElementById('liveBtn').classList.remove('active');}
+}
+async function poll(){
+  try{
+    const r=await fetch('/status');const s=await r.json();
+    if(s.running!==running)setRunning(s.running);
+    document.getElementById('s_ciclo').textContent=s.ciclo||'—';
+    document.getElementById('s_ciclo').className='v'+(s.running?' hot':'');
+    document.getElementById('s_cam').textContent='CAM '+s.camara_activa;
+    document.getElementById('s_folder').textContent=s.carpeta||'—';
+  }catch(e){}
+}
+setInterval(poll,2000);poll();verCam(0);
+
+// --- Temperatura SSE ---
+(function(){
+  const evtSource = new EventSource('/api/temperature/stream');
+  evtSource.onmessage = function(e){
+    try{
+      const d = JSON.parse(e.data);
+      document.getElementById('tDot').style.background = d.connected ? 'var(--green)' : 'var(--red)';
+      if(d.temperature !== null && d.temperature !== undefined){
+        const t = parseFloat(d.temperature).toFixed(1);
+        const el = document.getElementById('tVal');
+        el.textContent = t;
+        const diff = Math.abs(d.temperature - d.setpoint);
+        el.style.color = diff < 0.5 ? 'var(--green)' : diff < 2 ? 'var(--amber)' : 'var(--red)';
+      }
+      if(d.setpoint !== undefined){
+        document.getElementById('tSp').textContent = parseFloat(d.setpoint).toFixed(1) + ' °C';
+        if(document.activeElement !== document.getElementById('spSlider')){
+          document.getElementById('spSlider').value = d.setpoint;
+          document.getElementById('spPrev').textContent = parseFloat(d.setpoint).toFixed(1);
+        }
+      }
+      if(d.pwm !== null && d.pwm !== undefined){
+        document.getElementById('tPwm').textContent = d.pwm + ' / 255';
+        document.getElementById('tBar').style.width = ((d.pwm/255)*100).toFixed(1) + '%';
+      }
+
+      // --- CO2 / válvula (mismo stream) ---
+      const hasCo2 = d.co2 !== null && d.co2 !== undefined && !isNaN(d.co2);
+      document.getElementById('cDot').style.background = (d.connected && hasCo2) ? 'var(--green)' : 'var(--dim)';
+      const cVal = document.getElementById('cVal');
+      if(hasCo2){
+        cVal.textContent = parseFloat(d.co2).toFixed(0);
+        cVal.style.color = 'var(--txt)';
+      }else{
+        cVal.textContent = '--.-';
+      }
+      if(d.co2_setpoint !== undefined && d.co2_setpoint !== null){
+        document.getElementById('cSp').textContent = parseFloat(d.co2_setpoint).toFixed(0) + ' ppm';
+        if(document.activeElement !== document.getElementById('co2Slider')){
+          document.getElementById('co2Slider').value = d.co2_setpoint;
+          document.getElementById('co2Prev').textContent = parseInt(d.co2_setpoint);
+        }
+      }
+      const pill = document.getElementById('valvePill'), vtxt = document.getElementById('valveTxt');
+      if(d.valve_open !== null && d.valve_open !== undefined){
+        const isOpen = !!d.valve_open;
+        pill.className = 'valve-pill ' + (isOpen ? 'open' : 'closed');
+        vtxt.textContent = isOpen ? 'ABIERTA' : 'CERRADA';
+      }else{
+        pill.className = 'valve-pill closed';
+        vtxt.textContent = '--';
+      }
+      if(d.co2_duty !== null && d.co2_duty !== undefined){
+        document.getElementById('cDuty').textContent = parseFloat(d.co2_duty).toFixed(1) + ' %';
+        document.getElementById('cBar').style.width = Math.min(100,parseFloat(d.co2_duty)).toFixed(1) + '%';
+      }
+      if(d.ambient_temp !== null && d.ambient_temp !== undefined){
+        document.getElementById('cAmbient').textContent = parseFloat(d.ambient_temp).toFixed(1) + ' °C';
+      }
+      if(d.humidity !== null && d.humidity !== undefined){
+        document.getElementById('cHum').textContent = parseFloat(d.humidity).toFixed(1) + ' %';
+      }
+    }catch(err){}
+  };
+  evtSource.onerror = function(){
+    document.getElementById('tDot').style.background = 'var(--red)';
+    document.getElementById('tVal').textContent = 'ERR';
+    document.getElementById('cDot').style.background = 'var(--red)';
+  };
+})();
+async function aplicarSetpoint(){
+  const val = parseFloat(document.getElementById('spSlider').value);
+  const r = await fetch('/api/temperature/setpoint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val})});
+  const d = await r.json();
+  toast(d.ok ? 'Setpoint: '+val+'°C' : 'Error: '+d.error);
+}
+async function aplicarCo2Setpoint(){
+  const val = parseFloat(document.getElementById('co2Slider').value);
+  const r = await fetch('/api/temperature/co2_setpoint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val})});
+  const d = await r.json();
+  toast(d.ok ? 'Setpoint CO2: '+val+' ppm' : 'Error: '+d.error);
+}
+</script>
+</body>
+</html>

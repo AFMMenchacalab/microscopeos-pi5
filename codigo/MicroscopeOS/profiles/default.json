@@ -1,0 +1,16 @@
+{
+    "camera": {
+        "exposure_us": 12000,
+        "gain": 1.2,
+        "resolution_width": 3280,
+        "resolution_height": 2464
+    },
+    "timelapse": {
+        "interval_seconds": 60,
+        "duration_seconds": 3600,
+        "stabilization_time": 0.3
+    },
+    "illumination": {
+        "gpio_pin": 17
+    }
+}

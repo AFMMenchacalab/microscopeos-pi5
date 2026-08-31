@@ -1,0 +1,60 @@
+/home/AlexFlores/Escritorio/MicroscopeOS_Pi4_export/codigo
+├── extras
+│   ├── arduino_sketches
+│   ├── incubadora_temperatura
+│   │   ├── Control_Incubator_TempCO2
+│   │   │   └── Control_Incubator_TempCO2.ino
+│   │   ├── Control_Incubator_William1
+│   │   │   └── Control_Incubator_William1.ino
+│   │   ├── Temperature_PID_DS18B20
+│   │   │   └── Temperature_PID_DS18B20.ino
+│   │   └── Temperature_PID_Modulo1_SerialControl
+│   │       └── Temperature_PID_Modulo1_SerialControl.ino
+│   └── matrices_led_rp2040
+│       ├── capture_led.py
+│       ├── led_test.py
+│       ├── mapeo_leds.py
+│       ├── micropython_rp2040.uf2
+│       └── rp2040_firmware.py
+└── MicroscopeOS
+    ├── config.json
+    ├── core
+    │   ├── camera.py
+    │   ├── config.py
+    │   ├── illumination.py
+    │   ├── preview.py
+    │   ├── profile_manager.py
+    │   └── timelapse.py
+    ├── interfaces
+    │   └── desktop_gui.py
+    ├── main.py
+    ├── motortest.py
+    ├── profiles
+    │   ├── alex 1.json
+    │   ├── Alex prueba 1.json
+    │   └── default.json
+    ├── recording.avi
+    ├── run_web.py
+    ├── server
+    │   ├── api.py
+    │   └── static
+    │       └── index.html
+    ├── start_microscope.py
+    ├── start_microscope.sh
+    ├── temperature_controller.py
+    ├── test_captura.py
+    ├── test_luz.py
+    ├── test_timelapse.py
+    └── ver_timelapse.py
+
+15 directories, 33 files
+
+# codigo/extras/arduino_sketches/libraries/ (omitido arriba, son librerias de terceros):
+#   - Adafruit_BusIO (1.17.4)
+#   - Adafruit_GFX_Library (1.12.6)
+#   - Adafruit_SCD30 (1.0.11)
+#   - Adafruit_SSD1306 (2.5.17)
+#   - Adafruit_Unified_Sensor (1.1.15)
+#   - DallasTemperature (4.0.6)
+#   - OneWire (2.3.8)
+#   - PID (1.2.0)

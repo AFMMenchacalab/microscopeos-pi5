@@ -1,0 +1,16 @@
+[Unit]
+Description=MicroscopeOS Service
+After=graphical.target
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=microscope1
+WorkingDirectory=/home/microscope1/MicroscopeOS
+ExecStart=/home/microscope1/MicroscopeOS/start_microscope.sh
+Restart=always
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/microscope1/.Xauthority
+
+[Install]
+WantedBy=graphical.target
