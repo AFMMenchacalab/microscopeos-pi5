@@ -10,13 +10,15 @@ camera = CameraController()
 camera.set_exposure(12000, 1.2)
 
 # TimelapseManager indexa por camara: {0: ..., 1: ...}
+# max_value=46: tope de corriente para alimentacion USB (ver README de la
+# matriz, seccion "Potencia" -- FULL:255 son ~3.8A y un puerto USB da
+# 0.5-0.9A). Antes esto quedaba en 255 sin tope y set_brightness(100) abajo
+# lo mandaba a FULL:255 sin supervision.
 illuminations = {
-    0: IlluminationController(port="/dev/matriz_cam0"),
-    1: IlluminationController(port="/dev/matriz_cam1"),
+    0: IlluminationController(port="/dev/matriz_cam0", max_value=46),
+    1: IlluminationController(port="/dev/matriz_cam1", max_value=46),
 }
 for luz in illuminations.values():
-    # TODO-HW: 100% = 255/255. Con las matrices 8x8 por USB eso son ~3.8 A.
-    # Bajar antes de dejarlo corriendo sin supervision. Ver TODO_HW.md.
     luz.set_brightness(100)
 
 timelapse = TimelapseManager(camera, illuminations)
