@@ -6,9 +6,9 @@ After=network.target
 Type=simple
 # Ajustar User/rutas si el usuario o la ruta del proyecto cambian en Pi 5.
 # El codigo Python ya no lleva rutas absolutas: se deducen de __file__.
-User=microscope1
-WorkingDirectory=/home/microscope1/MicroscopeOS
-ExecStart=/home/microscope1/MicroscopeOS/venv/bin/python3 /home/microscope1/MicroscopeOS/run_web.py
+User=microscope2
+WorkingDirectory=/home/microscope2/MicroscopeOS/codigo/MicroscopeOS
+ExecStart=/home/microscope2/MicroscopeOS/venv/bin/python3 /home/microscope2/MicroscopeOS/codigo/MicroscopeOS/run_web.py
 Restart=on-failure
 RestartSec=5
 
