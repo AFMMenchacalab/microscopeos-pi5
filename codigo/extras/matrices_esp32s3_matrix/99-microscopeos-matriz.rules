@@ -1,0 +1,27 @@
+# MicroscopeOS - nombres estables para las matrices DPC (Waveshare ESP32-S3-Matrix)
+#
+# Sustituye a las reglas de los RP2040. El ESP32-S3 en modo hwcdc expone el
+# USB-Serial/JTAG nativo con VID:PID 303a:1001 y usa su MAC como numero de
+# serie, que es unico por placa y no cambia al reflashear.
+#
+# Ventaja frente al RP2040: el descriptor USB es el mismo con el sketch
+# corriendo y con el bootloader ROM, asi que el symlink tambien esta presente
+# durante el flasheo.
+#
+# Para leer el serie de una placa:
+#     udevadm info -a -n /dev/ttyACM0 | grep -m1 'ATTRS{serial}'
+#   o, con todas conectadas:
+#     ls -l /dev/serial/by-id/
+#
+# Instalar:
+#     sudo cp 99-microscopeos-matriz.rules /etc/udev/rules.d/
+#     sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# Verificar:
+#     ls -l /dev/matriz_cam*
+
+# --- cam0: calibrada ROT90 FX0 FY1 ---
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="A0:F2:62:EB:21:A4", SYMLINK+="matriz_cam0", GROUP="uucp", MODE="0660"
+
+# --- cam1: calibrada ROT90 FX1 FY0 (montada 180 grados respecto a cam0) ---
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="A0:F2:62:EB:2B:48", SYMLINK+="matriz_cam1", GROUP="uucp", MODE="0660"
