@@ -12,9 +12,15 @@ class TimelapseState(Enum):
 
 
 MODOS = {
-    "blanco": [("", "on")],
-    "dpc":    [("_L", "left"), ("_R", "right"),
-               ("_T", "top"), ("_B", "bottom")],
+    "blanco":    [("", "on")],
+    "dpc":       [("_L", "left"), ("_R", "right"),
+                  ("_T", "top"), ("_B", "bottom")],
+    # oscuro y rheinberg agregados 2026-08-31 junto con el firmware nuevo
+    # de las matrices (ver core/illumination.py y su README). ring() y
+    # rheinberg() aceptan llamarse sin argumentos (colores por defecto),
+    # que es como los invoca getattr(luz, metodo_luz)() mas abajo.
+    "oscuro":    [("", "ring")],
+    "rheinberg": [("", "rheinberg")],
 }
 
 
@@ -252,7 +258,7 @@ class TimelapseManager:
             print("Timelapse ya esta corriendo.")
             return
         if modo not in MODOS:
-            print(f"Modo invalido: {modo}. Usa 'blanco' o 'dpc'.")
+            print(f"Modo invalido: {modo}. Usa uno de: {', '.join(MODOS)}.")
             return
 
         self.thread = threading.Thread(

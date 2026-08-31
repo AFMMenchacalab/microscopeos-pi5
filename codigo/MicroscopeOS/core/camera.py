@@ -48,7 +48,8 @@ class CameraController:
         self._locks = {n: threading.RLock() for n in self.camera_nums}
         self._open_lock = threading.Lock()   # protege la creacion de instancias
 
-        self.preview_cam = None              # cual camara esta en modo vivo
+        self.preview_cam = None              # compat: ultima camara activada
+        self._preview_cams = set()           # camaras en vivo AHORA (puede haber 2)
 
     # =============================
     # CICLO DE VIDA DE LAS INSTANCIAS
@@ -130,18 +131,26 @@ class CameraController:
     # =============================
     # PREVIEW EN VIVO (baja resolucion)
     # =============================
+    # Pi 5: las dos camaras tienen puerto CSI propio, asi que a diferencia
+    # de la Pi 4 (una preview a la vez, por el mux) las dos pueden estar en
+    # vivo al mismo tiempo. self.preview_cam se mantiene como "la ultima
+    # camara activada" solo por compatibilidad con get_frame() sin
+    # argumentos (PreviewManager y la GUI PyQt6, que siguen pidiendo una
+    # sola camara); el estado real de que esta en vivo es self._preview_cams.
     def start_preview(self, camera_num):
         with self._locks[camera_num]:
             self._ensure_mode(camera_num, "preview")
+            self._preview_cams.add(camera_num)
             self.preview_cam = camera_num
 
-    def get_preview_frame(self):
-        """Devuelve un JPEG del frame actual, o None si no hay preview."""
-        camera_num = self.preview_cam
-        if camera_num is None:
+    def get_preview_frame(self, camera_num):
+        """Devuelve un JPEG del frame actual de esa camara, o None si no
+        esta en vivo."""
+        if camera_num not in self._preview_cams:
             return None
         with self._locks[camera_num]:
-            if self.preview_cam is None or self._modes.get(camera_num) != "preview":
+            if camera_num not in self._preview_cams or \
+                    self._modes.get(camera_num) != "preview":
                 return None
             frame = self._cams[camera_num].capture_array("main")
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -161,18 +170,21 @@ class CameraController:
                 else self.camera_nums[0]
         with self._locks[camera_num]:
             self._ensure_mode(camera_num, "preview")
+            self._preview_cams.add(camera_num)
             self.preview_cam = camera_num
             return self._cams[camera_num].capture_array("main")
 
-    def stop_preview(self):
-        camera_num = self.preview_cam
-        self.preview_cam = None
-        if camera_num is None:
-            return
-        # La instancia se deja viva y corriendo: en Pi 5 no hay mux que
-        # liberar, y reabrirla costaria mas que mantenerla.
-        with self._locks[camera_num]:
-            pass
+    def stop_preview(self, camera_num=None):
+        """Detiene el vivo de una camara, o de todas si no se especifica."""
+        cams = [camera_num] if camera_num is not None else list(self._preview_cams)
+        for n in cams:
+            self._preview_cams.discard(n)
+            # La instancia se deja viva y corriendo: en Pi 5 no hay mux que
+            # liberar, y reabrirla costaria mas que mantenerla.
+            with self._locks[n]:
+                pass
+        if self.preview_cam in cams:
+            self.preview_cam = next(iter(self._preview_cams), None)
 
     # =============================
     # CAPTURE (debayer a gris 16-bit)
@@ -185,8 +197,9 @@ class CameraController:
             filename = f"{folder}/img_{timestamp}.tif"
 
         with self._locks[camera_num]:
+            self._preview_cams.discard(camera_num)
             if self.preview_cam == camera_num:
-                self.preview_cam = None
+                self.preview_cam = next(iter(self._preview_cams), None)
             self._ensure_mode(camera_num, "still")
 
             request = self._cams[camera_num].capture_request()
@@ -241,8 +254,9 @@ class CameraController:
         # solo la captura y no la reconfiguracion de una de ellas.
         for n in camera_nums:
             with self._locks[n]:
+                self._preview_cams.discard(n)
                 if self.preview_cam == n:
-                    self.preview_cam = None
+                    self.preview_cam = next(iter(self._preview_cams), None)
                 self._ensure_mode(n, "still")
 
         os.makedirs(folder, exist_ok=True)
@@ -259,6 +273,7 @@ class CameraController:
     # =============================
     def stop(self):
         self.preview_cam = None
+        self._preview_cams.clear()
         for camera_num in list(self._cams):
             with self._locks[camera_num]:
                 self._shutdown(camera_num)

@@ -22,6 +22,7 @@ if str(BASE_DIR) not in sys.path:
 STATIC_DIR = BASE_DIR / "server" / "static"
 
 from temperature_controller import temperature_controller
+from core.timelapse import MODOS
 
 
 class ExposureReq(BaseModel):
@@ -30,6 +31,14 @@ class ExposureReq(BaseModel):
 
 class BrightnessReq(BaseModel):
     percent: int
+
+class LightReq(BaseModel):
+    # full|left|right|top|bottom|ring|rheinberg
+    modo: str = "full"
+    percent: int | None = None
+    color_centro: str = "0000FF"
+    color_anillo: str = "FF6A00"
+    camaras: list = [0, 1]
 
 class TimelapseReq(BaseModel):
     modo: str = "blanco"
@@ -52,7 +61,10 @@ def create_app(camera, illuminations, timelapse):
     estado = {"camara_activa": 0}
 
     def _preview_png(camera_num):
-        tmp = "/tmp/preview_cam.tif"
+        # Un archivo temporal por camara: con las dos vistas en vivo/foto
+        # pudiendo pedirse al mismo tiempo, compartir un unico nombre era
+        # una condicion de carrera (una pisaba el .tif de la otra).
+        tmp = f"/tmp/preview_cam{camera_num}.tif"
         camera.capture_image(camera_num=camera_num, folder="/tmp", filename=tmp)
         img = tifffile.imread(tmp)
         norm = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
@@ -66,33 +78,38 @@ def create_app(camera, illuminations, timelapse):
     def preview(camera_num: int):
         if timelapse.is_running():
             return Response(status_code=409)
-        if camera.preview_cam is not None:
-            camera.stop_preview()
+        # Solo para la camara pedida: la Pi 5 puede tener la otra en vivo
+        # al mismo tiempo, y una foto suelta no debe cortarle el stream.
+        camera.stop_preview(camera_num)
         estado["camara_activa"] = camera_num
         png = _preview_png(camera_num)
         return Response(content=png, media_type="image/png")
 
     # ===============================
-    # Vivo
+    # Vivo -- las dos camaras pueden estar activas a la vez (Pi 5, sin mux)
     # ===============================
     @app.post("/live/start/{camera_num}")
     def live_start(camera_num: int):
         if timelapse.is_running():
             return {"error": "Timelapse en curso"}
-        estado["camara_activa"] = camera_num
         camera.start_preview(camera_num)
         return {"status": "live", "cam": camera_num}
 
+    @app.post("/live/stop/{camera_num}")
+    def live_stop_one(camera_num: int):
+        camera.stop_preview(camera_num)
+        return {"status": "stopped", "cam": camera_num}
+
     @app.post("/live/stop")
-    def live_stop():
+    def live_stop_all():
         camera.stop_preview()
         return {"status": "stopped"}
 
-    @app.get("/live/stream")
-    def live_stream():
+    @app.get("/live/stream/{camera_num}")
+    def live_stream(camera_num: int):
         def gen():
-            while camera.preview_cam is not None:
-                frame = camera.get_preview_frame()
+            while camera_num in camera._preview_cams:
+                frame = camera.get_preview_frame(camera_num)
                 if frame is None:
                     break
                 yield (b'--frame\r\n'
@@ -104,6 +121,35 @@ def create_app(camera, illuminations, timelapse):
     # ===============================
     # Luz
     # ===============================
+    # Metodos de IlluminationController por nombre de modo (ver
+    # core/illumination.py). "rheinberg" no entra en este dict porque
+    # necesita los dos colores como argumento, no llamada sin parametros.
+    _METODOS_LUZ = {
+        "full": "on", "left": "left", "right": "right",
+        "top": "top", "bottom": "bottom", "ring": "ring",
+    }
+
+    @app.post("/light/set")
+    def light_set(req: LightReq):
+        """Enciende un modo de iluminacion (campo claro/DPC/campo oscuro/
+        Rheinberg) en las matrices indicadas. Reemplaza a /light/on para
+        control desde la vista en vivo -- ese endpoint solo sabia FULL."""
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        if req.modo != "rheinberg" and req.modo not in _METODOS_LUZ:
+            return {"error": f"Modo invalido: {req.modo}"}
+        for cam in req.camaras:
+            luz = illuminations.get(cam)
+            if luz is None:
+                continue
+            if req.percent is not None:
+                luz.set_brightness(req.percent)
+            if req.modo == "rheinberg":
+                luz.rheinberg(req.color_centro, req.color_anillo)
+            else:
+                getattr(luz, _METODOS_LUZ[req.modo])()
+        return {"status": "ok", "modo": req.modo}
+
     @app.post("/light/on")
     def light_on():
         if timelapse.is_running():
@@ -122,32 +168,10 @@ def create_app(camera, illuminations, timelapse):
     # ===============================
     # Captura
     # ===============================
-    @app.post("/capture/{camera_num}/{modo}")
-    def capture(camera_num: int, modo: str):
-        if timelapse.is_running():
-            return {"error": "Timelapse en curso"}
-        from datetime import datetime
-        folder = "capturas_unicas"
-        os.makedirs(folder, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        guardados = []
-        if modo == "dpc":
-            patrones = [("_L", "left"), ("_R", "right"),
-                        ("_T", "top"), ("_B", "bottom")]
-        else:
-            patrones = [("", "on")]
-        luz = illuminations.get(camera_num)
-        for sufijo, metodo in patrones:
-            if luz:
-                getattr(luz, metodo)()
-                time.sleep(0.3)
-            fn = f"{folder}/cam{camera_num}_{ts}{sufijo}.tif"
-            camera.capture_image(camera_num=camera_num, folder=folder, filename=fn)
-            guardados.append(os.path.basename(fn))
-        if luz:
-            luz.off()
-        return {"saved": guardados}
-
+    # /capture/both/{modo} DEBE declararse antes que /capture/{camera_num}/
+    # {modo}: FastAPI prueba las rutas en orden de declaracion, y con el
+    # orden invertido "both" se intentaba parsear como camera_num:int y
+    # tiraba 422 antes de llegar siquiera a esta ruta.
     @app.post("/capture/both/{modo}")
     def capture_both(modo: str):
         """Captura las dos camaras en paralelo (Pi 5, sin mux).
@@ -161,11 +185,7 @@ def create_app(camera, illuminations, timelapse):
         folder = "capturas_unicas"
         os.makedirs(folder, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if modo == "dpc":
-            patrones = [("_L", "left"), ("_R", "right"),
-                        ("_T", "top"), ("_B", "bottom")]
-        else:
-            patrones = [("", "on")]
+        patrones = MODOS.get(modo, MODOS["blanco"])
         cams = sorted(illuminations.keys())
         guardados = []
         for sufijo, metodo in patrones:
@@ -183,6 +203,28 @@ def create_app(camera, illuminations, timelapse):
                 luz = illuminations.get(cam)
                 if luz:
                     luz.off()
+        return {"saved": guardados}
+
+    @app.post("/capture/{camera_num}/{modo}")
+    def capture(camera_num: int, modo: str):
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        from datetime import datetime
+        folder = "capturas_unicas"
+        os.makedirs(folder, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        guardados = []
+        patrones = MODOS.get(modo, MODOS["blanco"])
+        luz = illuminations.get(camera_num)
+        for sufijo, metodo in patrones:
+            if luz:
+                getattr(luz, metodo)()
+                time.sleep(0.3)
+            fn = f"{folder}/cam{camera_num}_{ts}{sufijo}.tif"
+            camera.capture_image(camera_num=camera_num, folder=folder, filename=fn)
+            guardados.append(os.path.basename(fn))
+        if luz:
+            luz.off()
         return {"saved": guardados}
 
     # ===============================

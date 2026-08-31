@@ -74,39 +74,83 @@
 </div>
 <div class="grid">
   <div class="panel">
-    <h2>Vista / Posicionamiento</h2>
-    <div class="view">
-      <span class="ph" id="ph">Selecciona una cámara para ver</span>
-      <img id="img">
-      <div class="scan"></div>
-      <div class="camtag" id="camtag" style="display:none">CAM 0</div>
-      <div class="live" id="liveTag">EN VIVO</div>
+    <h2>Vista en vivo — 2 cámaras</h2>
+    <div class="row">
+      <div>
+        <div class="view">
+          <span class="ph" id="ph0">Cargando...</span>
+          <img id="img0">
+          <div class="scan"></div>
+          <div class="camtag">CAM 0</div>
+          <div class="live" id="liveTag0">EN VIVO</div>
+        </div>
+        <div class="camsel" style="margin-top:8px">
+          <button id="liveBtn0" onclick="toggleLive(0)">▶ En vivo</button>
+        </div>
+      </div>
+      <div>
+        <div class="view">
+          <span class="ph" id="ph1">Cargando...</span>
+          <img id="img1">
+          <div class="scan"></div>
+          <div class="camtag">CAM 1</div>
+          <div class="live" id="liveTag1">EN VIVO</div>
+        </div>
+        <div class="camsel" style="margin-top:8px">
+          <button id="liveBtn1" onclick="toggleLive(1)">▶ En vivo</button>
+        </div>
+      </div>
     </div>
-    <div class="camsel">
-      <button id="cam0" onclick="verCam(0)">◉ Cámara 0</button>
-      <button id="cam1" onclick="verCam(1)">◉ Cámara 1</button>
-    </div>
-    <div class="camsel">
-      <button id="liveBtn" onclick="toggleLive()">▶ En vivo</button>
-      <button id="refresh" onclick="refrescar()">⟳ Refrescar</button>
+    <div class="camsel" style="margin-top:10px">
+      <button id="refresh" onclick="refrescarAmbas()">⟳ Refrescar ambas</button>
     </div>
 
-    <h2 style="margin-top:22px">Luz manual</h2>
-    <div class="camsel">
-      <button id="lightBtn" onclick="toggleLuz()">💡 Encender luz</button>
+    <h2 style="margin-top:22px">Iluminación</h2>
+    <div class="field">
+      <label>Modo</label>
+      <select id="lightModo" onchange="lightModoChange()">
+        <option value="full">Campo claro</option>
+        <option value="left">DPC — izquierda</option>
+        <option value="right">DPC — derecha</option>
+        <option value="top">DPC — arriba</option>
+        <option value="bottom">DPC — abajo</option>
+        <option value="ring">Campo oscuro</option>
+        <option value="rheinberg">Rheinberg</option>
+      </select>
     </div>
-    <div class="field" style="margin-top:12px">
+    <div class="row" id="rheinbergColors" style="display:none">
+      <div class="field"><label>Color centro</label><input type="color" id="colorCentro" value="#0000ff"></div>
+      <div class="field"><label>Color anillo</label><input type="color" id="colorAnillo" value="#ff6a00"></div>
+    </div>
+    <div class="field">
       <label>Intensidad LED</label>
       <div class="slider">
         <input type="range" id="bright" min="0" max="100" value="80" oninput="brightLabel()">
         <span class="val" id="brightVal">80%</span>
       </div>
     </div>
+    <div class="camsel">
+      <button id="lightBtn" onclick="aplicarLuz()">💡 Aplicar</button>
+      <button id="lightOffBtn" onclick="apagarLuz()">Apagar</button>
+    </div>
 
-    <h2 style="margin-top:14px">Captura única</h2>
-    <div class="field">
-      <label>Modo de foto</label>
-      <select id="capModo"><option value="normal">Normal (1 foto)</option><option value="dpc">DPC (4 fotos L/R/T/B)</option></select>
+    <h2 style="margin-top:22px">Captura única</h2>
+    <div class="row">
+      <div class="field"><label>Cámara</label>
+        <select id="capCam">
+          <option value="0">Cámara 0</option>
+          <option value="1">Cámara 1</option>
+          <option value="both">Ambas (paralelo)</option>
+        </select>
+      </div>
+      <div class="field"><label>Modo de foto</label>
+        <select id="capModo">
+          <option value="blanco">Campo claro (1 foto)</option>
+          <option value="dpc">DPC (4 fotos L/R/T/B)</option>
+          <option value="oscuro">Campo oscuro (1 foto)</option>
+          <option value="rheinberg">Rheinberg (1 foto)</option>
+        </select>
+      </div>
     </div>
     <button id="snap" onclick="capturar()" style="width:100%">📷 Tomar foto</button>
   </div>
@@ -124,7 +168,12 @@
       <h2>Timelapse</h2>
       <div class="field"><label>Nombre experimento</label><input type="text" id="nombre" placeholder="ej. celulas_dia1"></div>
       <div class="field"><label>Modo iluminación</label>
-        <select id="modo"><option value="blanco">Blanco (1 foto)</option><option value="dpc">DPC (4 fotos)</option></select>
+        <select id="modo">
+          <option value="blanco">Campo claro (1 foto)</option>
+          <option value="dpc">DPC (4 fotos)</option>
+          <option value="oscuro">Campo oscuro (1 foto)</option>
+          <option value="rheinberg">Rheinberg (1 foto)</option>
+        </select>
       </div>
       <div class="row">
         <div class="field"><label>Intervalo s</label><input type="number" id="intv" value="300"></div>
@@ -191,91 +240,89 @@
 </div>
 <div class="toast" id="toast"></div>
 <script>
-let running=false,activeCam=0,liveOn=false,luzOn=false,liveTimer=null;
+let running=false,live=[false,false];
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function brightLabel(){document.getElementById('brightVal').textContent=document.getElementById('bright').value+'%';}
 
-async function verCam(n){
-  if(running)return;
-  activeCam=n;
-  document.getElementById('cam0').classList.toggle('active',n===0);
-  document.getElementById('cam1').classList.toggle('active',n===1);
-  await refrescar();
-}
-async function refrescar(){
-  if(running){toast('Timelapse en curso');return;}
-  const ph=document.getElementById('ph'),img=document.getElementById('img');
+async function refrescarUna(n){
+  if(running||live[n])return;
+  const ph=document.getElementById('ph'+n),img=document.getElementById('img'+n);
   if(img.style.display!=='block'){ph.textContent='Capturando...';ph.style.display='block';}
   try{
-    const r=await fetch('/preview/'+activeCam+'?t='+Date.now());
+    const r=await fetch('/preview/'+n+'?t='+Date.now());
     if(r.status===409)return;
     const blob=await r.blob();
     img.src=URL.createObjectURL(blob);img.style.display='block';ph.style.display='none';
-    const tag=document.getElementById('camtag');tag.textContent='CAM '+activeCam;tag.style.display='block';
   }catch(e){ph.textContent='Error';}
 }
-async function toggleLive(){
+async function refrescarAmbas(){
+  if(running){toast('Timelapse en curso');return;}
+  await Promise.all([refrescarUna(0),refrescarUna(1)]);
+}
+async function toggleLive(n){
   if(running)return;
-  liveOn=!liveOn;
-  const btn=document.getElementById('liveBtn');
-  const img=document.getElementById('img');
-  const ph=document.getElementById('ph');
-  btn.classList.toggle('active',liveOn);
-  btn.textContent=liveOn?'⏸ Detener vivo':'▶ En vivo';
-  document.getElementById('liveTag').style.display=liveOn?'flex':'none';
-  document.getElementById('cam0').disabled=liveOn;
-  document.getElementById('cam1').disabled=liveOn;
-  document.getElementById('refresh').disabled=liveOn;
-  document.getElementById('snap').disabled=liveOn;
+  live[n]=!live[n];
+  const btn=document.getElementById('liveBtn'+n);
+  const img=document.getElementById('img'+n);
+  const ph=document.getElementById('ph'+n);
+  btn.classList.toggle('active',live[n]);
+  btn.textContent=live[n]?'⏸ Detener vivo':'▶ En vivo';
+  document.getElementById('liveTag'+n).style.display=live[n]?'flex':'none';
 
-  if(liveOn){
-    await fetch('/live/start/'+activeCam,{method:'POST'});
+  if(live[n]){
+    await fetch('/live/start/'+n,{method:'POST'});
     ph.style.display='none';
     img.style.display='block';
-    img.src='/live/stream?t='+Date.now();   // stream MJPEG continuo
-    const tag=document.getElementById('camtag');
-    tag.textContent='CAM '+activeCam;tag.style.display='block';
+    img.src='/live/stream/'+n+'?t='+Date.now();   // stream MJPEG continuo, independiente por camara
   }else{
     img.src='';
-    await fetch('/live/stop',{method:'POST'});
-    document.getElementById('cam'+activeCam).disabled=false;
-    document.getElementById('cam'+(activeCam===0?1:0)).disabled=false;
-    document.getElementById('refresh').disabled=false;
-    document.getElementById('snap').disabled=false;
-    refrescar();
+    await fetch('/live/stop/'+n,{method:'POST'});
+    refrescarUna(n);
   }
 }
-async function toggleLuz(){
+function lightModoChange(){
+  document.getElementById('rheinbergColors').style.display=
+    document.getElementById('lightModo').value==='rheinberg'?'grid':'none';
+}
+async function aplicarLuz(){
   if(running)return;
-  luzOn=!luzOn;
-  const b=document.getElementById('lightBtn');
-  if(luzOn){
-    await fetch('/brightness',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({percent:+document.getElementById('bright').value})});
-    await fetch('/light/on',{method:'POST'});
-    b.classList.add('lit');b.textContent='💡 Apagar luz';
-  }else{
-    await fetch('/light/off',{method:'POST'});
-    b.classList.remove('lit');b.textContent='💡 Encender luz';
+  const modo=document.getElementById('lightModo').value;
+  const body={modo:modo,percent:+document.getElementById('bright').value,camaras:[0,1]};
+  if(modo==='rheinberg'){
+    body.color_centro=document.getElementById('colorCentro').value.slice(1).toUpperCase();
+    body.color_anillo=document.getElementById('colorAnillo').value.slice(1).toUpperCase();
   }
+  const r=await fetch('/light/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  document.getElementById('lightBtn').classList.add('lit');
+  toast('Luz: '+modo);
+}
+async function apagarLuz(){
+  await fetch('/light/off',{method:'POST'});
+  document.getElementById('lightBtn').classList.remove('lit');
+  toast('Luz apagada');
 }
 async function capturar(){
   if(running)return;
-  if(liveOn)await toggleLive();   // apaga el vivo antes de capturar
+  await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));   // apaga el vivo antes de capturar
+  const cam=document.getElementById('capCam').value;
   const modo=document.getElementById('capModo').value;
   toast('Capturando ('+modo+')...');
-  const r=await fetch('/capture/'+activeCam+'/'+modo,{method:'POST'});
+  const url=cam==='both'?'/capture/both/'+modo:'/capture/'+cam+'/'+modo;
+  const r=await fetch(url,{method:'POST'});
   const d=await r.json();
   if(d.error){toast(d.error);return;}
   toast('Guardado: '+(Array.isArray(d.saved)?d.saved.length+' fotos':d.saved));
-  luzOn=false;document.getElementById('lightBtn').classList.remove('lit');document.getElementById('lightBtn').textContent='💡 Encender luz';
+  document.getElementById('lightBtn').classList.remove('lit');
 }
 async function aplicarCamara(){
   await fetch('/exposure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exposure:+document.getElementById('exp').value,gain:+document.getElementById('gain').value})});
   toast('Exposición aplicada');
 }
 async function iniciar(){
-  if(liveOn)toggleLive();
+  await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));
   const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1]};
   const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
@@ -288,9 +335,18 @@ function setRunning(on){
   document.getElementById('dot').className='dot '+(on?'run':'idle');
   document.getElementById('state').textContent=on?'RUNNING':'IDLE';
   document.getElementById('s_state').textContent=on?'RUNNING':'IDLE';
-  ['cam0','cam1','refresh','snap','start','liveBtn','lightBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn'].forEach(id=>document.getElementById(id).disabled=on);
   document.getElementById('stop').disabled=!on;
-  if(on&&liveOn){liveOn=false;clearInterval(liveTimer);document.getElementById('liveTag').style.display='none';document.getElementById('liveBtn').textContent='▶ En vivo';document.getElementById('liveBtn').classList.remove('active');}
+  if(on){
+    [0,1].forEach(n=>{
+      if(live[n]){
+        live[n]=false;
+        document.getElementById('liveTag'+n).style.display='none';
+        document.getElementById('liveBtn'+n).textContent='▶ En vivo';
+        document.getElementById('liveBtn'+n).classList.remove('active');
+      }
+    });
+  }
 }
 async function poll(){
   try{
@@ -302,7 +358,7 @@ async function poll(){
     document.getElementById('s_folder').textContent=s.carpeta||'—';
   }catch(e){}
 }
-setInterval(poll,2000);poll();verCam(0);
+setInterval(poll,2000);poll();refrescarAmbas();
 
 // --- Temperatura SSE ---
 (function(){
