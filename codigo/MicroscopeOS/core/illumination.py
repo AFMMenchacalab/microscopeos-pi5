@@ -26,7 +26,11 @@ import serial
 import time
 
 # Patrones que acepta el firmware. "FULL" reemplaza al "ON"/"ALL" del RP2040.
-PATRONES = ("FULL", "LEFT", "RIGHT", "TOP", "BOTTOM", "OFF")
+# RING (campo oscuro, agregado en el firmware reescrito 2026-08-31) es un
+# patron simple mas, mismo protocolo PATRON:brillo. RHEINBERG no entra aqui:
+# es un comando aparte de 4 campos (dos colores a la vez), ver metodo
+# rheinberg() mas abajo.
+PATRONES = ("FULL", "LEFT", "RIGHT", "TOP", "BOTTOM", "OFF", "RING")
 
 # El firmware descarta lineas de mas de 47 caracteres (ERR:BAD_FORMAT:LINE_TOO_LONG).
 MAX_LINEA = 47
@@ -56,6 +60,9 @@ class IlluminationController:
         self.brightness_percent = 100
         self.max_value = max(0, min(255, max_value))
         self.strict = strict
+        # Colores del ultimo rheinberg(), para que set_brightness() pueda
+        # reenviarlo con los mismos dos colores si esta activo.
+        self._rheinberg_colors = ("0000FF", "FF6A00")
         self.current_pattern = "OFF"
         self.last_error = None
 
@@ -155,7 +162,9 @@ class IlluminationController:
         que es como se comportaba la version anterior.
         """
         self.brightness_percent = max(0, min(100, percent))
-        if self.state and self.current_pattern != "OFF":
+        if self.state and self.current_pattern == "RHEINBERG":
+            self.rheinberg(*self._rheinberg_colors)
+        elif self.state and self.current_pattern != "OFF":
             self._enviar(self.current_pattern)
 
     # =============================
@@ -172,6 +181,51 @@ class IlluminationController:
 
     def bottom(self):
         self._patron("BOTTOM")
+
+    # =============================
+    # CAMPO OSCURO Y RHEINBERG
+    # (firmware reescrito 2026-08-31, ver README de la matriz)
+    # =============================
+    def ring(self):
+        """Campo oscuro: solo el borde exterior de la matriz (8x8), con el
+        centro apagado. Aproxima iluminacion oblicua fuera del cono de
+        apertura numerica del objetivo. Sin luz directa entrando al lente,
+        solo se ve lo que la muestra dispersa: fondo oscuro, objeto claro."""
+        self._patron("RING")
+
+    def rheinberg(self, color_centro="0000FF", color_anillo="FF6A00"):
+        """Contraste de color falso: enciende el bloque central (2x2) y el
+        anillo exterior a la vez, cada uno con su propio color. El fondo y
+        el objeto salen en colores distintos aunque la muestra sea
+        transparente y sin tenir. Colores en RRGGBB hex, por defecto azul
+        al centro / naranja al anillo (complementarios).
+
+        A diferencia de los demas patrones (un solo comando PATRON:brillo),
+        este manda RHEINBERG:brillo:color_centro:color_anillo -- no pasa
+        por _enviar()/_patron() porque esos asumen 2 campos.
+        """
+        self._rheinberg_colors = (color_centro, color_anillo)
+        valor = self._valor()
+        linea = f"RHEINBERG:{valor}:{color_centro}:{color_anillo}"
+        if len(linea) + 1 > MAX_LINEA:
+            raise IlluminationError(f"comando demasiado largo: {linea!r}")
+
+        self.ser.write((linea + "\n").encode())
+        respuesta = self.ser.readline().decode(errors="ignore").strip()
+
+        esperada = f"OK:{linea}"
+        if respuesta != esperada:
+            self.last_error = respuesta or "sin respuesta (timeout)"
+            if self.strict:
+                raise IlluminationError(
+                    f"{self.port}: envie {linea!r}, esperaba {esperada!r}, "
+                    f"recibi {respuesta!r}")
+        else:
+            self.last_error = None
+
+        self.current_pattern = "RHEINBERG"
+        self.state = True
+        return respuesta
 
     # =============================
     # UTILIDADES
