@@ -49,7 +49,10 @@
 #define NUM_PIXELS  (MATRIX_SIDE * MATRIX_SIDE)
 #define MAX_LINE    47
 
-Adafruit_NeoPixel strip(NUM_PIXELS, DATA_PIN, NEO_GRB + NEO_KHZ800);
+// NEO_GRB (el orden habitual de WS2812B) daba R/G invertidos en esta
+// placa -- confirmado a ojo el 2026-08-31 con RHEINBERG (rojo salia verde
+// y viceversa). Esta placa concreta es RGB, no GRB.
+Adafruit_NeoPixel strip(NUM_PIXELS, DATA_PIN, NEO_RGB + NEO_KHZ800);
 
 // =====================================================
 // GEOMETRIA: coordenada logica (r,c), r,c en [0,7] -> indice fisico
