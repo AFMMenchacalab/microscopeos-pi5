@@ -85,7 +85,14 @@ class IlluminationController:
         # subirlo (el RP2040 usaba 1 s).
         time.sleep(0.3)
 
+        # Si la placa no responde, con strict=False todo lo demas seguiria
+        # funcionando en silencio y la matriz nunca encenderia. Avisar aqui
+        # es la unica oportunidad de detectarlo antes de un timelapse largo.
         self.off()
+        if self.last_error is not None:
+            print(f"AVISO: {port} no respondio al comando inicial "
+                  f"({self.last_error}). La matriz puede no estar "
+                  f"encendiendo. Comprueba con IlluminationController.id()")
 
     # =============================
     # TRANSPORTE

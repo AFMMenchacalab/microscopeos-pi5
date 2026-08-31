@@ -210,6 +210,19 @@ Interfaz web en `http://<ip-de-la-pi>:8000`.
 
 Ejecutar en esta secuencia; cada paso depende del anterior.
 
+**Primero el preflight**, que comprueba de una vez casi todo lo de
+`TODO_HW.md` y te dice qué falla:
+
+```bash
+cd $MS_DIR && source venv/bin/activate
+python3 verificar_pi5.py
+```
+
+Enciende las matrices a brillo 40/255 (por debajo del techo USB) y captura
+una imagen de prueba en `/tmp`. No modifica nada.
+
+Después, los tests de siempre:
+
 ```bash
 cd $MS_DIR && source venv/bin/activate
 
