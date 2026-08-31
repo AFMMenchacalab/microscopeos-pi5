@@ -77,13 +77,16 @@ class IlluminationController:
         self.ser.rts = False
         self.ser.open()
 
-        # El ROM del ESP32-S3 escribe mensajes de arranque por el mismo CDC.
+        # El ROM del ESP32-S3 escribe mensajes de arranque por el mismo CDC,
+        # y en las placas probadas tarda bastante mas que los 0.3 s que
+        # recomienda el README en terminar de bootear (el RP2040 usaba 1 s).
+        # Si se flushea antes de esperar, el log de arranque sigue llegando
+        # despues del flush y contamina la primera respuesta (readline()
+        # devuelve una linea del log tipo "SPIWP:0xee" en vez de "OK:...").
+        # Por eso el flush va DESPUES de esperar, no antes.
+        time.sleep(2.0)
         self.ser.reset_input_buffer()
         self.ser.reset_output_buffer()
-        # TODO-HW: 0.3 s es lo que recomienda el README de la matriz. Si al
-        # arrancar el servicio la primera matriz responde ERR o timeout,
-        # subirlo (el RP2040 usaba 1 s).
-        time.sleep(0.3)
 
         # Si la placa no responde, con strict=False todo lo demas seguiria
         # funcionando en silencio y la matriz nunca encenderia. Avisar aqui
