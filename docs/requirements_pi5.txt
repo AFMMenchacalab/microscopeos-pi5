@@ -1,0 +1,72 @@
+# requirements_pi5.txt
+# Derivado de requirements_pi4.txt (que se conserva como referencia del
+# sistema de origen). Cambios marcados con [PI5].
+#
+# El venv se crea IGUAL que en Pi 4, con --system-site-packages:
+#   python3 -m venv --system-site-packages ~/MicroscopeOS/venv
+# Sin esa flag, picamera2 / cv2 / numpy / rpi-lgpio / pyserial no se ven
+# desde el venv, porque vienen de apt y no de pip.
+
+# ============================================================
+# SECCION 1 - pip DENTRO del venv
+#   pip install -r <esta seccion>
+# ============================================================
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.12.1
+fastapi==0.128.8
+h11==0.16.0
+mpremote==1.28.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+starlette==0.52.1
+tifffile==2026.1.28
+typing_extensions==4.15.0
+typing_inspection==0.4.2
+uvicorn==0.40.0
+
+# [PI5] PyQt6 SIN version fijada. PyQt6 6.10.2 no tiene garantia de wheel
+# aarch64 para el Python de Bookworm/Trixie, y compilarlo en la Pi tarda
+# horas. Solo hace falta para el modo GUI de main.py, que NO se usa en
+# produccion (microscopeos.service arranca run_web.py). Recomendado:
+#   apt install python3-pyqt6      # binario del sistema, no pip
+# o simplemente omitirlo.
+# PyQt6
+
+# [PI5] matplotlib: NO estaba instalado en la Pi 4, por eso
+# core/timelapse.py nunca llego a generar temperatura.png (falla dentro de
+# un try/except que solo loguea). Si lo quieres funcionando:
+#   apt install python3-matplotlib
+# matplotlib
+
+# ============================================================
+# SECCION 2 - paquetes del SISTEMA (apt), heredados por el venv.
+# NO instalar con pip: perderias los bindings nativos.
+#
+#   sudo apt install -y python3-picamera2 python3-opencv python3-numpy \
+#                       python3-serial python3-rpi-lgpio python3-gpiozero
+# ============================================================
+# Camara. [PI5] Pi 5 usa CFE/PiSP, no Unicam. Necesita el picamera2 y el
+# libcamera que trae Pi OS PARA Pi 5; no copiar los binarios de la Pi 4.
+picamera2>=0.3.34
+# Vision / procesamiento
+opencv>=4.10.0
+numpy>=2.2.4
+# GPIO. [PI5] rpi-lgpio es OBLIGATORIO en Pi 5: provee el modulo RPi.GPIO
+# sobre lgpio. La RPi.GPIO clasica NO funciona con el southbridge RP1.
+#   sudo apt install python3-rpi-lgpio
+#   sudo apt remove  python3-rpi.gpio     <- si estuviera, entra en conflicto
+rpi-lgpio>=0.6
+lgpio>=0.2.2.0
+gpiod>=2.2.0
+gpiozero>=2.0.1
+# Serial: matrices ESP32-S3 y Arduino de la incubadora
+pyserial>=3.5
+
+# ============================================================
+# Fuera de la Pi
+# ============================================================
+# [PI5] mpremote ya NO hace falta para las matrices: era para flashear
+#   MicroPython en las RP2040. Las ESP32-S3 se compilan con arduino-cli
+#   (core esp32:esp32 3.3.11, Adafruit NeoPixel 1.15.5) y se restauran con
+#   esptool. Ver codigo/extras/matrices_esp32s3_matrix/README.md
