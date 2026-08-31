@@ -200,6 +200,12 @@ class CameraController:
         # esto NO lanza excepcion: produce una imagen de basura en silencio.
         # Validar con test_captura.py contra una muestra conocida.
         raw16 = np.ascontiguousarray(raw).view(np.uint16)
+        # El CFE del Pi 5 alinea el stride de cada fila a un multiplo de 32
+        # px (confirmado con picam2.camera_configuration()['raw']: stride=
+        # 6592 bytes para un ancho real de 3280 px x 2 bytes = 6560 bytes,
+        # 32 bytes = 16 px uint16 de relleno). Sin recortar, quedan 16
+        # columnas de basura pegadas al borde derecho de cada fila.
+        raw16 = raw16[:, :STILL_SIZE[0]]
         # TODO-HW: el buffer se pide como SBGGR10 (patron BG) pero se
         # debayerea como BayerRG. Esa inconsistencia venia de Pi 4 y ahi
         # daba imagen correcta; con el ISP nuevo hay que reconfirmar el
