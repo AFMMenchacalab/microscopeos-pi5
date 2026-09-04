@@ -1,8 +1,8 @@
-# TODO-HW — validaciones que requieren la Pi 5 y el hardware conectado
+# TODO-HW — validaciones pendientes con hardware real
 
-Nada de esta migración se pudo probar: la adaptación se hizo sin Pi 5, sin
-cámaras, sin matrices y sin motor. Cada punto marcado con `# TODO-HW` en el
-código está listado aquí, **ordenado por prioridad de validación**.
+Puntos del código marcados `# TODO-HW`, listados acá **por prioridad de
+validación**: cosas que solo se pueden confirmar con la Pi, las cámaras,
+las matrices o los motores presentes, no leyendo el código.
 
 Orden recomendado: prioridad 1 en bloque, luego 2, luego 3-4. Los de
 prioridad 1 pueden corromper datos o dañar hardware; los de prioridad 4 son
@@ -12,7 +12,7 @@ comodidad.
 
 ## Prioridad 1 — pueden corromper datos o dañar hardware
 
-### 1.1 Formato RAW bajo PiSP — el riesgo más grave de toda la migración
+### 1.1 Formato RAW bajo PiSP — el riesgo más grave de toda la captura
 `core/camera.py` (`RAW_FORMAT`, y el bloque de debayer en `capture_image`)
 
 El Pi 4 usa Unicam; el Pi 5 usa CFE/PiSP. La cadena
@@ -78,6 +78,38 @@ Verificar que abrir el puerto **no** reinicia la placa (si reinicia, la
 matriz parpadea y se apaga). Si la primera orden tras conectar devuelve
 `ERR` o da timeout, subir los 300 ms.
 
+### 1.5 Recorrido del eje Z sin finales de carrera
+`codigo/MicroscopeOS/core/motor_focus.py`, `core/autofocus.py`
+
+Ninguno de los dos ejes tiene final de carrera ni encoder: el software no
+sabe dónde está el tope mecánico. `position` es relativa al arranque del
+servidor, no una coordenada absoluta.
+
+Consecuencia práctica: un autofoco con `rango` grande, o el joystick
+mantenido apretado, puede llevar la plataforma **contra la muestra o
+contra el tope del husillo**. El motor no tiene fuerza para romper gran
+cosa a 450 mA, pero sí para rayar una muestra o forzar el objetivo.
+
+Antes de dejar el autofoco corriendo solo en un timelapse largo:
+
+1. Medir a mano, con el joystick, cuántos micropasos hay desde el foco
+   hasta cada tope mecánico en el montaje real.
+2. Ajustar el `rango` por defecto (3200 micropasos = 1 mm en la
+   interfaz, 1600 = 0.5 mm en el timelapse) a algo que entre cómodo
+   dentro de ese recorrido. Con el husillo T6×1 y 1/16 de paso, un
+   micropaso son 0.31 µm.
+3. Si el margen es chico, agregar límites blandos por software en
+   `FocusMotorController` (`position` mínima/máxima) — hoy **no existen**.
+
+### 1.6 Polaridad de las bobinas del segundo motor
+`codigo/MicroscopeOS/test_motor_enfoque.py 1`
+
+El eje de cam0 llegó a "vibrar sin avanzar" porque los dos cables de la
+bobina A estaban cruzados entre sí: eso rompe la cuadratura entre fases
+y no es lo mismo que invertir el sentido de giro. Al cablear el segundo
+motor, correr `python3 test_motor_enfoque.py 1` **antes** de montarlo en
+la plataforma y confirmar que gira limpio en los dos sentidos.
+
 ---
 
 ## Prioridad 2 — cambian resultados científicos
@@ -117,6 +149,86 @@ código.
 Con el mux este mapeo lo definía el overlay; ahora lo define el cableado
 físico.
 
+### 2.4 Qué métrica corresponde a tu muestra
+`codigo/MicroscopeOS/core/autofocus.py`
+
+El default es `metrica="dpc"` (Tenengrad sobre `(L−R)/(L+R)`), que es lo
+correcto para **objetos de fase**: células vivas sin teñir. Está
+verificado en simulación que sobre ese tipo de muestra la métrica cruda
+tiene un valle en el foco y un barrido que la maximiza se va ~170 µm al
+plano equivocado, mientras que la del DPC enfoca dentro de un par de
+micras.
+
+**El caso espejo también está verificado y hay que tenerlo presente:**
+con una muestra que absorbe (teñida, pigmentada, material opaco) en el
+foco las dos medias aperturas dan la misma imagen, el DPC se anula y su
+Tenengrad tiene el valle. Si alguna vez se mira una muestra teñida, hay
+que pasar `metrica="bruta"`.
+
+Lo que falta comprobar en el microscopio real:
+
+- Que la curva de Tenengrad sobre el DPC tenga pico distinguible con el
+  ruido de lectura real del IMX219. En la simulación no hay ruido, y
+  cerca del foco esa curva es MUY plana (0.1 % de variación en ±6 µm).
+  Si en la práctica el ajuste fino salta de un lado a otro, promediar
+  varias mediciones por plano antes que agrandar el rango.
+- Que enfocar en campo claro/DPC deje bien enfocadas también las
+  capturas en campo oscuro y Rheinberg del mismo ciclo.
+
+### 2.4b Rango lineal y calibración de la ganancia
+`codigo/MicroscopeOS/core/autofocus.py` (`calibrar_dpc`)
+
+`δ = 2·Δz·tanθ` es lineal **sólo dentro de un rango**: lejos del foco el
+corrimiento deja de crecer y la correlación termina perdiendo el
+enganche. Calibrar con un barrido más ancho que ese régimen sesga la
+ganancia, y el `r²` no lo delata (sigue saliendo alto porque la curva es
+suave). En la simulación, calibrar con ±940 µm en vez de ±125 µm
+sobreestimó la ganancia **4×** (100.7 contra 25.5 micropasos/px).
+
+Consecuencias prácticas:
+
+1. **Enfocar a ojo antes de calibrar.** El diálogo de la interfaz ya lo
+   pide. Calibrar lejos del foco, con la respuesta ya saturada, sesga la
+   pendiente igual que un rango demasiado ancho.
+2. Medir en el microscopio real hasta qué desenfoque δ sigue creciendo
+   proporcionalmente, y ajustar `amplitud` (1200 micropasos = 375 µm por
+   defecto) para quedar adentro.
+3. **Recalibrar al cambiar de objetivo:** la constante depende de la
+   magnificación y del cono de iluminación. El archivo guarda la fecha,
+   el `r²` y la escala en µm/px.
+
+No hace falta preocuparse por el signo: la calibración mide la pendiente
+con su signo, así que si `LEFT`/`RIGHT` estuvieran espejados respecto de
+lo que uno cree (los flags `ROT90:FX:FY` difieren entre las dos placas),
+el método se corrige solo. El `eje` es configurable (`lr` o `tb`): si la
+muestra tiene textura marcadamente direccional, conviene el de más
+contraste.
+
+### 2.4c Confianza de la correlación: el signo NO es un error
+`codigo/MicroscopeOS/core/autofocus.py` (`medir_par`)
+
+Con un objeto de fase las dos medias aperturas dan contraste de signo
+opuesto — eso es justamente lo que hace visible la fase — así que la
+superficie de correlación queda globalmente invertida y OpenCV devuelve
+una **respuesta negativa** aunque la posición del pico sea correcta. El
+código toma el valor absoluto a propósito: sin eso el método se
+rechazaría a sí mismo justo en las muestras para las que existe. Lo
+detectó la simulación (respuesta cruda ≈ −0.94 con el foco bien medido).
+
+Lo que sí descarta una respuesta cerca de cero es un campo vacío o sin
+textura, y ahí el pico efectivamente no significa nada.
+
+### 2.5 Costo en tiempo del autofoco dentro del timelapse
+`codigo/MicroscopeOS/core/timelapse.py`
+
+Por el método DPC son ~2 s por cámara (4 imágenes de preview y 4
+cambios de iluminación). Por barrido son ~20-30 s (13 puntos gruesos + 2
+pasadas finas, con reconfiguración de la cámara a modo preview y
+vuelta): con las dos cámaras y `autofocus_cada=1`, un intervalo de 60 s
+se come casi entero en enfocar. Medir el tiempo real en el log —queda
+anotado en cada línea de autofoco— y, si se está cayendo al barrido,
+calibrar el DPC antes que subir `autofocus_cada`.
+
 ---
 
 ## Prioridad 3 — funcionalidad que puede no arrancar
@@ -144,6 +256,21 @@ pinctrl get 20,21          # los que usa motortest.py
 
 Relevante porque `motortest.py` usa BCM 20/21 y podían estar en conflicto en
 Pi 4. Ahora el overlay ya no está.
+
+### 3.2b GPIO del segundo eje de enfoque
+`codigo/MicroscopeOS/core/motor_focus.py` (`PINES_POR_CAMARA`)
+
+El eje de cam1 usa BCM 26/19/13 (pines 37/35/33 del header), elegidos
+por estar libres y pegados a los del primer eje. Confirmar que nada más
+los toca antes de cablear:
+
+```bash
+pinctrl get 13,19,26
+```
+
+Y correr `python3 test_uart_only.py`, que ahora barre las 4 direcciones
+del bus y dice cuál contesta: es la forma rápida de ver si MS1/AD0 y
+MS2/AD1 del driver nuevo quedaron en la dirección 1 y no pisando la 0.
 
 ### 3.3 GPIO14/15 realmente libres
 `configs/boot/config.txt`, `configs/boot/cmdline.txt`
@@ -179,7 +306,7 @@ ls -l /dev/matriz_cam*
 ```
 
 Y que cada placa lleva su calibración con `IlluminationController.id()`
-(ver MIGRACION_PI5.md §7).
+(ver docs/historia/MIGRACION_PI5.md §7).
 
 ### 4.2 Permisos del grupo `uucp`
 La regla nueva usa `GROUP="uucp", MODE="0660"` (la de RP2040 no ponía

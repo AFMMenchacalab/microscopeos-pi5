@@ -4,6 +4,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core.camera import CameraController
 from core.illumination import IlluminationController
 from core.timelapse import TimelapseManager
+from core.motor_focus import crear_motores
+from core.autofocus import Autofocus
 from server.api import create_app
 import uvicorn
 
@@ -29,8 +31,29 @@ illuminations = {0: luz_cam0, 1: luz_cam1}
 luz_cam0.set_brightness(80)
 luz_cam1.set_brightness(80)
 
-timelapse = TimelapseManager(camera, illuminations)
+# Un motor de enfoque por camara, los dos en el mismo bus UART con
+# direcciones distintas (ver el docstring de core/motor_focus.py).
+# crear_motores no tira excepcion si un eje no contesta: el microscopio
+# tiene que arrancar igual con un solo motor cableado, o con ninguno,
+# porque esto corre como servicio en el boot.
+print("Conectando motores de enfoque...")
+try:
+    motores, bus_motores = crear_motores(camaras=(0, 1),
+                                         max_current_ma=550, microsteps=16)
+except Exception as e:
+    print(f"[motor] bus UART no disponible -> {e}")
+    motores, bus_motores = {}, None
 
-app = create_app(camera, illuminations, timelapse)
+# 450mA: corriente con la que el eje de cam0 giro limpio y sin avisos
+# termicos. El tope duro sigue siendo max_current_ma=550.
+for _m in motores.values():
+    _m.set_current(irun_ma=450)
+
+autofocus = Autofocus(camera, motores, illuminations) if motores else None
+
+timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus)
+
+app = create_app(camera, illuminations, timelapse,
+                 motores=motores, autofocus=autofocus)
 print("Servidor en http://0.0.0.0:8000")
 uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

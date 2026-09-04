@@ -10,6 +10,7 @@ import tifffile
 import asyncio
 import json
 import sys
+import threading
 from pathlib import Path
 
 # Raiz del proyecto, deducida de la ubicacion de este archivo.
@@ -23,6 +24,7 @@ STATIC_DIR = BASE_DIR / "server" / "static"
 
 from temperature_controller import temperature_controller
 from core.timelapse import MODOS
+from core.autofocus import micropasos_por_um
 
 
 class ExposureReq(BaseModel):
@@ -50,15 +52,88 @@ class TimelapseReq(BaseModel):
     # Captura de las dos camaras a la vez (solo Pi 5). Por defecto False:
     # requiere que los canales opticos esten aislados. Ver TODO_HW.md.
     simultaneo: bool = False
+    # Reenfocar antes de capturar. autofocus_cada=N reenfoca 1 de cada N
+    # ciclos: el barrido cuesta ~20 s por camara, que en un intervalo de
+    # 30 s no entra, pero en uno de 5 min es despreciable.
+    autofocus: bool = False
+    autofocus_cada: int = 1
+    autofocus_rango: int = 1600
+    autofocus_puntos: int = 11
 
 class SetpointPayload(BaseModel):
     value: float
 
+# Hay un motor de enfoque por camara: "motor" es el numero de camara
+# (ver PINES_POR_CAMARA en core/motor_focus.py).
+class FocusMoveReq(BaseModel):
+    motor: int = 0
+    direction: int = 1        # 1 = abajo, -1 = arriba (ver core/motor_focus.py)
+    pasos: int = 200          # en la resolucion de microstepping actual
+    velocidad: float = 0.003  # delay entre flancos STEP -- mas chico = mas rapido
 
-def create_app(camera, illuminations, timelapse):
+class FocusJogReq(BaseModel):
+    """Movimiento continuo del joystick. La interfaz reenvia este mismo
+    pedido cada pocas decimas mientras el joystick esta apretado: cada
+    uno refresca el watchdog y puede cambiar sentido y velocidad en
+    caliente. Si dejan de llegar (WiFi caido, pestania cerrada), el
+    motor se para solo al vencer el watchdog."""
+    motor: int = 0
+    direction: int = 1
+    velocidad: float = 0.003
+    watchdog: float = 1.5
+
+class FocusStopReq(BaseModel):
+    motor: int | None = None  # None = parar todos
+
+class FocusConfigReq(BaseModel):
+    motor: int = 0
+    microsteps: int = 16      # 1,2,4,8,16,32,64,128,256 (resolucion/precision)
+    corriente_ma: int | None = None
+
+class AutofocusReq(BaseModel):
+    camera: int = 0
+    # auto = DPC si esa camara esta calibrada, barrido si no.
+    metodo: str = "auto"      # auto | dpc | barrido
+    rango: int = 800          # amplitud total del barrido, en micropasos
+    # Alternativa en unidades fisicas: si se manda, pisa a `rango`
+    # convertido a la resolucion de microstepping ACTUAL de esa camara.
+    # Es lo que usa el boton "Autofoco" de la interfaz -- pensar el
+    # rango en micras (cuan lejos del punto donde el usuario ya enfoco a
+    # mano puede llegar a estar el foco real) es mucho mas intuitivo que
+    # en micropasos, que dependen de la resolucion configurada.
+    rango_um: float | None = None
+    puntos: int = 13
+    refinamientos: int = 2
+    iteraciones: int = 2      # correcciones sucesivas del metodo DPC
+    usar_luz: bool = True     # solo barrido: el DPC necesita L/R si o si
+    patron: str = "on"        # solo barrido: metodo de IlluminationController
+    # Cuantas mediciones L/R rapidas se combinan por mediana antes de
+    # decidir. None = usa el default de cada metodo (3 para DPC, 1 para
+    # el barrido de respaldo -- este ultimo ya samplea muchos puntos del
+    # barrido, promediar cada uno ademas lo hace demasiado lento).
+    repeticiones: int | None = None
+
+class CalibrarDpcReq(BaseModel):
+    camera: int = 0
+    amplitud: int = 1200      # recorrido barrido para ajustar la recta
+    puntos: int = 5
+    eje: str = "lr"           # lr (izquierda/derecha) o tb (arriba/abajo)
+    repeticiones: int = 2     # mediciones por punto de calibracion, por mediana
+
+
+def create_app(camera, illuminations, timelapse, motores=None,
+               autofocus=None, motor=None):
+    """motores: {numero_de_camara: FocusMotorController}. `motor` se
+    acepta todavia como un solo eje suelto (compatibilidad con la
+    version de un motor) y se mapea a la camara 0."""
 
     app = FastAPI()
+    if motores is None:
+        motores = {0: motor} if motor is not None else {}
     estado = {"camara_activa": 0}
+    # Serializa el autofoco: mueve motor Y camara a la vez, asi que dos
+    # corridas simultaneas se pisarian el modo de la camara.
+    autofocus_lock = threading.Lock()
 
     def _preview_png(camera_num):
         # Un archivo temporal por camara: con las dos vistas en vivo/foto
@@ -254,9 +329,13 @@ def create_app(camera, illuminations, timelapse):
             duration_seconds=req.duration,
             stabilization_time=req.stabilization,
             camaras=req.camaras,
-            simultaneo=req.simultaneo
+            simultaneo=req.simultaneo,
+            autofocus=req.autofocus,
+            autofocus_cada=req.autofocus_cada,
+            autofocus_opts={"rango": req.autofocus_rango,
+                            "puntos": req.autofocus_puntos},
         )
-        return {"status": "started"}
+        return {"status": "started", "autofocus": req.autofocus}
 
     @app.post("/timelapse/stop")
     def stop_timelapse():
@@ -297,6 +376,149 @@ def create_app(camera, illuminations, timelapse):
                 await asyncio.sleep(1.0)
         return StreamingResponse(gen(), media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    # ===============================
+    # Foco motorizado (NEMA11 + TMC2209, ver core/motor_focus.py)
+    # ===============================
+    def _motor(num):
+        return motores.get(num)
+
+    @app.post("/api/focus/move")
+    def focus_move(req: FocusMoveReq):
+        """Salto puntual de N micropasos (los botones de paso fijo)."""
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        motor_ = _motor(req.motor)
+        if motor_ is None:
+            return {"error": f"cam{req.motor} no tiene motor de enfoque"}
+        motor_.stop_jog()
+        pos = motor_.mover(req.pasos, direction=req.direction,
+                           delay=req.velocidad)
+        return {"status": "ok", "motor": req.motor, "posicion": pos}
+
+    @app.post("/api/focus/jog")
+    def focus_jog(req: FocusJogReq):
+        """Arranca (o mantiene vivo) el movimiento continuo."""
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        motor_ = _motor(req.motor)
+        if motor_ is None:
+            return {"error": f"cam{req.motor} no tiene motor de enfoque"}
+        motor_.start_jog(direction=req.direction, delay=req.velocidad,
+                         watchdog=req.watchdog)
+        return {"status": "jog", "motor": req.motor,
+                "posicion": motor_.position}
+
+    @app.post("/api/focus/jog/stop")
+    def focus_jog_stop(req: FocusStopReq):
+        objetivos = motores.values() if req.motor is None \
+            else [m for m in [_motor(req.motor)] if m is not None]
+        posiciones = {}
+        for m in objetivos:
+            posiciones[m.nombre] = m.stop_jog()
+        return {"status": "stopped", "posiciones": posiciones}
+
+    @app.post("/api/focus/config")
+    def focus_config(req: FocusConfigReq):
+        """Cambia resolucion de micropasos y/o corriente en caliente.
+
+        Antes esto recreaba el FocusMotorController entero (reabriendo
+        GPIO y puerto serie) para cambiar de resolucion; ahora MRES se
+        reescribe por UART sobre el CHOPCONF que ya esta cargado, que es
+        lo que el chip espera y ademas conserva la posicion acumulada.
+        """
+        motor_ = _motor(req.motor)
+        if motor_ is None:
+            return {"error": f"cam{req.motor} no tiene motor de enfoque"}
+        motor_.stop_jog()
+        try:
+            motor_.set_microsteps(req.microsteps)
+            if req.corriente_ma is not None:
+                motor_.set_current(irun_ma=req.corriente_ma)
+        except Exception as e:
+            return {"error": str(e)}
+        return {"status": "ok", "motor": req.motor,
+                "microsteps": motor_.microsteps,
+                "irun_ma": motor_.irun_ma_real,
+                "posicion": motor_.position}
+
+    @app.get("/api/focus/status")
+    def focus_status():
+        if not motores:
+            return {"error": "Sin motores de enfoque", "motores": {}}
+        estados = {}
+        for num, m in motores.items():
+            info = m.estado_completo()
+            if autofocus is not None:
+                info["calibracion_dpc"] = autofocus.calibracion.get(num)
+            estados[str(num)] = info
+        return {"motores": estados, "autofocus": autofocus is not None}
+
+    # ===============================
+    # Autofoco (barrido de nitidez, ver core/autofocus.py)
+    # ===============================
+    @app.post("/api/focus/auto")
+    def focus_auto(req: AutofocusReq):
+        """Enfoca una camara. Tarda del orden de 15-30 s: es sincrono a
+        proposito (FastAPI corre los endpoints sync en su threadpool,
+        asi que no bloquea al resto del servidor) y devuelve la curva de
+        nitidez completa para poder ver el barrido en la interfaz."""
+        if autofocus is None:
+            return {"error": "Autofoco no disponible (sin motores)"}
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        if not autofocus.disponible(req.camera):
+            return {"error": f"cam{req.camera} no tiene motor de enfoque"}
+        if not autofocus_lock.acquire(blocking=False):
+            return {"error": "Ya hay un autofoco corriendo"}
+        try:
+            rango = req.rango
+            if req.rango_um is not None:
+                motor_ref = autofocus.motores.get(req.camera)
+                if motor_ref is None:
+                    return {"error": f"cam{req.camera} no tiene motor de enfoque"}
+                rango = micropasos_por_um(req.rango_um, motor_ref.microsteps)
+            opciones = dict(
+                metodo=req.metodo, rango=rango, puntos=req.puntos,
+                refinamientos=req.refinamientos, iteraciones=req.iteraciones,
+                usar_luz=req.usar_luz, patron=req.patron)
+            # Solo se manda si el pedido lo trae explicito: cada metodo
+            # (enfocar_dpc / enfocar de respaldo) tiene su propio default
+            # sensato, y no queremos pisarlo con el mismo numero para los
+            # dos casos.
+            if req.repeticiones is not None:
+                opciones["repeticiones"] = req.repeticiones
+            return autofocus.enfocar_auto(req.camera, **opciones)
+        except Exception as e:
+            return {"error": str(e)}
+        finally:
+            autofocus_lock.release()
+
+    @app.post("/api/focus/calibrar")
+    def focus_calibrar(req: CalibrarDpcReq):
+        """Calibra el autofoco DPC de una camara: cuantos micropasos de
+        desenfoque equivalen a un pixel de corrimiento entre las dos
+        medias iluminaciones. Se hace una vez por objetivo y queda
+        guardado en profiles/autofoco_dpc.json.
+
+        De paso deja la camara enfocada: el foco es donde la recta
+        corrimiento-vs-posicion cruza el cero."""
+        if autofocus is None:
+            return {"error": "Autofoco no disponible (sin motores)"}
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        if not autofocus.disponible(req.camera):
+            return {"error": f"cam{req.camera} no tiene motor de enfoque"}
+        if not autofocus_lock.acquire(blocking=False):
+            return {"error": "Ya hay un autofoco corriendo"}
+        try:
+            return autofocus.calibrar_dpc(
+                req.camera, amplitud=req.amplitud, puntos=req.puntos,
+                eje=req.eje, repeticiones=req.repeticiones)
+        except Exception as e:
+            return {"error": str(e)}
+        finally:
+            autofocus_lock.release()
 
     # ===============================
     # Interfaz

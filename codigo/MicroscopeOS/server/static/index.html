@@ -61,6 +61,17 @@
   .actions{display:flex;flex-direction:column;gap:10px;margin-top:6px}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--panel);border:1px solid var(--green);color:var(--green);padding:12px 22px;border-radius:8px;font-size:13px;transition:.3s;z-index:50}
   .toast.show{transform:translateX(-50%) translateY(0)}
+  .joy{position:relative;height:230px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;
+    margin:12px 0;touch-action:none;cursor:grab;overflow:hidden;user-select:none}
+  .joy.grab{cursor:grabbing;border-color:var(--green)}
+  .joy::after{content:'';position:absolute;left:12px;right:12px;top:50%;height:1px;background:var(--line)}
+  .joyknob{position:absolute;left:50%;top:50%;width:78px;height:78px;margin:-39px 0 0 -39px;border-radius:50%;
+    background:var(--panel);border:1px solid var(--green);box-shadow:0 0 14px var(--glow);
+    display:flex;align-items:center;justify-content:center;color:var(--green);font-size:13px;transition:box-shadow .15s}
+  .joy.grab .joyknob{box-shadow:0 0 22px var(--green)}
+  .joylbl{position:absolute;left:0;right:0;text-align:center;font-size:10px;color:var(--dim);letter-spacing:1px;pointer-events:none}
+  .joylbl.up{top:8px}
+  .joylbl.dn{bottom:8px}
   .valve-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 10px;border-radius:20px;border:1px solid var(--line)}
   .valve-pill .vdot{width:6px;height:6px;border-radius:50%;background:currentColor}
   .valve-pill.open{color:var(--green);border-color:var(--green);background:var(--glow)}
@@ -157,6 +168,59 @@
 
   <div>
     <div class="panel" style="margin-bottom:18px">
+      <h2>Foco motorizado</h2>
+      <div class="camsel">
+        <button id="mBtn0" class="active" onclick="selMotor(0)">Eje CAM 0</button>
+        <button id="mBtn1" onclick="selMotor(1)">Eje CAM 1</button>
+      </div>
+      <!-- Joystick: arrastrar arriba/abajo mueve el eje seleccionado de
+           forma continua; cuanto mas lejos del centro, mas rapido. -->
+      <div class="joy" id="joy">
+        <span class="joylbl up">▲ SUBIR</span>
+        <span class="joylbl dn">▼ BAJAR</span>
+        <div class="joyknob" id="joyKnob">Z</div>
+      </div>
+      <div class="row">
+        <button onclick="focusMove(-1)">▲ Un paso</button>
+        <button onclick="focusMove(1)">▼ Un paso</button>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label>Pasos por click</label>
+        <input type="number" id="focusPasos" value="200" min="1">
+      </div>
+      <div class="field">
+        <label>Precisión (micropasos)</label>
+        <select id="focusMicrosteps" onchange="aplicarFocusConfig()">
+          <option value="1">1 — full step, máx. torque</option>
+          <option value="2">2</option>
+          <option value="4">4</option>
+          <option value="8">8</option>
+          <option value="16" selected>16</option>
+          <option value="32">32</option>
+          <option value="64">64</option>
+          <option value="128">128</option>
+          <option value="256">256 — máx. precisión</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Velocidad máxima</label>
+        <div class="slider">
+          <input type="range" id="focusVel" min="1" max="10" value="5" oninput="focusVelLabel()">
+          <span class="val" id="focusVelVal">5</span>
+        </div>
+      </div>
+      <div class="stat"><span class="k">Posición (micropasos)</span><span class="v" id="s_focus_pos">—</span></div>
+      <div class="stat"><span class="k">Driver</span><span class="v" id="s_focus_drv">—</span></div>
+      <div class="field" style="margin-top:14px;margin-bottom:8px">
+        <label>Rango de búsqueda (µm desde la posición actual)</label>
+        <input type="number" id="afRango" value="60" min="5" step="5">
+      </div>
+      <button id="afBtn" onclick="autoenfocar()" style="width:100%">◎ Autofoco de CAM 0</button>
+      <button id="calBtn" onclick="calibrarDpc()" style="width:100%;margin-top:8px">⊹ Calibrar autofoco DPC</button>
+      <div class="stat" style="margin-top:6px"><span class="k">Autofoco DPC</span><span class="v" id="s_cal">—</span></div>
+      <div class="stat"><span class="k">Último autofoco</span><span class="v" id="s_af">—</span></div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
       <h2>Cámara</h2>
       <div class="row">
         <div class="field"><label>Exposición µs</label><input type="number" id="exp" value="12000"></div>
@@ -178,6 +242,14 @@
       <div class="row">
         <div class="field"><label>Intervalo s</label><input type="number" id="intv" value="300"></div>
         <div class="field"><label>Duración s</label><input type="number" id="dur" value="3600"></div>
+      </div>
+      <div class="field" style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="tlAf" style="width:auto" onchange="tlAfChange()">
+        <label for="tlAf" style="margin:0;text-transform:none;letter-spacing:0">Reenfocar automáticamente</label>
+      </div>
+      <div class="row" id="tlAfOpts" style="display:none">
+        <div class="field"><label>Cada N ciclos</label><input type="number" id="tlAfCada" value="1" min="1"></div>
+        <div class="field"><label>Rango µpasos</label><input type="number" id="tlAfRango" value="1600" min="100"></div>
       </div>
       <div class="actions">
         <button class="primary" id="start" onclick="iniciar()">▶ Iniciar Timelapse</button>
@@ -317,13 +389,192 @@ async function capturar(){
   toast('Guardado: '+(Array.isArray(d.saved)?d.saved.length+' fotos':d.saved));
   document.getElementById('lightBtn').classList.remove('lit');
 }
+// ============================================================
+// Foco motorizado: un eje Z por camara, seleccionable.
+// ============================================================
+let motorSel=0;                 // eje activo (numero de camara)
+let jogTimer=null, jogActivo=false;
+
+function selMotor(n){
+  motorSel=n;
+  document.getElementById('mBtn0').classList.toggle('active',n===0);
+  document.getElementById('mBtn1').classList.toggle('active',n===1);
+  document.getElementById('afBtn').textContent='◎ Autofoco de CAM '+n;
+  refrescarFoco();
+}
+function focusVelLabel(){document.getElementById('focusVelVal').textContent=document.getElementById('focusVel').value;}
+// El slider da la velocidad MAXIMA (delay minimo entre flancos STEP).
+// 1 -> 10ms (lento y con mucho par), 10 -> 1ms (rapido).
+function delayMinimo(){const v=+document.getElementById('focusVel').value;return 0.011-v*0.001;}
+
+async function focusMove(direction){
+  const pasos=+document.getElementById('focusPasos').value;
+  const r=await fetch('/api/focus/move',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({motor:motorSel,direction:direction,pasos:pasos,velocidad:delayMinimo()})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast((direction===1?'Bajando ':'Subiendo ')+pasos+' µpasos');
+  refrescarFoco();
+}
+async function aplicarFocusConfig(){
+  const microsteps=+document.getElementById('focusMicrosteps').value;
+  const r=await fetch('/api/focus/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({motor:motorSel,microsteps:microsteps})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Precisión: 1/'+microsteps+' de paso');
+  refrescarFoco();
+}
+
+// --- joystick vertical ---
+// Mientras esta apretado se reenvia /api/focus/jog cada 250 ms. Cada
+// pedido refresca el watchdog del servidor (1.5 s): si el navegador se
+// congela o se corta el WiFi con el joystick apretado, el motor se para
+// solo en vez de seguir bajando la plataforma contra la muestra.
+(function(){
+  const joy=document.getElementById('joy'), knob=document.getElementById('joyKnob');
+  const ZONA_MUERTA=0.14, RECORRIDO=85;   // px de desplazamiento maximo del knob
+  let t=0;                                // -1 (arriba) .. 1 (abajo)
+
+  function velocidad(){
+    // Fuera de la zona muerta, |t| mapea linealmente a la velocidad:
+    // apenas movido = 22ms entre flancos (lentisimo, para enfocar fino),
+    // al tope = el delay minimo del slider.
+    const u=(Math.abs(t)-ZONA_MUERTA)/(1-ZONA_MUERTA);
+    return 0.022-(0.022-delayMinimo())*u;
+  }
+  function pintar(){knob.style.transform='translateY('+(t*RECORRIDO)+'px)';}
+  function enviar(){
+    if(Math.abs(t)<ZONA_MUERTA)return;
+    fetch('/api/focus/jog',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({motor:motorSel,direction:t>0?1:-1,velocidad:velocidad(),watchdog:1.5})})
+      .then(r=>r.json()).then(d=>{if(d.error){toast(d.error);soltar();}}).catch(()=>{});
+  }
+  function mover(ev){
+    const r=joy.getBoundingClientRect();
+    const dy=(ev.clientY-(r.top+r.height/2))/(r.height/2);
+    t=Math.max(-1,Math.min(1,dy));
+    pintar();
+  }
+  function agarrar(ev){
+    if(running)return;
+    joy.setPointerCapture(ev.pointerId);
+    joy.classList.add('grab');jogActivo=true;
+    mover(ev);enviar();
+    jogTimer=setInterval(enviar,250);
+  }
+  function soltar(){
+    if(!jogActivo)return;
+    jogActivo=false;
+    clearInterval(jogTimer);jogTimer=null;
+    joy.classList.remove('grab');
+    t=0;pintar();
+    fetch('/api/focus/jog/stop',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({motor:motorSel})}).then(()=>refrescarFoco()).catch(()=>{});
+  }
+  joy.addEventListener('pointerdown',agarrar);
+  joy.addEventListener('pointermove',ev=>{if(jogActivo)mover(ev);});
+  joy.addEventListener('pointerup',soltar);
+  joy.addEventListener('pointercancel',soltar);
+  // Si la pestania pasa a segundo plano, los timers se ralentizan y el
+  // watchdog cortaria igual; soltar aca lo hace explicito.
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)soltar();});
+  window.addEventListener('blur',soltar);
+})();
+
+async function refrescarFoco(){
+  try{
+    const r=await fetch('/api/focus/status');const d=await r.json();
+    const m=d.motores&&d.motores[motorSel];
+    const pos=document.getElementById('s_focus_pos'), drv=document.getElementById('s_focus_drv');
+    if(!m){pos.textContent='—';drv.textContent='sin motor';return;}
+    pos.textContent=m.posicion+'  (1/'+m.microsteps+')';
+    if(m.uart!=='ok'){drv.textContent='UART: error';drv.className='v hot';return;}
+    const avisos=[];
+    if(m.sobretemp_corte)avisos.push('CORTE TÉRMICO');
+    else if(m.sobretemp_aviso)avisos.push('caliente');
+    if(m.corto_fase_a||m.corto_fase_b)avisos.push('CORTO');
+    drv.textContent=avisos.length?avisos.join(' · '):(m.irun_ma+'mA · OK');
+    drv.className='v'+(avisos.length?' hot':'');
+    const cal=document.getElementById('s_cal'), c=m.calibracion_dpc;
+    if(c){
+      cal.textContent=c.um_por_pixel.toFixed(2)+' µm/px · r²='+c.r2.toFixed(3);
+      cal.className='v';
+    }else{
+      cal.textContent='sin calibrar — usa barrido';
+      cal.className='v hot';
+    }
+  }catch(e){}
+}
+
+async function autoenfocar(){
+  const btn=document.getElementById('afBtn'), cam=motorSel;
+  btn.disabled=true;btn.textContent='◎ Enfocando CAM '+cam+'...';
+  try{
+    // El rango se piensa en micras, no en micropasos: cuanto mas lejos
+    // del punto donde YA enfocaste a mano puede llegar a estar el foco
+    // real. Chico a proposito -- el autofoco arranca desde tu posicion
+    // actual (no la reemplaza a ciegas), asi que no hace falta un rango
+    // grande si ya enfocaste vos primero. Sin finales de carrera (ver
+    // TODO_HW.md 1.5), mas chico tambien es menos riesgo.
+    const rangoUm=+document.getElementById('afRango').value;
+    const r=await fetch('/api/focus/auto',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera:cam,rango_um:rangoUm,puntos:13,refinamientos:2})});
+    const d=await r.json();
+    if(d.error){toast(d.error);document.getElementById('s_af').textContent='error';return;}
+    const um=d.desplazamiento_um, signo=um>0?'+':'';
+    document.getElementById('s_af').textContent=
+      d.metodo+': '+signo+um.toFixed(1)+' µm · '+d.segundos+'s';
+    if(d.fuera_de_rango){
+      toast('Máximo en el borde del rango — repetí el autofoco o ampliá el rango');
+    }else if(d.fino && d.fino.en_borde){
+      toast('Enfocado ('+signo+um.toFixed(1)+' µm) pero el ajuste fino quedó en el borde — repetí');
+    }else{
+      // El DPC informa el corrimiento residual entre las dos medias
+      // aperturas; el barrido, la nitidez del máximo.
+      const detalle=d.metodo==='dpc'
+        ? 'resto '+d.corrimiento_px.toFixed(2)+' px'
+        : 'nitidez '+d.nitidez.toFixed(0);
+      toast('Enfocado por '+d.metodo+': '+signo+um.toFixed(1)+' µm ('+detalle+')');
+    }
+    refrescarFoco();
+  }catch(e){toast('Error de autofoco');}
+  finally{btn.disabled=false;btn.textContent='◎ Autofoco de CAM '+cam;}
+}
+async function calibrarDpc(){
+  const btn=document.getElementById('calBtn'), cam=motorSel;
+  if(!confirm('Calibrar el autofoco DPC de CAM '+cam+'.\n\nVa a mover la '
+    +'plataforma ±125 µm alrededor de la posición actual midiendo el '
+    +'corrimiento entre las dos medias iluminaciones.\n\nEnfocá a ojo ANTES: '
+    +'la relación es lineal solo cerca del foco, y calibrar lejos sesga la '
+    +'ganancia. La muestra tiene que tener estructura visible.'))return;
+  btn.disabled=true;btn.textContent='⊹ Calibrando CAM '+cam+'...';
+  try{
+    const r=await fetch('/api/focus/calibrar',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera:cam,amplitud:1200,puntos:5,eje:'lr'})});
+    const d=await r.json();
+    if(d.error){toast(d.error);return;}
+    toast(d.confiable
+      ? 'Calibrado: '+d.calibracion.um_por_pixel.toFixed(2)+' µm/px (r²='+d.r2.toFixed(3)+')'
+      : 'Ajuste pobre (r²='+d.r2.toFixed(3)+') — campo vacío, o rango de calibración fuera del régimen lineal');
+    refrescarFoco();
+  }catch(e){toast('Error de calibración');}
+  finally{btn.disabled=false;btn.textContent='⊹ Calibrar autofoco DPC';}
+}
+function tlAfChange(){
+  document.getElementById('tlAfOpts').style.display=
+    document.getElementById('tlAf').checked?'grid':'none';
+}
 async function aplicarCamara(){
   await fetch('/exposure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exposure:+document.getElementById('exp').value,gain:+document.getElementById('gain').value})});
   toast('Exposición aplicada');
 }
 async function iniciar(){
   await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));
-  const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1]};
+  const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1],
+    autofocus:document.getElementById('tlAf').checked,
+    autofocus_cada:+document.getElementById('tlAfCada').value,
+    autofocus_rango:+document.getElementById('tlAfRango').value};
   const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   if(d.error){toast(d.error);return;}
@@ -335,7 +586,7 @@ function setRunning(on){
   document.getElementById('dot').className='dot '+(on?'run':'idle');
   document.getElementById('state').textContent=on?'RUNNING':'IDLE';
   document.getElementById('s_state').textContent=on?'RUNNING':'IDLE';
-  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn','afBtn','calBtn'].forEach(id=>document.getElementById(id).disabled=on);
   document.getElementById('stop').disabled=!on;
   if(on){
     [0,1].forEach(n=>{
@@ -359,6 +610,7 @@ async function poll(){
   }catch(e){}
 }
 setInterval(poll,2000);poll();refrescarAmbas();
+setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();
 
 // --- Temperatura SSE ---
 (function(){

@@ -72,6 +72,7 @@ class CameraController:
             return picam2.create_video_configuration(
                 main={"size": PREVIEW_SIZE, "format": "RGB888"}
             )
+        # (el modo still va mas abajo)
         # Full res, raw, para captura cientifica
         return picam2.create_still_configuration(
             raw={"size": STILL_SIZE, "format": RAW_FORMAT}
@@ -90,18 +91,52 @@ class CameraController:
 
         picam2.configure(self._config(picam2, mode))
         picam2.start()
-        picam2.set_controls({
+        controles = {
             "ExposureTime": self.exposure_time,
             "AnalogueGain": self.gain,
             "AeEnable": False,
             "AwbEnable": False
-        })
+        }
+        if mode == "preview":
+            # El stream de preview pasa por el ISP, que por defecto
+            # realza bordes y hace reduccion de ruido. Las dos cosas
+            # falsean lo que mide el autofoco: el realce inventa alto
+            # contraste (nitidez donde no la hay) y el denoise borra
+            # justo la textura fina con la que engancha la correlacion
+            # de fase. Ademas el denoise es NO LINEAL, asi que actua
+            # distinto en la imagen de la mitad izquierda que en la de
+            # la derecha y contamina la resta del DPC.
+            controles.update(self._controles_planos(picam2))
+        picam2.set_controls(controles)
         self._modes[camera_num] = mode
         # TODO-HW: 0.3 s heredado de Pi 4 para que los controles se apliquen.
         # En Pi 5 el pipeline es otro; si las primeras capturas salen con
         # exposicion incorrecta, subirlo o esperar por metadata real.
         time.sleep(0.3)
         return picam2
+
+    @staticmethod
+    def _controles_planos(picam2):
+        """Controles de ISP que hay que apagar para medir foco, los que
+        esta build de libcamera soporte.
+
+        Se consultan contra picam2.camera_controls en vez de fijarlos a
+        ciegas: los nombres y los enums de NoiseReductionMode cambiaron
+        entre versiones de libcamera, y un control inexistente hace
+        fallar el set_controls ENTERO -- incluida la exposicion.
+        """
+        disponibles = getattr(picam2, "camera_controls", {}) or {}
+        controles = {}
+        if "Sharpness" in disponibles:
+            controles["Sharpness"] = 0.0
+        if "NoiseReductionMode" in disponibles:
+            try:
+                from libcamera import controls as libcam_controls
+                controles["NoiseReductionMode"] = \
+                    libcam_controls.draft.NoiseReductionModeEnum.Off
+            except Exception:
+                pass
+        return controles
 
     def _shutdown(self, camera_num):
         with self._open_lock:
@@ -157,6 +192,38 @@ class CameraController:
         if not ok:
             return None
         return buf.tobytes()
+
+    def get_focus_frame(self, camera_num, descartar=1):
+        """Frame gris de baja resolucion para medir nitidez (autofoco).
+
+        A diferencia de get_preview_frame() no comprime a JPEG (el
+        artefacto de compresion se comeria justo el alto contraste que
+        mide el autofoco) y a diferencia de get_frame() no marca la
+        camara como "en vivo": el autofoco puede correr con el vivo
+        apagado, incluso a mitad de un timelapse, y no debe dejar el
+        stream MJPEG creyendo que hay alguien mirando.
+
+        `descartar` tira los primeros N frames. NO es paranoia: el
+        autofoco cambia la iluminacion (o mueve la plataforma) e
+        inmediatamente pide una imagen, y la camara esta corriendo en
+        continuo con requests ya en vuelo. El primer frame que devuelve
+        capture_array() puede haberse EXPUESTO ANTES del cambio, asi
+        que mediria la iluminacion anterior. Con dos medias aperturas
+        que se comparan entre si, un frame viejo no da un error chico:
+        da un corrimiento inventado.
+
+        Deja la camara en modo preview; la proxima captura cientifica
+        la devuelve a modo still sola (_ensure_mode).
+        """
+        with self._locks[camera_num]:
+            self._ensure_mode(camera_num, "preview")
+            picam2 = self._cams[camera_num]
+            for _ in range(max(0, descartar)):
+                picam2.capture_array("main")
+            frame = picam2.capture_array("main")
+        if frame.ndim == 3:
+            return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        return frame
 
     def get_frame(self, camera_num=None):
         """Frame RGB crudo del preview, para PreviewManager y la GUI PyQt6.

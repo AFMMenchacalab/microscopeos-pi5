@@ -86,8 +86,20 @@ check("TIFF sale 2D uint16 (2464,3280)", tif.escritos[f"{d}/a0.tif"] == (2464, 3
 nconf = i0.n_configure
 cam.start_preview(0)
 check("preview reconfigura una vez", i0.n_configure == nconf + 1)
-check("get_preview_frame devuelve JPEG", cam.get_preview_frame()[:2] == b"\xff\xd8")
+check("get_preview_frame devuelve JPEG", cam.get_preview_frame(0)[:2] == b"\xff\xd8")
 check("get_frame existe y devuelve array", cam.get_frame(0).shape == (480, 640, 3))
+check("get_focus_frame devuelve gris 2D (autofoco)", cam.get_focus_frame(0).shape == (480, 640))
+check("get_focus_frame no marca la camara como en vivo",
+      1 not in cam._preview_cams)
+# Cambiar la luz y pedir imagen enseguida: el primer frame que devuelve
+# la camara puede haberse expuesto ANTES del cambio. Por eso se descarta.
+n_antes = i0.n_capturas
+cam.get_focus_frame(0)
+check("get_focus_frame descarta el frame en vuelo antes de medir",
+      i0.n_capturas - n_antes == 2, f"{i0.n_capturas - n_antes} capturas")
+n_antes = i0.n_capturas
+cam.get_focus_frame(0, descartar=0)
+check("y se puede pedir sin descarte", i0.n_capturas - n_antes == 1)
 cam.stop_preview()
 check("stop_preview no cierra la instancia", not i0.cerrada)
 

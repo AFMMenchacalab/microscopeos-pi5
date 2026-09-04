@@ -58,6 +58,11 @@ arm_boost=1
 # `enable_uart=1` aqui y `console=serial0,115200` en cmdline.txt, pero
 # entonces GPIO14/15 dejan de estar disponibles.
 
+# UART0 para el driver TMC2209 del motor de enfoque (core/motor_focus.py).
+# Expone /dev/ttyAMA0 en GPIO14 (TXD, va a UART RX del driver) y GPIO15
+# (RXD, va a UART TX del driver). Aplicado con setup_tmc2209.sh.
+dtparam=uart0=on
+
 # Multiplexor Arducam Multi Camera Adapter V2.2 ELIMINADO.
 # En Pi 4B era necesario porque la placa tiene un solo puerto CSI:
 #     dtoverlay=camera-mux-4port,cam0-imx219,cam1-imx219

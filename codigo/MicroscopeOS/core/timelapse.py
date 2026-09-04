@@ -26,9 +26,13 @@ MODOS = {
 
 class TimelapseManager:
 
-    def __init__(self, camera, illuminations):
+    def __init__(self, camera, illuminations, autofocus=None):
         self.camera = camera
         self.illuminations = illuminations
+        # Instancia de core.autofocus.Autofocus, o None si no hay
+        # motores de enfoque conectados. Opcional a proposito: el
+        # timelapse tiene que seguir corriendo igual sin ellos.
+        self.autofocus = autofocus
         self.state = TimelapseState.STOPPED
         self.thread = None
         self.base_folder = None
@@ -112,6 +116,58 @@ class TimelapseManager:
         except Exception as e:
             self._log(f"Error generando gráfica: {e}")
 
+    def _autoenfocar(self, camaras, ciclo, ts, opciones):
+        """Reenfoca cada camara antes de capturar el ciclo.
+
+        Por que tiene sentido en un timelapse largo: en 48 h el foco se
+        va solo (dilatacion termica del montaje, la incubadora ciclando
+        entre 37 grados y ambiente, evaporacion que baja el nivel del
+        medio). Sin esto, un timelapse que empieza enfocado puede
+        terminar borroso sin que nadie se entere hasta revisar las
+        imagenes.
+
+        Cada resultado se registra ademas en autofoco.csv: la deriva de
+        la posicion de foco a lo largo del experimento es un dato en si
+        mismo (y sirve para decidir si hace falta reenfocar cada ciclo o
+        cada 20).
+        """
+        if self.autofocus is None:
+            return
+        for cam in camaras:
+            if not self.autofocus.disponible(cam):
+                continue
+            try:
+                r = self.autofocus.enfocar_auto(cam, **opciones)
+                self._log(f"  autofoco cam{cam} [{r.get('metodo', '?')}]: "
+                          f"pos={r['posicion']} "
+                          f"(mov {r['desplazamiento']:+d}) "
+                          + (f"nitidez={r['nitidez']:.1f} "
+                             if "nitidez" in r else
+                             f"corrimiento={r['corrimiento_px']:+.2f}px ")
+                          + f"{r['segundos']}s"
+                          + ("  [MAXIMO EN EL BORDE DEL RANGO]"
+                             if r.get("fuera_de_rango") else ""))
+                self._log_autofoco(ciclo, ts, cam, r)
+            except Exception as e:
+                self._log(f"  autofoco cam{cam}: ERROR -> {e}")
+
+    def _log_autofoco(self, ciclo, ts, cam, r):
+        try:
+            path = os.path.join(self.base_folder, "autofoco.csv")
+            nuevo = not os.path.exists(path) or os.path.getsize(path) == 0
+            with open(path, "a") as f:
+                if nuevo:
+                    f.write("timestamp,ciclo,camara,metodo,posicion,"
+                            "desplazamiento,nitidez,corrimiento_px,"
+                            "fuera_de_rango\n")
+                f.write(f"{ts},{ciclo},{cam},{r.get('metodo', '')},"
+                        f"{r['posicion']},{r['desplazamiento']},"
+                        f"{r.get('nitidez', '')},"
+                        f"{r.get('corrimiento_px', '')},"
+                        f"{int(bool(r.get('fuera_de_rango')))}\n")
+        except Exception:
+            pass
+
     def _capturar_secuencial(self, patrones, camaras, ts, stabilization_time):
         """Una camara y una matriz encendida a la vez.
 
@@ -191,7 +247,8 @@ class TimelapseManager:
                             pass
 
     def _run(self, modo, interval_seconds, duration_seconds,
-             stabilization_time, camaras, simultaneo):
+             stabilization_time, camaras, simultaneo,
+             autofocus, autofocus_cada, autofocus_opts):
 
         self.state = TimelapseState.RUNNING
         patrones = MODOS[modo]
@@ -207,9 +264,15 @@ class TimelapseManager:
         with open(csv_path, "w") as f:
             f.write("timestamp,ciclo,temperatura,setpoint,pwm\n")
 
+        if autofocus and self.autofocus is None:
+            self._log("Autofoco pedido pero no hay motores de enfoque "
+                      "disponibles -- se continua sin autofoco.")
+            autofocus = False
+
         self._log(f"Timelapse iniciado | modo={modo} | camaras={camaras} | "
                   f"intervalo={interval_seconds}s | duracion={duration_seconds}s | "
-                  f"captura={'simultanea' if simultaneo else 'secuencial'}")
+                  f"captura={'simultanea' if simultaneo else 'secuencial'} | "
+                  f"autofoco={'cada ' + str(autofocus_cada) + ' ciclo(s)' if autofocus else 'no'}")
 
         start_time = time.monotonic()
         next_capture_time = start_time
@@ -229,6 +292,13 @@ class TimelapseManager:
 
                 # Registrar temperatura al inicio de cada ciclo
                 self._log_temp(ciclo, ts)
+
+                # El autofoco va ANTES de las capturas del ciclo y
+                # despues del log de temperatura: mueve la plataforma y
+                # deja las camaras en modo preview, asi que tiene que
+                # terminar antes de que se dispare la primera foto.
+                if autofocus and (ciclo - 1) % max(1, autofocus_cada) == 0:
+                    self._autoenfocar(camaras, ciclo, ts, autofocus_opts)
 
                 if simultaneo:
                     self._capturar_simultaneo(patrones, camaras, ts,
@@ -253,7 +323,8 @@ class TimelapseManager:
         self.state = TimelapseState.STOPPED
 
     def start(self, modo="blanco", interval_seconds=300, duration_seconds=3600,
-              stabilization_time=0.3, camaras=[0, 1], simultaneo=False):
+              stabilization_time=0.3, camaras=[0, 1], simultaneo=False,
+              autofocus=False, autofocus_cada=1, autofocus_opts=None):
         if self.state == TimelapseState.RUNNING:
             print("Timelapse ya esta corriendo.")
             return
@@ -264,7 +335,8 @@ class TimelapseManager:
         self.thread = threading.Thread(
             target=self._run,
             args=(modo, interval_seconds, duration_seconds,
-                  stabilization_time, camaras, simultaneo),
+                  stabilization_time, camaras, simultaneo,
+                  autofocus, autofocus_cada, autofocus_opts or {}),
             daemon=True
         )
         self.thread.start()
