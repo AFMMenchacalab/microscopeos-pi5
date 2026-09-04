@@ -1,8 +1,6 @@
-# requirements_pi5.txt
-# Derivado de requirements_pi4.txt (que se conserva como referencia del
-# sistema de origen). Cambios marcados con [PI5].
+# requirements.txt
 #
-# El venv se crea IGUAL que en Pi 4, con --system-site-packages:
+# El venv se crea con --system-site-packages:
 #   python3 -m venv --system-site-packages ~/MicroscopeOS/venv
 # Sin esa flag, picamera2 / cv2 / numpy / rpi-lgpio / pyserial no se ven
 # desde el venv, porque vienen de apt y no de pip.
