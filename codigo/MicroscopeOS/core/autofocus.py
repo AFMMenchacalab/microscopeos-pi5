@@ -173,15 +173,18 @@ def _pico_parabolico(puntos, i):
 
 class Autofocus:
 
-    def __init__(self, camera, motores, illuminations=None):
+    def __init__(self, camera, motores, illuminations=None, ia=None):
         """
         camera: CameraController
         motores: {numero_de_camara: FocusMotorController}
         illuminations: {numero_de_camara: IlluminationController} o None
+        ia: core.autofocus_ia.AutofocoIA o None. Solo se usa si trae un
+            modelo cargado; sin el, todo sigue igual que antes.
         """
         self.camera = camera
         self.motores = motores or {}
         self.illuminations = illuminations or {}
+        self.ia = ia
         self.ultimo = {}        # camera_num -> resultado del ultimo enfoque
         self.calibracion = {}   # camera_num -> constantes del metodo DPC
         self._cargar_calibracion()
@@ -745,8 +748,27 @@ class Autofocus:
         comportamiento por defecto sea el rapido sin dejar de funcionar
         en una camara todavia sin calibrar.
         """
-        if metodo not in ("auto", "dpc", "barrido"):
+        if metodo not in ("auto", "dpc", "barrido", "ia"):
             raise ValueError(f"metodo invalido: {metodo}")
+
+        # La red va primero en "auto" cuando hay modelo: aprende la
+        # curva completa (saturacion incluida), asi que arranca bien
+        # desde mas lejos que la recta calibrada. Si falla, se cae al
+        # metodo analitico, que no depende de ningun archivo.
+        tiene_ia = self.ia is not None and self.ia.disponible()
+        if metodo == "ia" and not tiene_ia:
+            raise RuntimeError(
+                "autofoco IA no disponible: "
+                + (self.ia.error if self.ia else "sin modelo cargado"))
+        if tiene_ia and metodo in ("auto", "ia"):
+            try:
+                return self.ia.enfocar(self, camera_num,
+                                       iteraciones=iteraciones, **kw)
+            except Exception as e:
+                if metodo == "ia":
+                    raise
+                print(f"[autofoco] cam{camera_num}: IA fallo ({e}); "
+                      f"se cae al metodo analitico")
 
         if metodo in ("auto", "dpc") and self.calibrado(camera_num):
             try:

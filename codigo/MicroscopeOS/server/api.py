@@ -59,6 +59,11 @@ class TimelapseReq(BaseModel):
     autofocus_cada: int = 1
     autofocus_rango: int = 1600
     autofocus_puntos: int = 11
+    # Contar celulas en las capturas de cada ciclo -> conteo.csv,
+    # poblacion.png y eventos.csv al terminar.
+    contar: bool = False
+    contar_cada: int = 1
+    contar_overlay: bool = True
 
 class SetpointPayload(BaseModel):
     value: float
@@ -92,8 +97,9 @@ class FocusConfigReq(BaseModel):
 
 class AutofocusReq(BaseModel):
     camera: int = 0
-    # auto = DPC si esa camara esta calibrada, barrido si no.
-    metodo: str = "auto"      # auto | dpc | barrido
+    # auto = IA si hay modelo, si no DPC si esa camara esta calibrada,
+    # si no barrido a ciegas.
+    metodo: str = "auto"      # auto | ia | dpc | barrido
     rango: int = 800          # amplitud total del barrido, en micropasos
     # Alternativa en unidades fisicas: si se manda, pisa a `rango`
     # convertido a la resolucion de microstepping ACTUAL de esa camara.
@@ -113,6 +119,58 @@ class AutofocusReq(BaseModel):
     # barrido, promediar cada uno ademas lo hace demasiado lento).
     repeticiones: int | None = None
 
+class PilaFocoReq(BaseModel):
+    """Grabacion de una pila de foco (dataset para el autofoco IA).
+
+    Ver core/pila_foco.py: barre Z alrededor de la posicion actual, que
+    se toma como el foco, y guarda el par de medias aperturas de cada
+    plano con su desenfoque real como etiqueta."""
+    camera: int = 0
+    rango: int = 1600         # recorrido total en micropasos
+    puntos: int = 25
+    eje: str = "lr"
+    notas: str = ""
+
+class ConteoConfigReq(BaseModel):
+    """Encendido/apagado del conteo en vivo y sus perillas.
+
+    Todos los campos son opcionales: la interfaz manda solo lo que
+    cambia (el boton manda `camara`+`activo`, los deslizadores mandan
+    el parametro suelto) y el resto queda como estaba."""
+    camara: int | None = None
+    activo: bool | None = None
+    # manual = mide solo cuando se lo pide (/api/analisis/medir) y deja
+    # el resultado congelado; auto = vuelve a medir cada `periodo`.
+    modo: str | None = None
+    diametro_px: float | None = None
+    umbral: float | None = None
+    separar: bool | None = None
+    periodo: float | None = None
+
+class ConteoMedirReq(BaseModel):
+    """Medicion puntual sobre el vivo (modo manual).
+
+    Pone media apertura un instante, mide, y devuelve la iluminacion a
+    donde estaba. El dibujo queda congelado sobre el vivo hasta la
+    proxima medicion."""
+    camera: int = 0
+    # Patron de media apertura a usar durante la medicion. None = no
+    # tocar la luz (para muestras tenidas, que se ven en campo claro).
+    patron: str | None = "left"
+    settle: float = 0.3
+
+class ConteoFotoReq(BaseModel):
+    camera: int = 0
+    # dpc = captura el par L/R y cuenta sobre la imagen DPC (lo correcto
+    # para celulas vivas sin tenir); blanco = una sola captura.
+    modo: str = "dpc"
+    ancho_max: int = 1200
+    guardar_overlay: bool = True
+
+class ConteoCarpetaReq(BaseModel):
+    carpeta: str
+    intervalo_s: int | None = None
+
 class CalibrarDpcReq(BaseModel):
     camera: int = 0
     amplitud: int = 1200      # recorrido barrido para ajustar la recta
@@ -122,15 +180,20 @@ class CalibrarDpcReq(BaseModel):
 
 
 def create_app(camera, illuminations, timelapse, motores=None,
-               autofocus=None, motor=None):
+               autofocus=None, motor=None, conteo=None):
     """motores: {numero_de_camara: FocusMotorController}. `motor` se
     acepta todavia como un solo eje suelto (compatibilidad con la
-    version de un motor) y se mapea a la camara 0."""
+    version de un motor) y se mapea a la camara 0.
+
+    conteo: core.analisis.ContadorEnVivo, o None para arrancar sin
+    conteo de celulas."""
 
     app = FastAPI()
     if motores is None:
         motores = {0: motor} if motor is not None else {}
-    estado = {"camara_activa": 0}
+    # "luz": ultimo modo aplicado a cada matriz, para poder restaurarlo
+    # despues de una medicion puntual de celulas (ver _luz_aplicar).
+    estado = {"camara_activa": 0, "luz": {}}
     # Serializa el autofoco: mueve motor Y camara a la vez, asi que dos
     # corridas simultaneas se pisarian el modo de la camara.
     autofocus_lock = threading.Lock()
@@ -183,8 +246,13 @@ def create_app(camera, illuminations, timelapse, motores=None,
     @app.get("/live/stream/{camera_num}")
     def live_stream(camera_num: int):
         def gen():
+            # El gancho se pasa siempre; ContadorEnVivo devuelve el frame
+            # intacto para las camaras que tienen el conteo apagado, asi
+            # que encender/apagar desde la interfaz no obliga a
+            # reconectar el stream.
+            anotar = conteo.anotar if conteo is not None else None
             while camera_num in camera._preview_cams:
-                frame = camera.get_preview_frame(camera_num)
+                frame = camera.get_preview_frame(camera_num, anotar=anotar)
                 if frame is None:
                     break
                 yield (b'--frame\r\n'
@@ -204,6 +272,44 @@ def create_app(camera, illuminations, timelapse, motores=None,
         "top": "top", "bottom": "bottom", "ring": "ring",
     }
 
+    def _luz_aplicar(cam, modo, percent=None, color_centro="0000FF",
+                     color_anillo="FF6A00"):
+        """Aplica un modo a una matriz y RECUERDA cual quedo puesto.
+
+        Hace falta recordarlo para poder devolver la iluminacion a donde
+        estaba despues de una medicion puntual de celulas, que necesita
+        media apertura por un instante. Sin este registro, la unica
+        forma de "restaurar" seria apagar la luz -- y dejarle la muestra
+        a oscuras a alguien que la estaba mirando es peor que no
+        restaurar nada.
+        """
+        luz = illuminations.get(cam)
+        if luz is None:
+            return
+        if percent is not None:
+            luz.set_brightness(percent)
+        if modo == "off":
+            luz.off()
+        elif modo == "rheinberg":
+            luz.rheinberg(color_centro, color_anillo)
+        else:
+            getattr(luz, _METODOS_LUZ[modo])()
+        estado["luz"][cam] = {"modo": modo, "percent": percent,
+                              "color_centro": color_centro,
+                              "color_anillo": color_anillo}
+
+    def _luz_restaurar(cam, previo):
+        """Vuelve a como estaba. Si nunca se supo, apaga."""
+        if previo is None:
+            luz = illuminations.get(cam)
+            if luz:
+                luz.off()
+            estado["luz"][cam] = {"modo": "off", "percent": None}
+            return
+        _luz_aplicar(cam, previo.get("modo", "off"), previo.get("percent"),
+                     previo.get("color_centro", "0000FF"),
+                     previo.get("color_anillo", "FF6A00"))
+
     @app.post("/light/set")
     def light_set(req: LightReq):
         """Enciende un modo de iluminacion (campo claro/DPC/campo oscuro/
@@ -214,30 +320,21 @@ def create_app(camera, illuminations, timelapse, motores=None,
         if req.modo != "rheinberg" and req.modo not in _METODOS_LUZ:
             return {"error": f"Modo invalido: {req.modo}"}
         for cam in req.camaras:
-            luz = illuminations.get(cam)
-            if luz is None:
-                continue
-            if req.percent is not None:
-                luz.set_brightness(req.percent)
-            if req.modo == "rheinberg":
-                luz.rheinberg(req.color_centro, req.color_anillo)
-            else:
-                getattr(luz, _METODOS_LUZ[req.modo])()
+            _luz_aplicar(cam, req.modo, req.percent,
+                         req.color_centro, req.color_anillo)
         return {"status": "ok", "modo": req.modo}
 
     @app.post("/light/on")
     def light_on():
         if timelapse.is_running():
             return {"error": "Timelapse en curso"}
-        luz = illuminations.get(estado["camara_activa"])
-        if luz:
-            luz.on()
+        _luz_aplicar(estado["camara_activa"], "full")
         return {"status": "on"}
 
     @app.post("/light/off")
     def light_off():
-        for luz in illuminations.values():
-            luz.off()
+        for cam in illuminations:
+            _luz_aplicar(cam, "off")
         return {"status": "off"}
 
     # ===============================
@@ -334,8 +431,12 @@ def create_app(camera, illuminations, timelapse, motores=None,
             autofocus_cada=req.autofocus_cada,
             autofocus_opts={"rango": req.autofocus_rango,
                             "puntos": req.autofocus_puntos},
+            contar=req.contar,
+            contar_cada=req.contar_cada,
+            contar_opts={"overlay": req.contar_overlay},
         )
-        return {"status": "started", "autofocus": req.autofocus}
+        return {"status": "started", "autofocus": req.autofocus,
+                "contar": req.contar}
 
     @app.post("/timelapse/stop")
     def stop_timelapse():
@@ -452,7 +553,9 @@ def create_app(camera, illuminations, timelapse, motores=None,
             if autofocus is not None:
                 info["calibracion_dpc"] = autofocus.calibracion.get(num)
             estados[str(num)] = info
-        return {"motores": estados, "autofocus": autofocus is not None}
+        ia = getattr(autofocus, "ia", None) if autofocus else None
+        return {"motores": estados, "autofocus": autofocus is not None,
+                "ia": ia.estado() if ia is not None else None}
 
     # ===============================
     # Autofoco (barrido de nitidez, ver core/autofocus.py)
@@ -519,6 +622,169 @@ def create_app(camera, illuminations, timelapse, motores=None,
             return {"error": str(e)}
         finally:
             autofocus_lock.release()
+
+    @app.post("/api/focus/pila")
+    def focus_pila(req: PilaFocoReq):
+        """Graba una pila de foco para entrenar el autofoco IA.
+
+        Requiere que la camara YA este enfocada: la posicion actual se
+        toma como el cero de las etiquetas. Tarda del orden de un minuto
+        (dos capturas por plano) y deja el eje donde estaba.
+        """
+        if autofocus is None:
+            return {"error": "Sin motores de enfoque"}
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        if not autofocus.disponible(req.camera):
+            return {"error": f"cam{req.camera} no tiene motor de enfoque"}
+        if not autofocus_lock.acquire(blocking=False):
+            return {"error": "Ya hay un autofoco corriendo"}
+        try:
+            from core.pila_foco import grabar_pila
+            return grabar_pila(autofocus, req.camera, rango=req.rango,
+                               puntos=req.puntos, eje=req.eje,
+                               notas=req.notas)
+        except Exception as e:
+            return {"error": str(e)}
+        finally:
+            autofocus_lock.release()
+
+    # ===============================
+    # Conteo de celulas (ver core/analisis.py)
+    # ===============================
+    @app.get("/api/analisis/estado")
+    def analisis_estado():
+        if conteo is None:
+            return {"error": "Conteo no disponible", "activas": []}
+        return conteo.estado()
+
+    @app.post("/api/analisis/config")
+    def analisis_config(req: ConteoConfigReq):
+        """Enciende/apaga el conteo en vivo de una camara y ajusta las
+        perillas. Solo toca lo que viene en el pedido."""
+        if conteo is None:
+            return {"error": "Conteo no disponible"}
+        if req.camara is not None and req.activo is not None:
+            conteo.activar(req.camara, req.activo)
+        if req.modo is not None:
+            try:
+                conteo.set_modo(req.modo)
+            except ValueError as e:
+                return {"error": str(e)}
+        if req.periodo is not None:
+            conteo.periodo = max(0.1, float(req.periodo))
+        conteo.contador.configurar(
+            diametro_px=req.diametro_px, umbral=req.umbral,
+            separar=req.separar)
+        return conteo.estado()
+
+    @app.post("/api/analisis/medir")
+    def analisis_medir(req: ConteoMedirReq):
+        """Medicion puntual: media apertura un instante, mide, restaura.
+
+        Es el modo manual, y es el que tiene sentido por defecto: las
+        celulas no cambian en segundos, asi que no hace falta medir dos
+        veces por segundo, y sobre todo no hace falta dejar la matriz en
+        oblicua todo el rato. Se mide, se devuelve la luz a como estaba,
+        y el numero queda dibujado sobre el vivo.
+        """
+        if conteo is None:
+            return {"error": "Conteo no disponible"}
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        if req.patron is not None and req.patron not in _METODOS_LUZ:
+            return {"error": f"Patron invalido: {req.patron}"}
+
+        previo = estado["luz"].get(req.camera)
+        try:
+            if req.patron is not None:
+                _luz_aplicar(req.camera, req.patron,
+                             (previo or {}).get("percent"))
+                time.sleep(req.settle)
+            # descartar=2: la camara viene corriendo en continuo, asi que
+            # el primer frame que devuelve puede haberse EXPUESTO antes
+            # del cambio de iluminacion. Contarlo seria contar sobre la
+            # luz anterior (campo claro), justo lo que se quiere evitar.
+            frame = camera.get_focus_frame(req.camera, descartar=2)
+            resultado = conteo.medir(req.camera, frame)
+        except Exception as e:
+            return {"error": str(e)}
+        finally:
+            if req.patron is not None:
+                try:
+                    _luz_restaurar(req.camera, previo)
+                except Exception:
+                    pass
+
+        return {k: v for k, v in resultado.items()
+                if k not in ("contornos", "objetos", "imagen")} | {
+            "camara": req.camera,
+            "luz_restaurada": (previo or {}).get("modo", "off"),
+        }
+
+    @app.post("/api/analisis/foto")
+    def analisis_foto(req: ConteoFotoReq):
+        """Captura a resolucion nativa y cuenta sobre esa captura.
+
+        Es el camino de precision, no el del vivo: usa el par L/R
+        completo (imagen DPC de verdad, no el frame de preview del ISP)
+        y guarda un PNG con las celulas marcadas al lado del TIFF.
+        """
+        if conteo is None:
+            return {"error": "Conteo no disponible"}
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        from datetime import datetime
+        from core import analisis
+
+        folder = "capturas_unicas"
+        os.makedirs(folder, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        patrones = MODOS.get(req.modo, MODOS["dpc"])
+        luz = illuminations.get(req.camera)
+
+        rutas = {}
+        try:
+            for sufijo, metodo in patrones:
+                if luz:
+                    getattr(luz, metodo)()
+                    time.sleep(0.3)
+                fn = f"{folder}/cam{req.camera}_{ts}{sufijo}.tif"
+                camera.capture_image(camera_num=req.camera, folder=folder,
+                                     filename=fn)
+                rutas[sufijo] = fn
+        finally:
+            if luz:
+                luz.off()
+
+        try:
+            resultado, imagen = analisis.analizar_capturas(
+                rutas, conteo.contador, ancho_max=req.ancho_max)
+        except Exception as e:
+            return {"error": str(e), "capturas": list(rutas.values())}
+
+        salida = None
+        if req.guardar_overlay:
+            salida = analisis.guardar_overlay(
+                f"{folder}/cam{req.camera}_{ts}_conteo.png", imagen, resultado)
+
+        return {k: v for k, v in resultado.items()
+                if k not in ("contornos", "objetos", "imagen")} | {
+            "capturas": [os.path.basename(v) for v in rutas.values()],
+            "overlay": os.path.basename(salida) if salida else None,
+        }
+
+    @app.post("/api/analisis/timelapse")
+    def analisis_timelapse(req: ConteoCarpetaReq):
+        """Regenera curva de poblacion y eventos de un experimento ya
+        terminado, a partir de su conteo.csv (no relee las imagenes)."""
+        from core import analisis
+        if not os.path.isdir(req.carpeta):
+            return {"error": f"no existe la carpeta {req.carpeta}"}
+        try:
+            return analisis.resumir_timelapse(req.carpeta, req.intervalo_s)
+        except Exception as e:
+            return {"error": str(e)}
 
     # ===============================
     # Interfaz

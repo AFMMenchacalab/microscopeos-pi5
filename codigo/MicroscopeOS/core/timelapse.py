@@ -26,13 +26,16 @@ MODOS = {
 
 class TimelapseManager:
 
-    def __init__(self, camera, illuminations, autofocus=None):
+    def __init__(self, camera, illuminations, autofocus=None, contador=None):
         self.camera = camera
         self.illuminations = illuminations
         # Instancia de core.autofocus.Autofocus, o None si no hay
         # motores de enfoque conectados. Opcional a proposito: el
         # timelapse tiene que seguir corriendo igual sin ellos.
         self.autofocus = autofocus
+        # core.analisis.Contador para contar celulas por ciclo. Tambien
+        # opcional: un timelapse sin conteo tiene que seguir andando.
+        self.contador = contador
         self.state = TimelapseState.STOPPED
         self.thread = None
         self.base_folder = None
@@ -168,12 +171,93 @@ class TimelapseManager:
         except Exception:
             pass
 
+    def _contar_ciclo(self, guardadas, ciclo, ts, opciones):
+        """Cuenta celulas en las capturas que se acaban de guardar.
+
+        Va DESPUES de capturar y no antes: analiza exactamente las
+        imagenes que quedan en el experimento, asi que el numero de
+        conteo.csv siempre se puede volver a verificar sobre el TIFF que
+        esta al lado. Si en cambio se capturara aparte para contar, el
+        CSV describiria una imagen que no existe.
+
+        Nunca interrumpe el timelapse: si el analisis falla se anota en
+        el log y el ciclo sigue. Perder un punto de la curva de
+        poblacion es molesto; perder una hora de capturas, no.
+        """
+        if self.contador is None:
+            return
+        from core import analisis
+
+        opciones = dict(opciones or {})
+        ancho_max = int(opciones.pop("ancho_max", 1200))
+        overlay = bool(opciones.pop("overlay", True))
+
+        for cam, rutas in sorted(guardadas.items()):
+            if not rutas:
+                continue
+            try:
+                resultado, imagen = analisis.analizar_capturas(
+                    rutas, self.contador, ancho_max=ancho_max)
+            except Exception as e:
+                self._log(f"  conteo cam{cam}: ERROR -> {e}")
+                continue
+
+            fila = dict(resultado, timestamp=ts, ciclo=ciclo, camara=cam)
+            fila["confluente"] = int(bool(resultado["confluente"]))
+            fila["vacio"] = int(bool(resultado["vacio"]))
+            try:
+                analisis.escribir_conteo(self.base_folder, fila)
+                if overlay:
+                    analisis.guardar_overlay(
+                        os.path.join(self.base_folder, f"cam{cam}",
+                                     f"conteo_{ts}.png"),
+                        imagen, resultado)
+            except Exception as e:
+                self._log(f"  conteo cam{cam}: no se pudo guardar -> {e}")
+
+            aviso = ""
+            if resultado["vacio"]:
+                aviso = "  [CAMPO VACIO O SIN LUZ]"
+            elif resultado["confluente"]:
+                aviso = "  [CONFLUENTE: el conteo es una cota inferior]"
+            self._log(f"  conteo cam{cam}: {resultado['n']} celulas "
+                      f"({resultado['regiones']} regiones, "
+                      f"{resultado['cumulos']} cumulos, "
+                      f"{resultado['ms']} ms){aviso}")
+
+    def _resumir_analisis(self, intervalo_s):
+        """Curva de poblacion + eventos, al terminar el timelapse."""
+        if self.contador is None or not self.base_folder:
+            return
+        try:
+            from core import analisis
+            resumen = analisis.resumir_timelapse(self.base_folder, intervalo_s)
+            if "error" in resumen:
+                return
+            for cam, info in resumen["camaras"].items():
+                crec = info.get("crecimiento") or {}
+                self._log(
+                    f"cam{cam}: {info['primero']} -> {info['ultimo']} celulas"
+                    + (f", duplicacion {crec['duplicacion_h']} h "
+                       f"(r2={crec['r2']})" if crec.get("duplicacion_h")
+                       else "")
+                    + f", {len(info['eventos'])} evento(s)")
+            if resumen.get("grafica"):
+                self._log(f"Grafica guardada: {resumen['grafica']}")
+        except Exception as e:
+            self._log(f"Error generando resumen de conteo: {e}")
+
     def _capturar_secuencial(self, patrones, camaras, ts, stabilization_time):
         """Una camara y una matriz encendida a la vez.
 
         Es el comportamiento del montaje de Pi 4 y el unico seguro si los
         dos canales opticos no estan aislados entre si.
+
+        Devuelve {camara: {sufijo: ruta}} con lo que efectivamente se
+        guardo, para que el conteo de celulas analice esas mismas
+        imagenes en vez de volver a capturar.
         """
+        guardadas = {cam: {} for cam in camaras}
         for cam in camaras:
             cam_folder = os.path.join(self.base_folder, f"cam{cam}")
             luz = self.illuminations.get(cam)
@@ -190,6 +274,7 @@ class TimelapseManager:
                         camera_num=cam,
                         folder=cam_folder,
                         filename=filename)
+                    guardadas[cam][sufijo] = filename
 
                     self._log(f"  cam{cam}{sufijo}: OK")
 
@@ -201,6 +286,7 @@ class TimelapseManager:
                             luz.off()
                         except Exception:
                             pass
+        return guardadas
 
     def _capturar_simultaneo(self, patrones, camaras, ts, stabilization_time):
         """Las dos camaras disparan a la vez, con las dos matrices encendidas.
@@ -212,6 +298,7 @@ class TimelapseManager:
         # cam1 ni viceversa. Si hay diafonia optica, esto contamina los
         # datos sin dar ningun error. Ver TODO_HW.md (prioridad 2).
         """
+        guardadas = {cam: {} for cam in camaras}
         for sufijo, metodo_luz in patrones:
             luces = [self.illuminations.get(cam) for cam in camaras]
             try:
@@ -234,6 +321,7 @@ class TimelapseManager:
                     camera_nums=camaras)
 
                 for cam in camaras:
+                    guardadas[cam][sufijo] = filenames[cam]
                     self._log(f"  cam{cam}{sufijo}: OK")
 
             except Exception as e:
@@ -245,10 +333,12 @@ class TimelapseManager:
                             luz.off()
                         except Exception:
                             pass
+        return guardadas
 
     def _run(self, modo, interval_seconds, duration_seconds,
              stabilization_time, camaras, simultaneo,
-             autofocus, autofocus_cada, autofocus_opts):
+             autofocus, autofocus_cada, autofocus_opts,
+             contar, contar_cada, contar_opts):
 
         self.state = TimelapseState.RUNNING
         patrones = MODOS[modo]
@@ -268,11 +358,16 @@ class TimelapseManager:
             self._log("Autofoco pedido pero no hay motores de enfoque "
                       "disponibles -- se continua sin autofoco.")
             autofocus = False
+        if contar and self.contador is None:
+            self._log("Conteo de celulas pedido pero no hay contador "
+                      "disponible -- se continua sin conteo.")
+            contar = False
 
         self._log(f"Timelapse iniciado | modo={modo} | camaras={camaras} | "
                   f"intervalo={interval_seconds}s | duracion={duration_seconds}s | "
                   f"captura={'simultanea' if simultaneo else 'secuencial'} | "
-                  f"autofoco={'cada ' + str(autofocus_cada) + ' ciclo(s)' if autofocus else 'no'}")
+                  f"autofoco={'cada ' + str(autofocus_cada) + ' ciclo(s)' if autofocus else 'no'} | "
+                  f"conteo={'cada ' + str(contar_cada) + ' ciclo(s)' if contar else 'no'}")
 
         start_time = time.monotonic()
         next_capture_time = start_time
@@ -301,11 +396,14 @@ class TimelapseManager:
                     self._autoenfocar(camaras, ciclo, ts, autofocus_opts)
 
                 if simultaneo:
-                    self._capturar_simultaneo(patrones, camaras, ts,
-                                              stabilization_time)
+                    guardadas = self._capturar_simultaneo(
+                        patrones, camaras, ts, stabilization_time)
                 else:
-                    self._capturar_secuencial(patrones, camaras, ts,
-                                              stabilization_time)
+                    guardadas = self._capturar_secuencial(
+                        patrones, camaras, ts, stabilization_time)
+
+                if contar and (ciclo - 1) % max(1, contar_cada) == 0:
+                    self._contar_ciclo(guardadas, ciclo, ts, contar_opts)
 
                 next_capture_time += interval_seconds
 
@@ -320,11 +418,14 @@ class TimelapseManager:
 
         self._log(f"Timelapse finalizado. Ciclos completados: {ciclo}")
         self._graficar_temperatura()
+        if contar:
+            self._resumir_analisis(interval_seconds)
         self.state = TimelapseState.STOPPED
 
     def start(self, modo="blanco", interval_seconds=300, duration_seconds=3600,
               stabilization_time=0.3, camaras=[0, 1], simultaneo=False,
-              autofocus=False, autofocus_cada=1, autofocus_opts=None):
+              autofocus=False, autofocus_cada=1, autofocus_opts=None,
+              contar=False, contar_cada=1, contar_opts=None):
         if self.state == TimelapseState.RUNNING:
             print("Timelapse ya esta corriendo.")
             return
@@ -336,7 +437,8 @@ class TimelapseManager:
             target=self._run,
             args=(modo, interval_seconds, duration_seconds,
                   stabilization_time, camaras, simultaneo,
-                  autofocus, autofocus_cada, autofocus_opts or {}),
+                  autofocus, autofocus_cada, autofocus_opts or {},
+                  contar, contar_cada, contar_opts or {}),
             daemon=True
         )
         self.thread.start()

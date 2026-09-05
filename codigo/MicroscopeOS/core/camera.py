@@ -178,9 +178,20 @@ class CameraController:
             self._preview_cams.add(camera_num)
             self.preview_cam = camera_num
 
-    def get_preview_frame(self, camera_num):
+    def get_preview_frame(self, camera_num, anotar=None):
         """Devuelve un JPEG del frame actual de esa camara, o None si no
-        esta en vivo."""
+        esta en vivo.
+
+        `anotar(camera_num, frame)` es un gancho opcional que recibe el
+        frame BGR antes de comprimirlo y devuelve el que se manda (lo
+        usa el conteo de celulas para dibujar encima). Va aca y no en el
+        endpoint porque el frame crudo solo existe dentro del lock: si
+        el analisis lo pidiera por su cuenta seria una captura mas, y a
+        16 fps eso duplica el trabajo de la camara.
+
+        Si el gancho falla, se manda el frame sin anotar: una excepcion
+        del analisis no tiene por que cortar el vivo.
+        """
         if camera_num not in self._preview_cams:
             return None
         with self._locks[camera_num]:
@@ -188,6 +199,11 @@ class CameraController:
                     self._modes.get(camera_num) != "preview":
                 return None
             frame = self._cams[camera_num].capture_array("main")
+        if anotar is not None:
+            try:
+                frame = anotar(camera_num, frame)
+            except Exception:
+                pass
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ok:
             return None

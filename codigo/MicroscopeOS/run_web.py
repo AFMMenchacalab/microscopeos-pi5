@@ -6,6 +6,8 @@ from core.illumination import IlluminationController
 from core.timelapse import TimelapseManager
 from core.motor_focus import crear_motores
 from core.autofocus import Autofocus
+from core.autofocus_ia import AutofocoIA
+from core.analisis import Contador, ContadorEnVivo
 from server.api import create_app
 import uvicorn
 
@@ -49,11 +51,27 @@ except Exception as e:
 for _m in motores.values():
     _m.set_current(irun_ma=450)
 
-autofocus = Autofocus(camera, motores, illuminations) if motores else None
+# Autofoco IA: se construye siempre pero solo se activa si hay un
+# modelo entrenado en profiles/autofoco_ia.onnx. Sin ese archivo,
+# disponible() da False y el autofoco usa el metodo analitico de
+# siempre, sin cambiar nada. Ver core/autofocus_ia.py.
+ia = AutofocoIA()
+if ia.error:
+    print(f"[autofoco IA] {ia.error} -- se usa el metodo analitico")
 
-timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus)
+autofocus = Autofocus(camera, motores, illuminations, ia=ia) if motores else None
+
+# Conteo de celulas. No depende de ningun hardware extra: son las
+# mismas capturas, analizadas. Arranca APAGADO en el vivo (se enciende
+# por camara desde la interfaz) porque cuesta CPU y no siempre se
+# quiere; el contador en si se crea siempre.
+contador = Contador()
+conteo = ContadorEnVivo(contador, periodo=0.6)
+
+timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus,
+                             contador=contador)
 
 app = create_app(camera, illuminations, timelapse,
-                 motores=motores, autofocus=autofocus)
+                 motores=motores, autofocus=autofocus, conteo=conteo)
 print("Servidor en http://0.0.0.0:8000")
 uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

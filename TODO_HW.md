@@ -229,6 +229,104 @@ se come casi entero en enfocar. Medir el tiempo real en el log —queda
 anotado en cada línea de autofoco— y, si se está cayendo al barrido,
 calibrar el DPC antes que subir `autofocus_cada`.
 
+### 2.6 Diámetro de célula del conteo — la única perilla que hay que acertar
+`codigo/MicroscopeOS/core/analisis.py`
+
+`diametro_px` fija la escala a la que se buscan las células, declarado
+para una imagen de 640 px de ancho (el código lo reescala solo para las
+fotos a resolución nativa). Medido contra campos sintéticos, el conteo
+aguanta bien de 1× a 3× el valor correcto, pero **si se lo pone a la
+mitad del tamaño real cuenta el doble**: deja de fundir los dos lóbulos
+del relieve DPC y cuenta cada uno como una célula.
+
+Cómo ajustarlo: con una muestra real, "Contar en una foto nueva" y
+mirar el PNG marcado. Si cada célula tiene dos marcas, subirlo; si
+varias células vecinas caen dentro de una sola marca, bajarlo. El valor
+por defecto (14) sale de los campos sintéticos, no de una muestra real
+en este objetivo, así que **hay que revisarlo la primera vez**.
+
+Verificar también el campo `descartados` de la respuesta: si es alto y
+`n` es bajo, el diámetro no tiene nada que ver con la muestra. Es la
+única forma en que este método falla en silencio.
+
+### 2.6b Iluminación del conteo en vivo — confirmar con muestra real
+`codigo/MicroscopeOS/core/analisis.py` (`ContadorEnVivo`)
+
+El conteo en vivo mira **un frame con una sola iluminación**: no puede
+hacer DPC. Con células sin teñir (objetos de fase) en campo claro y en
+foco, no hay nada que contar, y el contador reporta «campo vacío» sobre
+un cultivo lleno. En simulación, con 40 células de fase en foco: campo
+claro **0**, media apertura **40**, DPC **40**.
+
+Por eso el conteo pone la matriz en `left` para medir (checkbox "Usar
+media apertura al medir", encendido por defecto). En **modo manual**
+sólo durante la medición, y después devuelve la iluminación a la que
+estaba; en **automático** la deja puesta mientras el conteo siga
+encendido. **Falta confirmarlo con una muestra real**: que con la matriz
+en media apertura las células se vean y se cuenten en el vivo, y que en
+campo claro efectivamente no. Si el montaje tiene bastante aberración o
+la muestra queda algo desenfocada, en campo claro se van a ver igual
+—por transporte de intensidad— pero el conteo va a inflarse (en
+simulación, 67 en vez de 40 a 20 px de desenfoque), así que la media
+apertura sigue siendo lo correcto.
+
+Con muestras **teñidas** esto no aplica: absorben, se ven en campo claro
+y se pueden contar con cualquier iluminación.
+
+### 2.7 Umbral de campo vacío contra el ruido real del IMX219
+`codigo/MicroscopeOS/core/analisis.py` (`nitidez_ruido`)
+
+El filtro de campo vacío distingue "no hay nada" de "hay células" por
+en qué banda de frecuencia está la energía: el ruido de lectura es
+blanco y da `nitidez` ~40, mientras que cualquier imagen que pasó por el
+objetivo está limitada por difracción y da 0.01-0.05. El corte está en
+5, en medio de tres órdenes de magnitud de brecha.
+
+Eso se midió con ruido gaussiano sintético. Falta confirmarlo con
+capturas reales de la Pi en los dos extremos que importan: **tapa
+puesta / luz apagada** (tiene que dar `vacio=True`) y **un pozo
+confluente de verdad** (tiene que dar `vacio=False` y `confluente=True`).
+El segundo es el que importa: si un pozo lleno se reportara como vacío,
+la curva de población caería a cero justo cuando el cultivo está al
+máximo.
+
+Ojo con el ISP: la reducción de ruido del preview aplasta la banda fina
+y baja `nitidez`, así que un preview muy denoiseado podría no detectarse
+como vacío. `_controles_planos()` en `core/camera.py` la apaga cuando la
+build de libcamera lo soporta — confirmar que efectivamente se aplicó
+(`picam2.camera_controls`).
+
+### 2.8 Costo del conteo por ciclo en la Pi
+`codigo/MicroscopeOS/core/analisis.py` (`reducir`, `ancho_max`)
+
+Analizar un TIFF a resolución nativa (3280 px) tarda ~7 s **en una
+laptop**, porque los desenfoques son con sigmas enormes; por eso el
+análisis se hace sobre una copia reducida a 1200 px (~0.2 s ahí mismo).
+La Pi 5 es varias veces más lenta: medir el valor real en el log del
+timelapse (cada línea de conteo trae los ms) y, si no entra en el
+intervalo, subir `contar_cada` o bajar `ancho_max`. Reducir no cambia el
+conteo, porque el diámetro se reescala con el ancho.
+
+### 2.9 Autofoco aprendido: no hay modelo todavía
+`codigo/MicroscopeOS/core/autofocus_ia.py`, `core/pila_foco.py`
+
+Todo el camino está implementado y probado con un predictor inyectado,
+pero **el modelo no existe**: hace falta grabar pilas de foco reales
+(`POST /api/focus/pila`) y entrenarlo con
+`extras/ia/entrenar_autofoco.py`. Sin `profiles/autofoco_ia.onnx` el
+autofoco sigue siendo el analítico y nada de esto se activa.
+
+Al grabar las pilas:
+
+- la posición actual se toma como **el foco**, así que hay que enfocar
+  bien antes (mejor todavía: correr el autofoco DPC y grabar desde ahí);
+- hacen falta **muchas pilas de campos distintos**, no una larga. Con
+  una sola, la red memoriza ese campo; el script avisa y separa la
+  validación por pila justamente por eso;
+- `onnxruntime` no está instalado en la Pi todavía (`pip install
+  onnxruntime`); sin él, `AutofocoIA.disponible()` da False y se sigue
+  usando el método analítico.
+
 ---
 
 ## Prioridad 3 — funcionalidad que puede no arrancar

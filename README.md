@@ -92,9 +92,47 @@ Navegador  ──HTTP/SSE──>  FastAPI (run_web.py + server/api.py)
   a un barrido grueso-a-fino de respaldo. Todo movimiento final se
   alcanza siempre desde el mismo sentido, para no arrastrar el juego
   mecánico del husillo entre una medición y la siguiente.
+
+  Hay además una tercera vía **opcional y todavía sin entrenar**: un
+  regresor que estima el desenfoque directamente del par de medias
+  aperturas, sin calibración y sin el límite del rango lineal. La
+  inferencia y la grabación del dataset están implementadas; el modelo
+  no existe hasta grabar pilas de foco en el microscopio
+  (`/api/focus/pila` → `extras/ia/entrenar_autofoco.py`). Sin el archivo
+  `profiles/autofoco_ia.onnx` nada de esto se activa y el autofoco
+  sigue siendo el analítico.
+- **Conteo de células**, sobre el vivo y sobre las capturas, dibujado
+  encima del stream. Dos modos, porque las células no cambian en
+  segundos: **manual** (por defecto) mide una vez al apretar el botón,
+  devuelve la iluminación a como estaba y deja el número congelado en
+  pantalla; **automático** vuelve a medir cada pocas décimas mientras
+  enfocás o barrés el campo, a cambio de dejar la matriz en media
+  apertura todo el rato. Ni uno ni otro analizan cada frame: la
+  segmentación cuesta más que un frame de stream. En un timelapse se
+  cuenta cada N ciclos y queda una curva de población con su tiempo de
+  duplicación, más la marca de los ciclos donde algo cambió de golpe.
+
+  La segmentación es clásica, no aprendida: se busca **energía local a
+  escala de célula**, no brillo. En la imagen DPC una célula sale en
+  relieve, con el centro al mismo gris que el fondo, así que cualquier
+  umbral de brillo cuenta los dos lóbulos por separado y devuelve el
+  doble de objetos. Trae además el filtro que distingue un campo vacío
+  (o la luz apagada) de un cultivo confluente, que es el error que
+  arruinaría una curva de crecimiento.
+
+  **El vivo necesita iluminación oblicua.** El stream es un solo frame
+  con un solo patrón encendido, así que no puede hacer DPC (eso son dos
+  capturas), y en campo claro una célula sin teñir se anula justo en el
+  foco: el contador diría «campo vacío» sobre un cultivo lleno. Medido
+  sobre 40 células de fase en foco: campo claro **0**, media apertura
+  **40**, DPC **40**. La media apertura lo resuelve sin costo —es un
+  patrón estático, no baja los fps— así que el conteo pone la matriz en
+  `left` para medir. En modo manual sólo durante ese instante y después
+  la devuelve; en automático la deja puesta mientras cuente. Las fotos
+  no tienen el problema, porque usan el par L/R completo.
 - **Interfaz web** con vivo simultáneo de las dos cámaras, selector de
-  modo de iluminación, panel de foco por eje y control de temperatura/CO₂
-  en tiempo real (SSE).
+  modo de iluminación, panel de foco por eje, conteo de células y
+  control de temperatura/CO₂ en tiempo real (SSE).
 
 ## Instalación
 
@@ -162,6 +200,12 @@ sudo systemctl enable --now microscopeos
 | `GET` | `/api/focus/status` | Posición, resolución y flags del driver de cada eje |
 | `POST` | `/api/focus/auto` | Autofoco (DPC si la cámara está calibrada, barrido si no) |
 | `POST` | `/api/focus/calibrar` | Calibra el autofoco DPC de una cámara (una vez por objetivo) |
+| `POST` | `/api/focus/pila` | Graba una pila de foco (dataset para el autofoco aprendido) |
+| `GET` | `/api/analisis/estado` | Último conteo en vivo de cada cámara |
+| `POST` | `/api/analisis/config` | Enciende/apaga el conteo en vivo, su modo y sus parámetros |
+| `POST` | `/api/analisis/medir` | Medición puntual: media apertura un instante, cuenta, restaura la luz |
+| `POST` | `/api/analisis/foto` | Captura a resolución nativa, cuenta y guarda un PNG marcado |
+| `POST` | `/api/analisis/timelapse` | Regenera curva de población y eventos de un experimento |
 | `GET` | `/api/temperature/status` · `/stream` | Telemetría ambiental (JSON / SSE) |
 | `POST` | `/api/temperature/setpoint` | Cambia el setpoint de temperatura |
 
@@ -170,9 +214,13 @@ sudo systemctl enable --now microscopeos
 ```
 timelapse_20260831_121729/
 ├── cam0/img_20260831_121729_L.tif   # patrones DPC: _L _R _T _B (modo "dpc")
+│   └── conteo_20260831_121729.png    # con conteo: PNG con las células marcadas
 ├── cam1/...
 ├── temperatura.csv                   # timestamp,ciclo,temperatura,setpoint,pwm
 ├── autofoco.csv                      # solo con autofoco: deriva del foco por ciclo
+├── conteo.csv                        # solo con conteo: n de células y calidad por ciclo
+├── poblacion.png                     # curva de población + tiempo de duplicación
+├── eventos.csv                       # ciclos con saltos, caídas o pérdida de foco
 └── timelapse.log
 ```
 
@@ -180,9 +228,10 @@ timelapse_20260831_121729/
 
 | Ruta | Contenido |
 |---|---|
-| `codigo/MicroscopeOS/core/` | Cámara, iluminación, timelapse, enfoque, autofoco, perfiles |
+| `codigo/MicroscopeOS/core/` | Cámara, iluminación, timelapse, enfoque, autofoco, análisis de imagen, perfiles |
 | `codigo/MicroscopeOS/server/` | API FastAPI + interfaz web estática |
 | `codigo/MicroscopeOS/interfaces/` | GUI de escritorio en PyQt6 (no usada en producción; el modo activo es la web) |
+| `codigo/extras/ia/` | Entrenamiento del autofoco aprendido (corre fuera de la Pi) |
 | `codigo/extras/matrices_esp32s3_matrix/` | Firmware de las matrices de iluminación + protocolo |
 | `codigo/extras/incubadora_temperatura/` | Sketches del PID de temperatura/CO₂ |
 | `configs/` | Unidad systemd, reglas udev, `config.txt`/`cmdline.txt` de arranque |
@@ -201,6 +250,7 @@ bajo media apertura, y objetos de fase que se anulan en campo claro):
 cd tests
 SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 test_migracion.py
 SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 test_motores.py
+SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 test_analisis.py
 ```
 
 Detalle de qué cubre cada suite en [`tests/README.md`](tests/README.md).

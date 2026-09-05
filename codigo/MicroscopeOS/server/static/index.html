@@ -97,7 +97,10 @@
         </div>
         <div class="camsel" style="margin-top:8px">
           <button id="liveBtn0" onclick="toggleLive(0)">▶ En vivo</button>
+          <button id="cntBtn0" onclick="accionConteo(0)">⊙ Medir</button>
+          <button id="cntOff0" onclick="apagarConteo(0)" style="display:none">✕</button>
         </div>
+        <div class="stat"><span class="k">Células (vivo)</span><span class="v" id="s_cnt0">—</span></div>
       </div>
       <div>
         <div class="view">
@@ -109,7 +112,10 @@
         </div>
         <div class="camsel" style="margin-top:8px">
           <button id="liveBtn1" onclick="toggleLive(1)">▶ En vivo</button>
+          <button id="cntBtn1" onclick="accionConteo(1)">⊙ Medir</button>
+          <button id="cntOff1" onclick="apagarConteo(1)" style="display:none">✕</button>
         </div>
+        <div class="stat"><span class="k">Células (vivo)</span><span class="v" id="s_cnt1">—</span></div>
       </div>
     </div>
     <div class="camsel" style="margin-top:10px">
@@ -220,6 +226,59 @@
       <div class="stat" style="margin-top:6px"><span class="k">Autofoco DPC</span><span class="v" id="s_cal">—</span></div>
       <div class="stat"><span class="k">Último autofoco</span><span class="v" id="s_af">—</span></div>
     </div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Conteo de células</h2>
+      <div class="field">
+        <label>Modo</label>
+        <select id="cntModo" onchange="cntModoChange()">
+          <option value="manual" selected>Manual — mide al apretar y congela</option>
+          <option value="auto">Automático — vuelve a medir solo</option>
+        </select>
+      </div>
+      <div class="stat" style="border:0;padding-top:0">
+        <span class="k" id="cntModoNota" style="line-height:1.5">
+        Manual: el botón mide una vez, devuelve la luz a como estaba y deja
+        el número dibujado hasta que vuelvas a apretar.</span>
+      </div>
+      <!-- El diámetro es la única perilla que hay que acertar: marca la
+           escala a la que se buscan las células. Está referido a un
+           ancho de 640 px y el código lo reescala solo para las fotos a
+           resolución nativa, así que el mismo número vale para las dos. -->
+      <div class="field">
+        <label>Diámetro típico de célula (px)</label>
+        <input type="number" id="cntDiam" value="14" min="4" step="1" onchange="aplicarConteoConfig()">
+      </div>
+      <div class="field">
+        <label>Refresco en vivo (s)</label>
+        <input type="number" id="cntPeriodo" value="0.6" min="0.1" step="0.1" onchange="aplicarConteoConfig()">
+      </div>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="cntSeparar" checked style="width:auto" onchange="aplicarConteoConfig()">
+          Separar células pegadas (watershed)
+        </label>
+      </div>
+      <!-- En campo claro una célula sin teñir es invisible EN EL FOCO
+           (es un objeto de fase). El vivo es un solo stream con una sola
+           iluminación, así que no puede hacer DPC; la media apertura es
+           un patrón estático que sí revela la fase sin costar fps. -->
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="cntOblicua" checked style="width:auto">
+          Usar media apertura al medir
+        </label>
+      </div>
+      <div class="stat" style="border:0;padding-top:0">
+        <span class="k" style="line-height:1.5">En campo claro las células sin teñir
+        desaparecen en el foco y el conteo en vivo da «campo vacío».
+        Desmarcalo sólo con muestras teñidas, que sí absorben.
+        Las fotos no tienen este problema: usan el par L/R completo.</span>
+      </div>
+      <button id="cntFotoBtn" onclick="contarFoto()" style="width:100%;margin-top:6px">⊙ Contar en una foto nueva</button>
+      <div class="stat" style="margin-top:6px"><span class="k">Último conteo en foto</span><span class="v" id="s_cntfoto">—</span></div>
+      <div class="stat"><span class="k">Overlay guardado</span><span class="v" id="s_cntov" style="font-size:10px">—</span></div>
+    </div>
     <div class="panel" style="margin-bottom:18px">
       <h2>Cámara</h2>
       <div class="row">
@@ -250,6 +309,17 @@
       <div class="row" id="tlAfOpts" style="display:none">
         <div class="field"><label>Cada N ciclos</label><input type="number" id="tlAfCada" value="1" min="1"></div>
         <div class="field"><label>Rango µpasos</label><input type="number" id="tlAfRango" value="1600" min="100"></div>
+      </div>
+      <div class="field" style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="tlCnt" style="width:auto" onchange="tlCntChange()">
+        <label for="tlCnt" style="margin:0;text-transform:none;letter-spacing:0">Contar células por ciclo</label>
+      </div>
+      <div class="row" id="tlCntOpts" style="display:none">
+        <div class="field"><label>Cada N ciclos</label><input type="number" id="tlCntCada" value="1" min="1"></div>
+        <div class="field" style="display:flex;align-items:center;gap:8px;padding-top:18px">
+          <input type="checkbox" id="tlCntOverlay" checked style="width:auto">
+          <label for="tlCntOverlay" style="margin:0;text-transform:none;letter-spacing:0">Guardar PNG marcado</label>
+        </div>
       </div>
       <div class="actions">
         <button class="primary" id="start" onclick="iniciar()">▶ Iniciar Timelapse</button>
@@ -565,6 +635,164 @@ function tlAfChange(){
   document.getElementById('tlAfOpts').style.display=
     document.getElementById('tlAf').checked?'grid':'none';
 }
+function tlCntChange(){
+  document.getElementById('tlCntOpts').style.display=
+    document.getElementById('tlCnt').checked?'grid':'none';
+}
+
+// ===== Conteo de celulas =====
+// El conteo en vivo se dibuja del lado del servidor, sobre el mismo
+// frame del stream MJPEG: no hay que tocar la <img> ni reconectar nada.
+//
+// Dos modos, porque las células no cambian en segundos:
+//
+//   MANUAL (por defecto)  el botón mide UNA vez -- pone media apertura
+//     un instante, cuenta, y devuelve la luz a como estaba -- y deja el
+//     dibujo congelado. Podés seguir mirando la muestra en campo claro
+//     con el número en pantalla.
+//   AUTOMÁTICO  vuelve a medir solo cada `periodo`. Útil mientras
+//     enfocás o barrés el campo, pero la matriz tiene que quedarse en
+//     media apertura todo el rato: si volvés a campo claro, la próxima
+//     medición no encuentra nada y el dibujo se vacía.
+const conteoOn={0:false,1:false};
+let conteoModo='manual';
+
+function pintarBotonConteo(n){
+  const btn=document.getElementById('cntBtn'+n);
+  const off=document.getElementById('cntOff'+n);
+  if(conteoModo==='manual'){
+    btn.textContent=conteoOn[n]?'↻ Medir':'⊙ Medir';
+    btn.classList.remove('active');
+  }else{
+    btn.textContent=conteoOn[n]?'⊙ Contando':'⊙ Contar';
+    btn.classList.toggle('active',conteoOn[n]);
+  }
+  off.style.display=conteoOn[n]?'':'none';
+}
+
+async function cntModoChange(){
+  const modo=document.getElementById('cntModo').value;
+  const r=await fetch('/api/analisis/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({modo:modo})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  conteoModo=modo;
+  document.getElementById('cntModoNota').textContent = modo==='auto'
+    ? 'Automático: la matriz se queda en media apertura MIENTRAS el conteo esté encendido. Si volvés a campo claro, el dibujo se vacía en la siguiente medición.'
+    : 'Manual: el botón mide una vez, devuelve la luz a como estaba y deja el número dibujado hasta que vuelvas a apretar.';
+  if(modo==='auto') toast('Automático: la luz queda en media apertura mientras el conteo esté encendido');
+  [0,1].forEach(pintarBotonConteo);
+}
+
+async function accionConteo(n){
+  if(conteoModo==='manual') return medirConteo(n);
+  return toggleConteo(n);
+}
+
+async function medirConteo(n){
+  const btn=document.getElementById('cntBtn'+n);
+  btn.disabled=true;btn.textContent='⊙ Midiendo...';
+  try{
+    const oblicua=document.getElementById('cntOblicua').checked;
+    const r=await fetch('/api/analisis/medir',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera:n,patron:oblicua?'left':null})});
+    const d=await r.json();
+    if(d.error){toast(d.error);return;}
+    conteoOn[n]=true;
+    document.getElementById('s_cnt'+n).textContent=textoConteo(d)+' · recién';
+    if(d.vacio) toast('CAM '+n+': campo vacío — revisá la luz y el foco');
+    if(!live[n]) toast('Encendé el vivo de CAM '+n+' para ver las marcas');
+  }catch(e){toast('Error: '+e);}
+  finally{btn.disabled=false;pintarBotonConteo(n);}
+}
+
+async function apagarConteo(n){
+  const r=await fetch('/api/analisis/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({camara:n,activo:false})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  conteoOn[n]=false;
+  document.getElementById('s_cnt'+n).textContent='—';
+  pintarBotonConteo(n);
+}
+
+// Solo modo automático: enciende/apaga el ciclo de medición continua.
+async function toggleConteo(n){
+  const activo=!conteoOn[n];
+  if(!activo) return apagarConteo(n);
+  const r=await fetch('/api/analisis/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({camara:n,activo:true})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  conteoOn[n]=true;
+  pintarBotonConteo(n);
+  // En automático la luz se DEJA en media apertura: el ciclo vuelve a
+  // medir cada `periodo` y necesita la fase visible en cada medición.
+  if(document.getElementById('cntOblicua').checked){
+    await fetch('/light/set',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({modo:'left',percent:+document.getElementById('bright').value,camaras:[n]})});
+    toast('CAM '+n+': luz en media apertura, y ahí se queda mientras cuente');
+  }
+  if(!live[n]) toast('Encendé el vivo de CAM '+n+' para ver las marcas');
+}
+
+async function aplicarConteoConfig(){
+  const body={diametro_px:+document.getElementById('cntDiam').value,
+              periodo:+document.getElementById('cntPeriodo').value,
+              separar:document.getElementById('cntSeparar').checked};
+  const r=await fetch('/api/analisis/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Conteo actualizado');
+}
+
+function textoConteo(d){
+  if(d.vacio) return 'campo vacío';
+  let t=d.n+' células';
+  if(d.confluente) t+=' (confluente, mínimo)';
+  else if(d.cumulos) t+=' · '+d.cumulos+' cúmulo(s)';
+  return t;
+}
+
+async function refrescarConteo(){
+  if(!conteoOn[0] && !conteoOn[1]) return;
+  try{
+    const r=await fetch('/api/analisis/estado');const d=await r.json();
+    if(d.error) return;
+    [0,1].forEach(n=>{
+      const u=d.ultimos&&d.ultimos[n];
+      if(!conteoOn[n]||!u){document.getElementById('s_cnt'+n).textContent='—';return;}
+      // En manual el número está CONGELADO, así que lo que importa es
+      // cuándo se midió, no cuánto tardó: si el campo se movió hace 40 s,
+      // ese número ya no describe lo que estás viendo.
+      const sufijo = conteoModo==='manual'
+        ? ' · hace '+Math.round(u.edad_s)+'s'
+        : ' · '+u.ms+' ms';
+      document.getElementById('s_cnt'+n).textContent=textoConteo(u)+sufijo;
+    });
+  }catch(e){}
+}
+
+async function contarFoto(){
+  const btn=document.getElementById('cntFotoBtn'), cam=motorSel;
+  btn.disabled=true;btn.textContent='⊙ Capturando y contando...';
+  try{
+    // Captura el par L/R a resolución nativa y cuenta sobre la imagen
+    // DPC: es lo correcto para células sin teñir, y no depende del
+    // preview del ISP como sí depende el conteo en vivo.
+    const r=await fetch('/api/analisis/foto',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera:cam,modo:'dpc'})});
+    const d=await r.json();
+    if(d.error){toast(d.error);document.getElementById('s_cntfoto').textContent='error';return;}
+    document.getElementById('s_cntfoto').textContent=
+      'CAM '+cam+': '+textoConteo(d)+' · '+d.ms+' ms';
+    document.getElementById('s_cntov').textContent=d.overlay||'—';
+    if(d.vacio) toast('Campo vacío o sin luz — revisá la iluminación');
+    else if(d.confluente) toast('Campo confluente: el conteo es una cota inferior');
+  }catch(e){toast('Error: '+e);}
+  finally{btn.disabled=false;btn.textContent='⊙ Contar en una foto nueva';}
+}
 async function aplicarCamara(){
   await fetch('/exposure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exposure:+document.getElementById('exp').value,gain:+document.getElementById('gain').value})});
   toast('Exposición aplicada');
@@ -574,7 +802,10 @@ async function iniciar(){
   const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1],
     autofocus:document.getElementById('tlAf').checked,
     autofocus_cada:+document.getElementById('tlAfCada').value,
-    autofocus_rango:+document.getElementById('tlAfRango').value};
+    autofocus_rango:+document.getElementById('tlAfRango').value,
+    contar:document.getElementById('tlCnt').checked,
+    contar_cada:+document.getElementById('tlCntCada').value,
+    contar_overlay:document.getElementById('tlCntOverlay').checked};
   const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   if(d.error){toast(d.error);return;}
@@ -586,7 +817,7 @@ function setRunning(on){
   document.getElementById('dot').className='dot '+(on?'run':'idle');
   document.getElementById('state').textContent=on?'RUNNING':'IDLE';
   document.getElementById('s_state').textContent=on?'RUNNING':'IDLE';
-  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn','afBtn','calBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn','afBtn','calBtn','cntFotoBtn'].forEach(id=>document.getElementById(id).disabled=on);
   document.getElementById('stop').disabled=!on;
   if(on){
     [0,1].forEach(n=>{
@@ -611,6 +842,10 @@ async function poll(){
 }
 setInterval(poll,2000);poll();refrescarAmbas();
 setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();
+// Mas rapido que el resto de los sondeos: el conteo en vivo se refresca
+// varias veces por segundo del lado del servidor y el numero tiene que
+// acompaniar a lo que se ve dibujado en el stream.
+setInterval(refrescarConteo,1000);
 
 // --- Temperatura SSE ---
 (function(){
