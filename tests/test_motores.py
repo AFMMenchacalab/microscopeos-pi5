@@ -119,7 +119,15 @@ class CamaraDesenfocable:
         # hace falta para poder medir si repeticiones>1 (mediana de
         # varias lecturas) reduce de verdad la dispersion del resultado.
         self.ruido = ruido
-        self._rng_ruido = np.random.default_rng()  # sin semilla: varia entre llamadas
+        # CON semilla fija. Un generador sembrado igual devuelve algo
+        # distinto en CADA llamada -- que es lo unico que la prueba
+        # necesita -- pero repite la misma secuencia entre corridas.
+        # Sin sembrarlo, la comparacion de dispersiones de mas abajo
+        # (dos desvios estimados con 25 muestras cada uno) fallaba una
+        # de cada varias corridas sin que nada estuviera mal: un test
+        # que grita en falso se termina ignorando, que es peor que no
+        # tenerlo.
+        self._rng_ruido = np.random.default_rng(20260904)
         self.capturas = []
 
     def _corrimiento(self, d):
@@ -440,6 +448,19 @@ print("\n=== AUTOFOCO DPC: repeticiones reducen el ruido de medicion ===")
 # justo donde el ruido pesa mas (cerca del foco, delta chico). Se prueba
 # con una camara CON ruido de lectura sintetico (0 en el resto de las
 # pruebas, que son deterministas a proposito).
+#
+# Lo que la mediana gana aca NO es el factor sqrt(N) de promediar: la
+# distribucion de delta_px tiene COLA PESADA, porque de vez en cuando el
+# pico de la correlacion de fase engancha en un lugar espurio y esa
+# lectura sola se va lejisimos. La mediana descarta ese caso; el promedio
+# no. Por eso la mejora medida (1.6 px -> 0.28 px) es mucho mayor que
+# sqrt(5).
+#
+# Y por eso mismo el RNG de la camara va sembrado: con cola pesada, un
+# desvio estimado sobre 25 muestras depende de si a esa corrida le
+# tocaron outliers o no. Sin semilla esta comprobacion fallaba una de
+# cada varias corridas midiendo 0.25 px en vez de 1.6 px -- no porque
+# algo estuviera mal, sino porque no habia atrapado ningun outlier.
 cam_ruido = CamaraDesenfocable(motores, {0: foco_fase, 1: 0}, luces_f,
                                absorcion=6.0, fase=60.0, ruido=6.0)
 af_ruido = Autofocus(cam_ruido, motores, luces_f)
