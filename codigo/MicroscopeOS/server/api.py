@@ -530,4 +530,9 @@ def create_app(camera, illuminations, timelapse, motores=None,
         with open(STATIC_DIR / "index.html", "r") as f:
             return f.read()
 
+    @app.get("/ui", response_class=HTMLResponse)
+    def index_uiux():
+        with open(STATIC_DIR / "index_uiux.html", "r") as f:
+            return f.read()
+
     return app
