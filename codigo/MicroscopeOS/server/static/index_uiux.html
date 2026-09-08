@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
 <title>MicroscopeOS</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230a0f1c'/%3E%3Cg fill='none' stroke='%2322c55e' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='6.3' r='2'/%3E%3Cpath d='M9 8.3v3'/%3E%3Cpath d='M6.7 19.5h8.6'/%3E%3Cpath d='M10.8 19.5c2.8-.3 4.7-2.5 4.7-5.2A5.2 5.2 0 0 0 10 9'/%3E%3Cpath d='M6.3 14.3h5.6'/%3E%3Cpath d='M14.8 17.1h3.1'/%3E%3C/g%3E%3C/svg%3E">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@400;500;600;700&display=swap');
   :root{
@@ -81,8 +82,15 @@
   .view{position:relative;background:var(--panel2);border:1px solid var(--line);
     border-radius:var(--radius-sm);aspect-ratio:4/3;overflow:hidden;display:flex;
     align-items:center;justify-content:center}
+  .view{cursor:zoom-in}
+  .view.expanded{cursor:zoom-out}
   .view img{width:100%;height:100%;object-fit:contain;display:none}
   .view .ph{color:var(--dim);font-size:13px;text-align:center;padding:20px}
+  .expand-btn{position:absolute;bottom:9px;right:9px;width:30px;height:30px;border-radius:8px;
+    background:rgba(8,12,20,.65);border:1px solid var(--line);color:var(--dim);
+    display:flex;align-items:center;justify-content:center;padding:0;min-height:0}
+  .expand-btn:hover{color:var(--green);border-color:var(--green);background:rgba(8,12,20,.8)}
+  .expand-btn .ic{width:15px;height:15px}
   .scan{position:absolute;inset:0;pointer-events:none;
     background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(0,0,0,.12) 3px 4px);opacity:.35}
   .camtag{position:absolute;top:9px;left:9px;font-family:var(--font-mono);font-size:11px;
@@ -186,6 +194,31 @@
     *{animation-duration:.001ms !important;animation-iteration-count:1 !important;
       transition-duration:.001ms !important}
   }
+
+  /* ---------- lightbox (ampliar cámara) ---------- */
+  .lightbox{position:fixed;inset:0;background:rgba(5,8,14,.86);backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;
+    z-index:200;padding:var(--sp-5)}
+  .lightbox[hidden]{display:none}
+  .lightbox-stage{max-width:min(92vw,1100px);width:100%}
+  .lightbox-stage .view{max-height:86vh}
+  .lightbox-close{position:absolute;top:20px;right:20px;width:44px;height:44px;padding:0;
+    border-radius:10px;background:var(--panel-solid);color:var(--text)}
+  .lightbox-close:hover{border-color:var(--red);color:var(--red)}
+
+  /* ---------- paneles colapsables ---------- */
+  details.panel{padding:0}
+  details.panel summary{list-style:none;cursor:pointer;padding:var(--sp-4);margin:0;
+    display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:1.6px;
+    text-transform:uppercase;color:var(--dim)}
+  details.panel summary::-webkit-details-marker{display:none}
+  details.panel summary:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:10px}
+  details.panel summary .stitle{flex:1}
+  details.panel summary .chev{color:var(--dim);transition:transform .15s ease}
+  details.panel[open] summary .chev{transform:rotate(180deg)}
+  details.panel summary .mini{font-family:var(--font-mono);font-size:11.5px;color:var(--dim);
+    text-transform:none;letter-spacing:0}
+  details.panel .body{padding:0 var(--sp-4) var(--sp-4)}
 </style>
 </head>
 <body>
@@ -213,6 +246,7 @@
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.2v5l3.4 2"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l11 7-11 7V5Z"/></symbol>
   <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v6.2L5.6 17a2 2 0 0 0 1.8 3h9.2a2 2 0 0 0 1.8-3L14 9.2V3"/><path d="M8 15h8"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9"/><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9"/><path d="M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
 </defs>
 </svg>
 
@@ -230,12 +264,13 @@
       <h2><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Vista en vivo — 2 cámaras</h2>
       <div class="row">
         <div>
-          <div class="view">
+          <div class="view" id="view0" onclick="toggleExpand(0)" title="Click para ampliar">
             <span class="ph" id="ph0">Cargando...</span>
             <img id="img0" alt="Vista en vivo cámara 0">
             <div class="scan"></div>
             <div class="camtag">CAM 0</div>
             <div class="live" id="liveTag0">EN VIVO</div>
+            <button class="expand-btn" onclick="event.stopPropagation();toggleExpand(0)" aria-label="Ampliar cámara 0"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
           </div>
           <div class="camsel" style="margin-top:8px">
             <button id="liveBtn0" onclick="toggleLive(0)"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">En vivo</span></button>
@@ -245,12 +280,13 @@
           <div class="stat"><span class="k">Células (vivo)</span><span class="v" id="s_cnt0">—</span></div>
         </div>
         <div>
-          <div class="view">
+          <div class="view" id="view1" onclick="toggleExpand(1)" title="Click para ampliar">
             <span class="ph" id="ph1">Cargando...</span>
             <img id="img1" alt="Vista en vivo cámara 1">
             <div class="scan"></div>
             <div class="camtag">CAM 1</div>
             <div class="live" id="liveTag1">EN VIVO</div>
+            <button class="expand-btn" onclick="event.stopPropagation();toggleExpand(1)" aria-label="Ampliar cámara 1"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
           </div>
           <div class="camsel" style="margin-top:8px">
             <button id="liveBtn1" onclick="toggleLive(1)"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">En vivo</span></button>
@@ -316,8 +352,9 @@
   </div>
 
   <div class="col">
-    <div class="panel">
-      <h2><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg>Foco motorizado</h2>
+    <details class="panel" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="stitle">Foco motorizado</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
       <div class="camsel">
         <button id="mBtn0" class="active" onclick="selMotor(0)">Eje CAM 0</button>
         <button id="mBtn1" onclick="selMotor(1)">Eje CAM 1</button>
@@ -368,10 +405,12 @@
       <button id="calBtn" onclick="calibrarDpc()" style="width:100%;margin-top:8px"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="lbl">Calibrar autofoco DPC</span></button>
       <div class="stat" style="margin-top:6px"><span class="k">Autofoco DPC</span><span class="v" id="s_cal">—</span></div>
       <div class="stat"><span class="k">Último autofoco</span><span class="v" id="s_af">—</span></div>
-    </div>
+      </div>
+    </details>
 
-    <div class="panel">
-      <h2><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg>Conteo de células</h2>
+    <details class="panel" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="stitle">Conteo de células</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
       <div class="field">
         <label for="cntModo">Modo</label>
         <select id="cntModo" onchange="cntModoChange()">
@@ -412,19 +451,23 @@
       <button id="cntFotoBtn" onclick="contarFoto()" style="width:100%;margin-top:6px"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg><span class="lbl">Contar en una foto nueva</span></button>
       <div class="stat" style="margin-top:6px"><span class="k">Último conteo en foto</span><span class="v" id="s_cntfoto">—</span></div>
       <div class="stat"><span class="k">Overlay guardado</span><span class="v" id="s_cntov" style="font-size:10px">—</span></div>
-    </div>
+      </div>
+    </details>
 
-    <div class="panel">
-      <h2><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Cámara</h2>
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Cámara</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
       <div class="row">
         <div class="field"><label for="exp">Exposición µs</label><input type="number" id="exp" value="12000"></div>
         <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
       </div>
       <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
-    </div>
+      </div>
+    </details>
 
-    <div class="panel">
-      <h2><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Timelapse</h2>
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="stitle">Timelapse</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
       <div class="field"><label for="nombre">Nombre experimento</label><input type="text" id="nombre" placeholder="ej. celulas_dia1"></div>
       <div class="field"><label for="modo">Modo iluminación</label>
         <select id="modo">
@@ -461,10 +504,12 @@
         <button class="primary" id="start" onclick="iniciar()"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span>Iniciar Timelapse</span></button>
         <button class="danger" id="stop" onclick="detener()" disabled><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span>STOP de emergencia</span></button>
       </div>
-    </div>
+      </div>
+    </details>
 
-    <div class="panel">
-      <h2><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg>Temperatura</h2>
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg><span class="stitle">Temperatura</span><span class="mini" id="tValMini">--.-°C</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
       <div class="gauge-num">
         <span class="n" id="tVal">--.-</span>
         <span class="u">°C</span>
@@ -481,10 +526,12 @@
         </div>
       </div>
       <button onclick="aplicarSetpoint()" style="width:100%;margin-top:8px">Aplicar setpoint</button>
-    </div>
+      </div>
+    </details>
 
-    <div class="panel">
-      <h2><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg>CO2</h2>
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg><span class="stitle">CO2</span><span class="mini" id="cValMini">--.-ppm</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
       <div class="gauge-num">
         <span class="n" id="cVal">--.-</span>
         <span class="u">ppm</span>
@@ -504,22 +551,64 @@
         </div>
       </div>
       <button onclick="aplicarCo2Setpoint()" style="width:100%;margin-top:8px">Aplicar setpoint CO2</button>
-    </div>
+      </div>
+    </details>
 
-    <div class="panel">
-      <h2><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>Estado</h2>
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg><span class="stitle">Estado</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
       <div class="stat"><span class="k">Estado</span><span class="v" id="s_state">IDLE</span></div>
       <div class="stat"><span class="k">Ciclo actual</span><span class="v" id="s_ciclo">—</span></div>
       <div class="stat"><span class="k">Cámara activa</span><span class="v" id="s_cam">—</span></div>
       <div class="stat"><span class="k">Carpeta</span><span class="v" id="s_folder" style="font-size:10px">—</span></div>
-    </div>
+      </div>
+    </details>
   </div>
+</div>
+
+<div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista de cámara ampliada" onclick="if(event.target===this)closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()" aria-label="Cerrar vista ampliada"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg></button>
+  <div class="lightbox-stage" id="lightboxStage"></div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 let running=false,live=[false,false];
+
+// ===== Lightbox: ampliar una cámara momentaneamente =====
+// Mueve el MISMO nodo #view0/#view1 (con su <img> ya conectado al
+// stream MJPEG) adentro del lightbox, en vez de crear una segunda
+// conexion -- asi no duplica ancho de banda ni carga de CPU en la Pi.
+const viewHomes={};
+let expandedCam=null;
+
+function toggleExpand(n){
+  if(expandedCam===n){closeLightbox();return;}
+  if(expandedCam!==null)restoreView(expandedCam);
+  const view=document.getElementById('view'+n);
+  if(!viewHomes[n])viewHomes[n]={parent:view.parentNode,next:view.nextSibling};
+  document.getElementById('lightboxStage').appendChild(view);
+  view.classList.add('expanded');
+  expandedCam=n;
+  document.getElementById('lightbox').hidden=false;
+  document.body.style.overflow='hidden';
+}
+function restoreView(n){
+  const view=document.getElementById('view'+n), home=viewHomes[n];
+  view.classList.remove('expanded');
+  if(!home)return;
+  if(home.next&&home.next.parentNode===home.parent)home.parent.insertBefore(view,home.next);
+  else home.parent.appendChild(view);
+}
+function closeLightbox(){
+  if(expandedCam===null)return;
+  restoreView(expandedCam);
+  expandedCam=null;
+  document.getElementById('lightbox').hidden=true;
+  document.body.style.overflow='';
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function brightLabel(){document.getElementById('brightVal').textContent=document.getElementById('bright').value+'%';}
@@ -983,6 +1072,7 @@ setInterval(refrescarConteo,1000);
         el.textContent = t;
         const diff = Math.abs(d.temperature - d.setpoint);
         el.style.color = diff < 0.5 ? 'var(--green)' : diff < 2 ? 'var(--amber)' : 'var(--red)';
+        document.getElementById('tValMini').textContent = t + '°C';
       }
       if(d.setpoint !== undefined){
         document.getElementById('tSp').textContent = parseFloat(d.setpoint).toFixed(1) + ' °C';
@@ -1003,8 +1093,10 @@ setInterval(refrescarConteo,1000);
       if(hasCo2){
         cVal.textContent = parseFloat(d.co2).toFixed(0);
         cVal.style.color = 'var(--text)';
+        document.getElementById('cValMini').textContent = parseFloat(d.co2).toFixed(0)+'ppm';
       }else{
         cVal.textContent = '--.-';
+        document.getElementById('cValMini').textContent = '--.-ppm';
       }
       if(d.co2_setpoint !== undefined && d.co2_setpoint !== null){
         document.getElementById('cSp').textContent = parseFloat(d.co2_setpoint).toFixed(0) + ' ppm';
