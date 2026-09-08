@@ -31,6 +31,52 @@
     --radius-sm:9px;
     --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;
   }
+
+  /* Modo claro: para configurar el equipo con luz ambiente antes de
+     arrancar una sesion, no pensado para usarse a oscuras. */
+  :root[data-theme="light"]{
+    --bg:#eef2f6;
+    --panel:rgba(255,255,255,.82);
+    --panel-solid:#ffffff;
+    --panel2:#e7ecf2;
+    --line:rgba(71,85,105,.25);
+    --line-strong:#cbd5e1;
+    --text:#0f172a;
+    --dim:#516072;
+    --green:#16a34a;
+    --green-soft:rgba(22,163,74,.14);
+    --ring:rgba(22,163,74,.55);
+  }
+  :root[data-theme="light"] body{
+    background-image:radial-gradient(circle at 18% 8%,#ffffff 0%,var(--bg) 55%)}
+
+  /* Modo noche: monocromo rojo para no arruinar la adaptacion de los
+     ojos a la oscuridad mientras se trabaja con DPC/campo oscuro (igual
+     idea que el modo noche de las apps de astronomia). Toda la interfaz
+     se distingue por brillo/saturacion, no por matiz -- por eso el
+     "verde" de estado tambien pasa a rojo aca. */
+  :root[data-theme="night"]{
+    --bg:#0d0000;
+    --panel:rgba(46,10,10,.6);
+    --panel-solid:#2a0808;
+    --panel2:#1c0505;
+    --line:rgba(180,40,40,.35);
+    --line-strong:#5c1414;
+    --text:#ff5a5a;
+    --dim:#8a2e2e;
+    --green:#ff4747;
+    --green-soft:rgba(255,71,71,.16);
+    --amber:#ff6a4d;
+    --amber-soft:rgba(255,106,77,.16);
+    --red:#ffb3b3;
+    --red-soft:rgba(255,179,179,.18);
+    --blue:#ff8080;
+    --ring:rgba(255,71,71,.6);
+  }
+  :root[data-theme="night"] body{
+    background-image:radial-gradient(circle at 18% 8%,#1a0202 0%,var(--bg) 55%)}
+  :root[data-theme="night"] img{filter:grayscale(1) sepia(1) hue-rotate(-50deg) saturate(4)}
+
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{background:var(--bg)}
   body{color:var(--text);font-family:var(--font-ui);font-size:14px;line-height:1.5;
@@ -52,11 +98,18 @@
 
   /* ---------- header ---------- */
   .head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
-    border-bottom:1px solid var(--line);padding-bottom:var(--sp-4);margin-bottom:var(--sp-5)}
+    border-bottom:1px solid var(--line);padding-bottom:var(--sp-4);margin-bottom:var(--sp-4)}
   .brand{display:flex;align-items:center;gap:10px}
   .brand .ic-lg{color:var(--green)}
   .head h1{font-size:21px;letter-spacing:.5px;color:#fff;font-weight:700}
   .head h1 span{color:var(--green)}
+  .head-actions{display:flex;align-items:center;gap:10px}
+  #themeBtn{width:42px}
+
+  .connbanner{display:none;align-items:center;gap:10px;max-width:1400px;margin:0 auto var(--sp-4);
+    padding:10px 16px;border-radius:10px;background:var(--red-soft);border:1px solid var(--red);
+    color:var(--red);font-size:13px}
+  .connbanner:not([hidden]){display:flex}
   .badge{display:flex;align-items:center;gap:9px;font-family:var(--font-mono);font-size:12px;
     padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--panel);
     backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
@@ -219,6 +272,27 @@
   details.panel summary .mini{font-family:var(--font-mono);font-size:11.5px;color:var(--dim);
     text-transform:none;letter-spacing:0}
   details.panel .body{padding:0 var(--sp-4) var(--sp-4)}
+
+  /* ---------- galeria ---------- */
+  .gal-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    margin-bottom:8px;flex-wrap:wrap}
+  .gal-section-head > span{font-size:12px;color:var(--dim)}
+  .gal-zip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--green);
+    text-decoration:none;padding:4px 0}
+  .gal-zip:hover{text-decoration:underline}
+  .gal-zip .ic{width:13px;height:13px}
+  .thumb-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+  .thumb-card{position:relative;width:82px;height:82px;flex:0 0 auto}
+  .thumb{width:100%;height:100%;object-fit:cover;border-radius:8px;
+    border:1px solid var(--line-strong);cursor:zoom-in;display:block;background:var(--panel2)}
+  .thumb-dl{position:absolute;bottom:3px;right:3px;width:22px;height:22px;border-radius:6px;
+    background:rgba(8,12,20,.75);border:1px solid var(--line);color:var(--dim);
+    display:flex;align-items:center;justify-content:center}
+  .thumb-dl:hover{color:var(--green);border-color:var(--green)}
+  .thumb-dl .ic{width:12px;height:12px}
+  details.gal-exp{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+  details.gal-exp summary{cursor:pointer;font-size:12.5px;color:var(--text);list-style:revert}
+  details.gal-exp summary:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -247,6 +321,16 @@
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l11 7-11 7V5Z"/></symbol>
   <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v6.2L5.6 17a2 2 0 0 0 1.8 3h9.2a2 2 0 0 0 1.8-3L14 9.2V3"/><path d="M8 15h8"/></symbol>
   <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9"/><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9"/><path d="M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.4 6.4 0 0 0 10.2 10.2Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4"/><path d="M12 19.1v2.4"/><path d="M4.6 4.6l1.7 1.7"/><path d="M17.7 17.7l1.7 1.7"/><path d="M2.5 12h2.4"/><path d="M19.1 12h2.4"/><path d="M4.6 19.4l1.7-1.7"/><path d="M17.7 6.3l1.7-1.7"/></symbol>
+  <symbol id="i-moon-red" viewBox="0 0 24 24"><path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.4 6.4 0 0 0 10.2 10.2Z"/><circle cx="17.5" cy="7" r="1.1" style="fill:currentColor;stroke:none"/></symbol>
+  <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3.5 21.5 20h-19Z"/><path d="M12 9.5v4.2"/><circle cx="12" cy="17" r="0.9" style="fill:currentColor;stroke:none"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 6.5a1.5 1.5 0 0 1 1.5-1.5h4l2 2.4h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18Z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11.4"/><path d="M7.4 10.6 12 15.2l4.6-4.6"/><path d="M4.5 18.5h15"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.8 20c1-3.6 4-5.6 7.2-5.6s6.2 2 7.2 5.6"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3.5h11.5L20.5 7.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5Z"/><path d="M8 3.5V9h8V3.5"/><path d="M7.5 20v-6h9v6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2"/><path d="M6.5 7l1 12.5A1.5 1.5 0 0 0 9 21h6a1.5 1.5 0 0 0 1.5-1.5L17.5 7"/><path d="M10.3 11v6"/><path d="M13.7 11v6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 9 17l10.5-11"/></symbol>
 </defs>
 </svg>
 
@@ -255,7 +339,17 @@
     <svg class="ic ic-lg" aria-hidden="true"><use href="#i-microscope"/></svg>
     <h1>MICROSCOPE<span>OS</span></h1>
   </div>
-  <div class="badge"><span class="dot idle" id="dot"></span><span id="state">IDLE</span></div>
+  <div class="head-actions">
+    <button class="icon-only" id="themeBtn" onclick="cycleTheme()" aria-label="Cambiar tema" title="Cambiar tema">
+      <svg class="ic" aria-hidden="true"><use id="themeIconUse" href="#i-moon"/></svg>
+    </button>
+    <div class="badge"><span class="dot idle" id="dot"></span><span id="state">IDLE</span></div>
+  </div>
+</div>
+
+<div class="connbanner" id="connBanner" hidden role="alert">
+  <svg class="ic" aria-hidden="true"><use href="#i-warning"/></svg>
+  <span>Sin conexión con el servidor — reintentando…</span>
 </div>
 
 <div class="grid">
@@ -454,6 +548,39 @@
       </div>
     </details>
 
+    <details class="panel" id="galeriaDetails">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg><span class="stitle">Galería</span><span class="mini" id="galMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="camsel" style="margin-bottom:10px">
+        <button onclick="cargarGaleria()"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Actualizar</span></button>
+      </div>
+      <div id="galCapturas"></div>
+      <div id="galTimelapses"></div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span class="stitle">Perfiles</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <p class="hint">Guardá tu exposición/ganancia y los valores por defecto de
+      timelapse para no pisar la config de otra persona si el equipo es compartido.</p>
+      <div class="field">
+        <label for="profileSelect">Perfil guardado</label>
+        <select id="profileSelect"></select>
+      </div>
+      <div class="camsel">
+        <button onclick="cargarPerfil()"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span class="lbl">Cargar</span></button>
+        <button class="danger" onclick="borrarPerfil()"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg><span class="lbl">Eliminar</span></button>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label for="profileNombre">Guardar como</label>
+        <input type="text" id="profileNombre" placeholder="ej. alex, objetivo 40x">
+      </div>
+      <button onclick="guardarPerfil()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span class="lbl">Guardar perfil actual</span></button>
+      <div class="stat" style="margin-top:10px"><span class="k">Último cargado</span><span class="v" id="s_perfil">—</span></div>
+      </div>
+    </details>
+
     <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Cámara</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
@@ -603,12 +730,62 @@ function restoreView(n){
 }
 function closeLightbox(){
   if(expandedCam===null)return;
-  restoreView(expandedCam);
+  if(expandedCam==='img')document.getElementById('lightboxStage').innerHTML='';
+  else restoreView(expandedCam);
   expandedCam=null;
   document.getElementById('lightbox').hidden=true;
   document.body.style.overflow='';
 }
+// Vista ampliada de una foto ya guardada (galeria): a diferencia de
+// toggleExpand (que mueve el <img> del stream en vivo), aca no hay
+// conexion que preservar -- solo se crea una <img> nueva apuntando a
+// una miniatura mas grande, generada por el servidor al vuelo.
+function openImagePreview(url){
+  const stage=document.getElementById('lightboxStage');
+  stage.innerHTML='';
+  const img=document.createElement('img');
+  img.src=url;img.alt='Vista ampliada';
+  img.style.cssText='width:100%;height:auto;max-height:86vh;border-radius:16px;display:block;cursor:zoom-out';
+  img.onclick=closeLightbox;
+  stage.appendChild(img);
+  expandedCam='img';
+  document.getElementById('lightbox').hidden=false;
+  document.body.style.overflow='hidden';
+}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
+
+// ===== Tema: oscuro (default) -> noche (rojo) -> claro -> oscuro =====
+const TEMAS=['oscuro','noche','claro'];
+const TEMA_ICONO={oscuro:'i-moon',noche:'i-moon-red',claro:'i-sun'};
+function aplicarTema(t){
+  if(t==='oscuro')document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',t==='claro'?'light':'night');
+  document.getElementById('themeIconUse').setAttribute('href','#'+TEMA_ICONO[t]);
+  document.getElementById('themeBtn').title='Tema: '+t+' (click para cambiar)';
+}
+function cycleTheme(){
+  const actual=TEMAS[(TEMAS.indexOf(temaActual)+1)%TEMAS.length];
+  temaActual=actual;
+  aplicarTema(actual);
+  try{localStorage.setItem('microscopeos_tema',actual);}catch(e){}
+  toast('Tema: '+actual);
+}
+let temaActual='oscuro';
+try{
+  const guardado=localStorage.getItem('microscopeos_tema');
+  if(guardado && TEMAS.includes(guardado))temaActual=guardado;
+}catch(e){}
+aplicarTema(temaActual);
+
+// ===== Indicador de conexion: se muestra solo si el servidor deja de
+// contestar (poll() o el SSE de temperatura fallan varias veces
+// seguidas), no en el primer fallo suelto de un fetch. =====
+let fallosConexion=0;
+function marcarConexion(ok){
+  if(ok){fallosConexion=0;document.getElementById('connBanner').hidden=true;return;}
+  fallosConexion++;
+  if(fallosConexion>=2)document.getElementById('connBanner').hidden=false;
+}
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function brightLabel(){document.getElementById('brightVal').textContent=document.getElementById('bright').value+'%';}
@@ -778,9 +955,23 @@ async function aplicarFocusConfig(){
   window.addEventListener('blur',soltar);
 })();
 
+const driverAvisoPrevio={0:false,1:false};
 async function refrescarFoco(){
   try{
     const r=await fetch('/api/focus/status');const d=await r.json();
+    // Chequea alertas termicas/cortocircuito en LOS DOS ejes, no solo en
+    // el seleccionado -- el eje que no se esta mirando tambien puede
+    // recalentarse y hoy solo se ve el stat del que esta activo.
+    if(d.motores){
+      for(const eje of Object.keys(d.motores)){
+        const mm=d.motores[eje];
+        const problema=!!(mm.sobretemp_corte||mm.sobretemp_aviso||mm.corto_fase_a||mm.corto_fase_b);
+        if(problema && !driverAvisoPrevio[eje]){
+          toast('⚠ Eje CAM '+eje+': '+(mm.sobretemp_corte?'CORTE TÉRMICO':mm.corto_fase_a||mm.corto_fase_b?'CORTO':'motor caliente'));
+        }
+        driverAvisoPrevio[eje]=problema;
+      }
+    }
     const m=d.motores&&d.motores[motorSel];
     const pos=document.getElementById('s_focus_pos'), drv=document.getElementById('s_focus_drv');
     if(!m){pos.textContent='—';drv.textContent='sin motor';return;}
@@ -1045,13 +1236,119 @@ function setRunning(on){
 async function poll(){
   try{
     const r=await fetch('/status');const s=await r.json();
+    marcarConexion(true);
     if(s.running!==running)setRunning(s.running);
     document.getElementById('s_ciclo').textContent=s.ciclo||'—';
     document.getElementById('s_ciclo').className='v'+(s.running?' hot':'');
     document.getElementById('s_cam').textContent='CAM '+s.camara_activa;
     document.getElementById('s_folder').textContent=s.carpeta||'—';
+  }catch(e){marcarConexion(false);}
+}
+// ===== Galeria =====
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtBytes(n){
+  if(n>1e9)return (n/1e9).toFixed(1)+' GB';
+  if(n>1e6)return (n/1e6).toFixed(1)+' MB';
+  if(n>1e3)return (n/1e3).toFixed(0)+' KB';
+  return n+' B';
+}
+function thumbCard(thumbUrl,bigUrl,dlUrl,alt){
+  return '<div class="thumb-card">'
+    +'<img class="thumb" src="'+thumbUrl+'" loading="lazy" alt="'+esc(alt)+'" onclick="openImagePreview(\''+bigUrl+'\')">'
+    +'<a class="thumb-dl" href="'+dlUrl+'" aria-label="Descargar '+esc(alt)+'" title="Descargar original .tif"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg></a>'
+    +'</div>';
+}
+function confirmZip(bytes){
+  if(bytes>400*1024*1024){
+    return confirm('Esta carpeta pesa '+fmtBytes(bytes)+'. Comprimirla en el servidor puede '
+      +'tardar y usar bastante memoria de la Pi. ¿Descargar igual?');
+  }
+  return true;
+}
+async function cargarGaleria(){
+  try{
+    const r=await fetch('/files/list');const d=await r.json();
+    marcarConexion(true);
+    const cd=d.capturas||[], tl=d.timelapses||[];
+    document.getElementById('galMini').textContent=
+      cd.length+' sueltas · '+tl.length+' timelapse';
+
+    document.getElementById('galCapturas').innerHTML = cd.length
+      ? '<div class="gal-section-head"><span>Capturas sueltas ('+cd.length+(cd.length>=60?'+':'')+')</span>'
+        +'<a class="gal-zip" href="/files/zip/capturas"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Descargar todas (.zip)</a></div>'
+        +'<div class="thumb-grid">'+cd.map(f=>thumbCard(
+            '/files/thumb/capturas/'+encodeURIComponent(f.filename)+'?size=160',
+            '/files/thumb/capturas/'+encodeURIComponent(f.filename)+'?size=1600',
+            '/files/raw/capturas/'+encodeURIComponent(f.filename), f.filename)).join('')+'</div>'
+      : '<p class="hint">Todavía no hay capturas sueltas.</p>';
+
+    document.getElementById('galTimelapses').innerHTML = tl.length
+      ? tl.map(exp=>{
+          const cams=Object.keys(exp.cams||{}).sort();
+          const camsHtml=cams.map(c=>'<p class="hint" style="margin-top:8px">CAM '+c+'</p>'
+            +'<div class="thumb-grid">'+(exp.cams[c]||[]).map(fn=>thumbCard(
+                '/files/thumb/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn)+'?size=160',
+                '/files/thumb/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn)+'?size=1600',
+                '/files/raw/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn), fn)).join('')+'</div>'
+          ).join('');
+          return '<details class="gal-exp"><summary>'+esc(exp.folder)+' · '+exp.n_files+' fotos · '+fmtBytes(exp.size_bytes)+'</summary>'
+            +'<div style="padding:8px 0 4px">'
+            +'<a class="gal-zip" href="/files/zip/timelapse/'+encodeURIComponent(exp.folder)+'" onclick="return confirmZip('+exp.size_bytes+')">'
+            +'<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Descargar carpeta completa (.zip, '+fmtBytes(exp.size_bytes)+')</a>'
+            +camsHtml+'</div></details>';
+        }).join('')
+      : '<p class="hint">Todavía no corriste ningún timelapse.</p>';
+  }catch(e){marcarConexion(false);}
+}
+document.getElementById('galeriaDetails').addEventListener('toggle',function(){if(this.open)cargarGaleria();});
+
+// ===== Perfiles =====
+async function cargarListaPerfiles(){
+  try{
+    const r=await fetch('/profiles/list');const d=await r.json();
+    const sel=document.getElementById('profileSelect'), actual=sel.value;
+    sel.innerHTML=(d.perfiles||[]).map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join('');
+    if(d.perfiles && d.perfiles.includes(actual))sel.value=actual;
   }catch(e){}
 }
+async function cargarPerfil(){
+  const nombre=document.getElementById('profileSelect').value;
+  if(!nombre){toast('No hay perfiles guardados todavía');return;}
+  const r=await fetch('/profiles/load/'+encodeURIComponent(nombre),{method:'POST'});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  document.getElementById('exp').value=d.camera.exposure_us;
+  document.getElementById('gain').value=d.camera.gain;
+  document.getElementById('intv').value=d.timelapse.interval_seconds;
+  document.getElementById('dur').value=d.timelapse.duration_seconds;
+  document.getElementById('s_perfil').textContent=nombre;
+  toast('Perfil "'+nombre+'" cargado y exposición aplicada');
+}
+async function guardarPerfil(){
+  const nombre=document.getElementById('profileNombre').value.trim();
+  if(!nombre){toast('Poné un nombre para el perfil');return;}
+  const body={name:nombre,
+    interval_seconds:+document.getElementById('intv').value,
+    duration_seconds:+document.getElementById('dur').value};
+  const r=await fetch('/profiles/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Perfil "'+nombre+'" guardado');
+  document.getElementById('profileNombre').value='';
+  cargarListaPerfiles();
+}
+async function borrarPerfil(){
+  const nombre=document.getElementById('profileSelect').value;
+  if(!nombre){toast('No hay perfil seleccionado');return;}
+  if(!confirm('¿Eliminar el perfil "'+nombre+'"? No se puede deshacer.'))return;
+  const r=await fetch('/profiles/delete/'+encodeURIComponent(nombre),{method:'POST'});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Perfil eliminado');
+  cargarListaPerfiles();
+}
+cargarListaPerfiles();
+
 setInterval(poll,2000);poll();refrescarAmbas();
 setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();
 // Mas rapido que el resto de los sondeos: el conteo en vivo se refresca
@@ -1130,6 +1427,7 @@ setInterval(refrescarConteo,1000);
     document.getElementById('tDot').style.background = 'var(--red)';
     document.getElementById('tVal').textContent = 'ERR';
     document.getElementById('cDot').style.background = 'var(--red)';
+    marcarConexion(false);
   };
 })();
 async function aplicarSetpoint(){

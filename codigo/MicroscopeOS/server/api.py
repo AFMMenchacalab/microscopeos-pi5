@@ -1,8 +1,11 @@
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
+import re
+import io
+import zipfile
 import time
 import numpy as np
 import cv2
@@ -25,6 +28,59 @@ STATIC_DIR = BASE_DIR / "server" / "static"
 from temperature_controller import temperature_controller
 from core.timelapse import MODOS
 from core.autofocus import micropasos_por_um
+from core.profile_manager import ProfileManager
+from core.config import SystemConfig, CameraSettings, TimelapseSettings
+
+# ===============================
+# Galeria de archivos: solo lectura, con nombres validados por regex
+# para no aceptar un path arbitrario del cliente (ver _ruta_captura /
+# _ruta_timelapse mas abajo).
+# ===============================
+_FOLDER_RE = re.compile(r'^timelapse_\d{8}_\d{6}$')
+_FILE_RE = re.compile(r'^[A-Za-z0-9_.\-]+\.tif$')
+_PERFIL_RE = re.compile(r'^[A-Za-z0-9 _\-]{1,40}$')
+
+
+def _ruta_captura(filename):
+    if not _FILE_RE.match(filename):
+        return None
+    carpeta = (BASE_DIR / "capturas_unicas").resolve()
+    p = (carpeta / filename).resolve()
+    if p.parent != carpeta or not p.is_file():
+        return None
+    return p
+
+
+def _ruta_timelapse(folder, cam, filename):
+    if not _FOLDER_RE.match(folder) or cam not in (0, 1) or not _FILE_RE.match(filename):
+        return None
+    carpeta = (BASE_DIR / folder / f"cam{cam}").resolve()
+    p = (carpeta / filename).resolve()
+    if p.parent != carpeta or not p.is_file():
+        return None
+    return p
+
+
+def _thumb_jpeg(path, max_dim=320):
+    """Miniatura 8-bit de un .tif crudo de 16 bits, igual normalizacion
+    que _preview_png (cv2.NORM_MINMAX) para que se vea consistente con
+    el vivo. JPEG (no PNG) porque es solo para previsualizar -- el
+    archivo original de 16 bits siempre se sirve intacto por separado
+    via /files/raw/... para quien necesite los datos crudos."""
+    img = tifffile.imread(str(path))
+    norm = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    h, w = norm.shape[:2]
+    escala = max_dim / max(h, w)
+    if escala < 1:
+        norm = cv2.resize(norm, (max(1, int(w * escala)), max(1, int(h * escala))))
+    ok, buf = cv2.imencode(".jpg", norm, [cv2.IMWRITE_JPEG_QUALITY, 82])
+    return buf.tobytes()
+
+
+class ProfileSaveReq(BaseModel):
+    name: str
+    interval_seconds: int = 300
+    duration_seconds: int = 3600
 
 
 class ExposureReq(BaseModel):
@@ -131,6 +187,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
     if motores is None:
         motores = {0: motor} if motor is not None else {}
     estado = {"camara_activa": 0}
+    profile_manager = ProfileManager()
     # Serializa el autofoco: mueve motor Y camara a la vez, asi que dos
     # corridas simultaneas se pisarian el modo de la camara.
     autofocus_lock = threading.Lock()
@@ -519,6 +576,136 @@ def create_app(camera, illuminations, timelapse, motores=None,
             return {"error": str(e)}
         finally:
             autofocus_lock.release()
+
+    # ===============================
+    # Galeria / descarga (solo lectura sobre lo ya guardado en disco)
+    # ===============================
+    @app.get("/files/list")
+    def files_list():
+        capturas_dir = BASE_DIR / "capturas_unicas"
+        capturas = []
+        if capturas_dir.is_dir():
+            archivos = sorted(capturas_dir.glob("*.tif"),
+                               key=lambda p: p.stat().st_mtime, reverse=True)
+            capturas = [{"filename": p.name, "mtime": p.stat().st_mtime,
+                         "size": p.stat().st_size} for p in archivos[:60]]
+
+        timelapses = []
+        for folder in sorted(BASE_DIR.glob("timelapse_*"),
+                              key=lambda p: p.stat().st_mtime, reverse=True):
+            if not folder.is_dir() or not _FOLDER_RE.match(folder.name):
+                continue
+            cams, total_bytes, total_files = {}, 0, 0
+            for camdir in sorted(folder.glob("cam*")):
+                if not camdir.is_dir():
+                    continue
+                arch = sorted(camdir.glob("*.tif"),
+                              key=lambda p: p.stat().st_mtime, reverse=True)
+                total_files += len(arch)
+                total_bytes += sum(p.stat().st_size for p in arch)
+                cams[camdir.name.replace("cam", "")] = [p.name for p in arch[:12]]
+            timelapses.append({"folder": folder.name, "mtime": folder.stat().st_mtime,
+                                "cams": cams, "n_files": total_files,
+                                "size_bytes": total_bytes})
+        return {"capturas": capturas, "timelapses": timelapses}
+
+    @app.get("/files/thumb/capturas/{filename}")
+    def thumb_captura(filename: str, size: int = 320):
+        p = _ruta_captura(filename)
+        if p is None:
+            return Response(status_code=404)
+        return Response(content=_thumb_jpeg(p, size), media_type="image/jpeg")
+
+    @app.get("/files/thumb/timelapse/{folder}/{cam}/{filename}")
+    def thumb_timelapse(folder: str, cam: int, filename: str, size: int = 320):
+        p = _ruta_timelapse(folder, cam, filename)
+        if p is None:
+            return Response(status_code=404)
+        return Response(content=_thumb_jpeg(p, size), media_type="image/jpeg")
+
+    @app.get("/files/raw/capturas/{filename}")
+    def raw_captura(filename: str):
+        p = _ruta_captura(filename)
+        if p is None:
+            return Response(status_code=404)
+        return FileResponse(str(p), media_type="image/tiff", filename=filename)
+
+    @app.get("/files/raw/timelapse/{folder}/{cam}/{filename}")
+    def raw_timelapse(folder: str, cam: int, filename: str):
+        p = _ruta_timelapse(folder, cam, filename)
+        if p is None:
+            return Response(status_code=404)
+        return FileResponse(str(p), media_type="image/tiff", filename=filename)
+
+    @app.get("/files/zip/capturas")
+    def zip_capturas():
+        folder = BASE_DIR / "capturas_unicas"
+        if not folder.is_dir():
+            return Response(status_code=404)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for p in sorted(folder.glob("*.tif")):
+                zf.write(p, arcname=p.name)
+        return Response(content=buf.getvalue(), media_type="application/zip",
+                         headers={"Content-Disposition": 'attachment; filename="capturas_unicas.zip"'})
+
+    @app.get("/files/zip/timelapse/{folder}")
+    def zip_timelapse(folder: str):
+        if not _FOLDER_RE.match(folder):
+            return Response(status_code=400)
+        base = (BASE_DIR / folder).resolve()
+        if base.parent != BASE_DIR.resolve() or not base.is_dir():
+            return Response(status_code=404)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for p in sorted(base.rglob("*")):
+                if p.is_file():
+                    zf.write(p, arcname=str(p.relative_to(base)))
+        return Response(content=buf.getvalue(), media_type="application/zip",
+                         headers={"Content-Disposition": f'attachment; filename="{folder}.zip"'})
+
+    # ===============================
+    # Perfiles (exposicion/ganancia + defaults de timelapse). Pensado
+    # para un microscopio compartido: cada persona guarda su propia
+    # configuracion y la vuelve a cargar sin pisar la del resto.
+    # ===============================
+    @app.get("/profiles/list")
+    def profiles_list():
+        return {"perfiles": profile_manager.list_profiles()}
+
+    @app.post("/profiles/load/{name}")
+    def profiles_load(name: str):
+        if not _PERFIL_RE.match(name):
+            return {"error": "Nombre de perfil inválido"}
+        if name not in profile_manager.list_profiles():
+            return {"error": f"No existe el perfil '{name}'"}
+        config = profile_manager.load_profile(name)
+        camera.set_exposure(config.camera.exposure_us, config.camera.gain)
+        return {"status": "ok",
+                "camera": {"exposure_us": config.camera.exposure_us,
+                           "gain": config.camera.gain},
+                "timelapse": {"interval_seconds": config.timelapse.interval_seconds,
+                              "duration_seconds": config.timelapse.duration_seconds}}
+
+    @app.post("/profiles/save")
+    def profiles_save(req: ProfileSaveReq):
+        if not _PERFIL_RE.match(req.name):
+            return {"error": "Nombre de perfil inválido"}
+        config = SystemConfig()
+        config.camera = CameraSettings(exposure_us=camera.exposure_time, gain=camera.gain)
+        config.timelapse = TimelapseSettings(interval_seconds=req.interval_seconds,
+                                              duration_seconds=req.duration_seconds)
+        profile_manager.save_profile(req.name, config)
+        return {"status": "ok"}
+
+    @app.post("/profiles/delete/{name}")
+    def profiles_delete(name: str):
+        if not _PERFIL_RE.match(name):
+            return {"error": "Nombre de perfil inválido"}
+        if name == "default":
+            return {"error": "No se puede borrar el perfil 'default'"}
+        profile_manager.delete_profile(name)
+        return {"status": "ok"}
 
     # ===============================
     # Interfaz
