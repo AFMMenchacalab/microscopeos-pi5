@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>MicroscopeOS</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230a0f1c'/%3E%3Cg fill='none' stroke='%2322c55e' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='6.3' r='2'/%3E%3Cpath d='M9 8.3v3'/%3E%3Cpath d='M6.7 19.5h8.6'/%3E%3Cpath d='M10.8 19.5c2.8-.3 4.7-2.5 4.7-5.2A5.2 5.2 0 0 0 10 9'/%3E%3Cpath d='M6.3 14.3h5.6'/%3E%3Cpath d='M14.8 17.1h3.1'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@400;500;600;700&display=swap');
+  :root{
+    --font-ui:'Fira Sans',system-ui,sans-serif;
+    --font-mono:'Fira Code','JetBrains Mono',monospace;
+    --bg:#0a0f1c;
+    --panel:rgba(27,35,54,.74);
+    --panel-solid:#1b2336;
+    --panel2:#141c2e;
+    --line:rgba(100,116,139,.35);
+    --line-strong:#334155;
+    --text:#f1f5f9;
+    --dim:#a3b3c7;
+    --green:#22c55e;
+    --green-soft:rgba(34,197,94,.16);
+    --amber:#f6b352;
+    --amber-soft:rgba(246,179,82,.16);
+    --red:#ef4444;
+    --red-soft:rgba(239,68,68,.14);
+    --blue:#4dabf7;
+    --ring:rgba(34,197,94,.55);
+    --radius:14px;
+    --radius-sm:9px;
+    --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;
+  }
+
+  /* Modo claro: para configurar el equipo con luz ambiente antes de
+     arrancar una sesion, no pensado para usarse a oscuras. */
+  :root[data-theme="light"]{
+    --bg:#eef2f6;
+    --panel:rgba(255,255,255,.82);
+    --panel-solid:#ffffff;
+    --panel2:#e7ecf2;
+    --line:rgba(71,85,105,.25);
+    --line-strong:#cbd5e1;
+    --text:#0f172a;
+    --dim:#516072;
+    --green:#16a34a;
+    --green-soft:rgba(22,163,74,.14);
+    --ring:rgba(22,163,74,.55);
+  }
+  :root[data-theme="light"] body{
+    background-image:radial-gradient(circle at 18% 8%,#ffffff 0%,var(--bg) 55%)}
+
+  /* Modo noche: monocromo rojo para no arruinar la adaptacion de los
+     ojos a la oscuridad mientras se trabaja con DPC/campo oscuro (igual
+     idea que el modo noche de las apps de astronomia). Toda la interfaz
+     se distingue por brillo/saturacion, no por matiz -- por eso el
+     "verde" de estado tambien pasa a rojo aca. */
+  :root[data-theme="night"]{
+    --bg:#0d0000;
+    --panel:rgba(46,10,10,.6);
+    --panel-solid:#2a0808;
+    --panel2:#1c0505;
+    --line:rgba(180,40,40,.35);
+    --line-strong:#5c1414;
+    --text:#ff5a5a;
+    --dim:#8a2e2e;
+    --green:#ff4747;
+    --green-soft:rgba(255,71,71,.16);
+    --amber:#ff6a4d;
+    --amber-soft:rgba(255,106,77,.16);
+    --red:#ffb3b3;
+    --red-soft:rgba(255,179,179,.18);
+    --blue:#ff8080;
+    --ring:rgba(255,71,71,.6);
+  }
+  :root[data-theme="night"] body{
+    background-image:radial-gradient(circle at 18% 8%,#1a0202 0%,var(--bg) 55%)}
+  :root[data-theme="night"] img{filter:grayscale(1) sepia(1) hue-rotate(-50deg) saturate(4)}
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg)}
+  body{color:var(--text);font-family:var(--font-ui);font-size:14px;line-height:1.5;
+    background-image:radial-gradient(circle at 18% 8%,#122036 0%,var(--bg) 55%);
+    min-height:100dvh;padding:var(--sp-4)}
+  h1,h2{font-family:var(--font-ui)}
+  ::selection{background:var(--green-soft);color:var(--text)}
+  a{color:inherit}
+
+  /* ---------- icons ---------- */
+  .ic{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;
+    stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  h2 .ic{width:15px;height:15px;color:var(--green)}
+  .ic-lg{width:22px;height:22px}
+
+  /* ---------- focus / a11y ---------- */
+  a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,
+  .joy:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:8px}
+
+  /* ---------- header ---------- */
+  .head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
+    border-bottom:1px solid var(--line);padding-bottom:var(--sp-4);margin-bottom:var(--sp-4)}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand .ic-lg{color:var(--green)}
+  .head h1{font-size:21px;letter-spacing:.5px;color:#fff;font-weight:700}
+  .head h1 span{color:var(--green)}
+  .head-actions{display:flex;align-items:center;gap:10px}
+  #themeBtn{width:42px}
+
+  .connbanner{display:none;align-items:center;gap:10px;max-width:1400px;margin:0 auto var(--sp-4);
+    padding:10px 16px;border-radius:10px;background:var(--red-soft);border:1px solid var(--red);
+    color:var(--red);font-size:13px}
+  .connbanner:not([hidden]){display:flex}
+  .badge{display:flex;align-items:center;gap:9px;font-family:var(--font-mono);font-size:12px;
+    padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--panel);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim);transition:.3s}
+  .dot.idle{background:var(--green);box-shadow:0 0 8px var(--green)}
+  .dot.run{background:var(--red);box-shadow:0 0 10px var(--red);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+
+  /* ---------- layout ---------- */
+  .grid{display:grid;grid-template-columns:1fr 380px;gap:var(--sp-4);max-width:1400px;margin:0 auto}
+  @media(max-width:1024px){.grid{grid-template-columns:1fr}}
+  .col{display:flex;flex-direction:column;gap:var(--sp-4)}
+
+  .panel{background:var(--panel);backdrop-filter:blur(16px) saturate(140%);
+    -webkit-backdrop-filter:blur(16px) saturate(140%);
+    border:1px solid var(--line);border-radius:var(--radius);padding:var(--sp-4);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 30px -22px rgba(0,0,0,.7)}
+  .panel + h2{margin-top:var(--sp-5)}
+  .panel h2, .panel > h2:first-child{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;
+    color:var(--dim);margin-bottom:var(--sp-4);display:flex;align-items:center;gap:8px}
+
+  /* ---------- camera view ---------- */
+  .view{position:relative;background:var(--panel2);border:1px solid var(--line);
+    border-radius:var(--radius-sm);aspect-ratio:4/3;overflow:hidden;display:flex;
+    align-items:center;justify-content:center}
+  .view{cursor:zoom-in}
+  .view.expanded{cursor:zoom-out}
+  .view img{width:100%;height:100%;object-fit:contain;display:none}
+  .view .ph{color:var(--dim);font-size:13px;text-align:center;padding:20px}
+  .expand-btn{position:absolute;bottom:9px;right:9px;width:30px;height:30px;border-radius:8px;
+    background:rgba(8,12,20,.65);border:1px solid var(--line);color:var(--dim);
+    display:flex;align-items:center;justify-content:center;padding:0;min-height:0}
+  .expand-btn:hover{color:var(--green);border-color:var(--green);background:rgba(8,12,20,.8)}
+  .expand-btn .ic{width:15px;height:15px}
+  .scan{position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(0,0,0,.12) 3px 4px);opacity:.35}
+  .camtag{position:absolute;top:9px;left:9px;font-family:var(--font-mono);font-size:11px;
+    background:rgba(8,12,20,.65);padding:4px 10px;border-radius:6px;color:var(--green);
+    border:1px solid var(--line);letter-spacing:.6px}
+  .live{position:absolute;top:9px;right:9px;font-family:var(--font-mono);font-size:11px;
+    background:rgba(8,12,20,.65);padding:4px 10px;border-radius:6px;color:var(--red);
+    border:1px solid var(--line);display:none;align-items:center;gap:6px}
+  .live::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--red);
+    animation:pulse 1s infinite}
+  .camsel{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .camsel button{flex:1;min-width:0}
+
+  /* ---------- buttons ---------- */
+  button{font-family:var(--font-ui);font-size:13px;font-weight:500;cursor:pointer;
+    background:var(--panel2);color:var(--text);border:1px solid var(--line-strong);
+    border-radius:10px;padding:11px 14px;min-height:42px;letter-spacing:.2px;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    transition:background .15s ease,border-color .15s ease,color .15s ease,transform .08s ease}
+  button:hover:not(:disabled){border-color:var(--green);color:#fff;background:#182338}
+  button:active:not(:disabled){transform:scale(.98)}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  button.active{border-color:var(--green);color:var(--green);background:var(--green-soft)}
+  button.primary{background:var(--green);color:#04130a;border-color:var(--green);font-weight:700}
+  button.primary:hover:not(:disabled){background:#4ade80;color:#04130a}
+  button.danger{background:transparent;color:var(--red);border-color:rgba(239,68,68,.35)}
+  button.danger:hover:not(:disabled){background:var(--red);color:#fff;border-color:var(--red)}
+  button.lit{background:var(--amber);color:#1a1100;border-color:var(--amber);font-weight:700}
+  button.lit:hover:not(:disabled){background:#ffc673;color:#1a1100}
+  button.icon-only{flex:0 0 auto;min-width:42px;padding:0;width:42px}
+  .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ---------- fields ---------- */
+  .field{margin-bottom:var(--sp-3)}
+  .field label{display:block;font-size:11px;color:var(--dim);margin-bottom:6px;
+    letter-spacing:.8px;text-transform:uppercase}
+  .field input,.field select{width:100%;background:var(--panel2);border:1px solid var(--line-strong);
+    border-radius:8px;padding:10px 11px;color:var(--text);font-family:var(--font-mono);
+    font-size:13px;min-height:42px}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--green)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:420px){.row{grid-template-columns:1fr}}
+  .check{display:flex;align-items:center;gap:9px}
+  .check input{width:18px;height:18px;accent-color:var(--green);flex:0 0 auto}
+  .check label{margin:0;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)}
+  .hint{font-size:12px;color:var(--dim);line-height:1.6;padding:2px 0 var(--sp-3)}
+
+  .slider{display:flex;align-items:center;gap:10px}
+  .slider input[type=range]{flex:1;accent-color:var(--amber);height:36px}
+  .slider .val{min-width:46px;text-align:right;color:var(--amber);font-weight:700;font-family:var(--font-mono)}
+
+  .stat{display:flex;justify-content:space-between;gap:10px;padding:9px 0;
+    border-bottom:1px solid var(--line);font-size:12.5px}
+  .stat:last-child{border:0}
+  .stat .k{color:var(--dim)}
+  .stat .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;text-align:right}
+  .stat .v.hot{color:var(--amber)}
+
+  .actions{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(90px);
+    background:var(--panel-solid);border:1px solid var(--green);color:var(--green);
+    padding:12px 22px;border-radius:10px;font-size:13px;font-family:var(--font-mono);
+    transition:transform .3s ease;z-index:50;box-shadow:0 12px 30px -12px rgba(0,0,0,.7)}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+
+  /* ---------- joystick ---------- */
+  .joy{position:relative;height:230px;background:var(--panel2);border:1px solid var(--line-strong);
+    border-radius:var(--radius);margin:var(--sp-3) 0;touch-action:none;cursor:grab;
+    overflow:hidden;user-select:none}
+  .joy.grab{cursor:grabbing;border-color:var(--green)}
+  .joy::after{content:'';position:absolute;left:14px;right:14px;top:50%;height:1px;background:var(--line-strong)}
+  .joyknob{position:absolute;left:50%;top:50%;width:78px;height:78px;margin:-39px 0 0 -39px;
+    border-radius:50%;background:var(--panel-solid);border:1px solid var(--green);
+    box-shadow:0 0 14px var(--green-soft);display:flex;align-items:center;justify-content:center;
+    color:var(--green);transition:box-shadow .15s}
+  .joy.grab .joyknob{box-shadow:0 0 22px var(--green)}
+  .joylbl{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;
+    gap:6px;font-size:10px;color:var(--dim);letter-spacing:1.2px;pointer-events:none;text-transform:uppercase}
+  .joylbl.up{top:9px}
+  .joylbl.dn{bottom:9px}
+  .joylbl .ic{width:12px;height:12px}
+
+  .valve-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
+    letter-spacing:.4px;padding:3px 10px;border-radius:20px;border:1px solid var(--line-strong);
+    font-family:var(--font-mono)}
+  .valve-pill .vdot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .valve-pill.open{color:var(--green);border-color:var(--green);background:var(--green-soft)}
+  .valve-pill.closed{color:var(--dim);border-color:var(--line-strong)}
+
+  .gauge-num{display:flex;align-items:baseline;gap:6px;margin-bottom:var(--sp-3)}
+  .gauge-num .n{font-family:var(--font-mono);font-size:2.1rem;font-weight:700;color:var(--text);
+    min-width:5ch;text-align:right;font-variant-numeric:tabular-nums}
+  .gauge-num .u{color:var(--dim)}
+  .gauge-dot{width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:6px;
+    display:inline-block;transition:background .3s}
+  .gauge-bar{background:var(--panel2);border-radius:3px;height:5px;margin:10px 0;overflow:hidden}
+  .gauge-bar > div{height:100%;width:0%;border-radius:3px;transition:width .4s}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important;animation-iteration-count:1 !important;
+      transition-duration:.001ms !important}
+  }
+
+  /* ---------- lightbox (ampliar cámara) ---------- */
+  .lightbox{position:fixed;inset:0;background:rgba(5,8,14,.86);backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;
+    z-index:200;padding:var(--sp-5)}
+  .lightbox[hidden]{display:none}
+  .lightbox-stage{max-width:min(92vw,1100px);width:100%}
+  .lightbox-stage .view{max-height:86vh}
+  .lightbox-close{position:absolute;top:20px;right:20px;width:44px;height:44px;padding:0;
+    border-radius:10px;background:var(--panel-solid);color:var(--text)}
+  .lightbox-close:hover{border-color:var(--red);color:var(--red)}
+
+  /* ---------- paneles colapsables ---------- */
+  details.panel{padding:0}
+  details.panel summary{list-style:none;cursor:pointer;padding:var(--sp-4);margin:0;
+    display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:1.6px;
+    text-transform:uppercase;color:var(--dim)}
+  details.panel summary::-webkit-details-marker{display:none}
+  details.panel summary:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:10px}
+  details.panel summary .stitle{flex:1}
+  details.panel summary .chev{color:var(--dim);transition:transform .15s ease}
+  details.panel[open] summary .chev{transform:rotate(180deg)}
+  details.panel summary .mini{font-family:var(--font-mono);font-size:11.5px;color:var(--dim);
+    text-transform:none;letter-spacing:0}
+  details.panel .body{padding:0 var(--sp-4) var(--sp-4)}
+
+  /* ---------- galeria ---------- */
+  .gal-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    margin-bottom:8px;flex-wrap:wrap}
+  .gal-section-head > span{font-size:12px;color:var(--dim)}
+  .gal-zip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--green);
+    text-decoration:none;padding:4px 0}
+  .gal-zip:hover{text-decoration:underline}
+  .gal-zip .ic{width:13px;height:13px}
+  .thumb-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+  .thumb-card{position:relative;width:82px;height:82px;flex:0 0 auto}
+  .thumb{width:100%;height:100%;object-fit:cover;border-radius:8px;
+    border:1px solid var(--line-strong);cursor:zoom-in;display:block;background:var(--panel2)}
+  .thumb-dl{position:absolute;bottom:3px;right:3px;width:22px;height:22px;border-radius:6px;
+    background:rgba(8,12,20,.75);border:1px solid var(--line);color:var(--dim);
+    display:flex;align-items:center;justify-content:center}
+  .thumb-dl:hover{color:var(--green);border-color:var(--green)}
+  .thumb-dl .ic{width:12px;height:12px}
+  details.gal-exp{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+  details.gal-exp summary{cursor:pointer;font-size:12.5px;color:var(--text);list-style:revert}
+  details.gal-exp summary:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<defs>
+  <symbol id="i-microscope" viewBox="0 0 24 24"><circle cx="9" cy="6" r="2.2"/><path d="M9 8.2v3.2"/><path d="M6.5 20h9"/><path d="M11 20c3-.3 5-2.7 5-5.6A5.6 5.6 0 0 0 9.8 8.8"/><path d="M6 14.6h6"/><path d="M15.2 17.6h3.3"/></symbol>
+  <symbol id="i-broadcast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.3"/><path d="M8.6 8.6a5 5 0 0 0 0 6.8"/><path d="M15.4 8.6a5 5 0 0 1 0 6.8"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8"/><path d="M18.4 5.6a9 9 0 0 1 0 12.8"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.2"/><circle cx="12" cy="12" r="3"/><path d="M12 2.2v3.4"/><path d="M12 18.4v3.4"/><path d="M2.2 12h3.4"/><path d="M18.4 12h3.4"/></symbol>
+  <symbol id="i-focus" viewBox="0 0 24 24"><path d="M4 9V6.2A2.2 2.2 0 0 1 6.2 4H9"/><path d="M20 9V6.2A2.2 2.2 0 0 0 17.8 4H15"/><path d="M4 15v2.8A2.2 2.2 0 0 0 6.2 20H9"/><path d="M20 15v2.8a2.2 2.2 0 0 1-2.2 2.2H15"/><circle cx="12" cy="12" r="2.8"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6.5h9"/><circle cx="16" cy="6.5" r="1.8"/><path d="M20 12h-9"/><circle cx="8" cy="12" r="1.8"/><path d="M4 17.5h9"/><circle cx="16" cy="17.5" r="1.8"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2.2"/><path d="M8.3 7l1.2-2.2A1.6 1.6 0 0 1 10.9 4h2.2a1.6 1.6 0 0 1 1.4.8L15.7 7"/><circle cx="12" cy="13.4" r="3.6"/></symbol>
+  <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18.2h6"/><path d="M10 21.2h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.45 1 1.15 1 1.9v.6h5v-.6c0-.75.4-1.45 1-1.9A6 6 0 0 0 12 3Z"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M7 6.6a7 7 0 1 0 10 0"/></symbol>
+  <symbol id="i-thermo" viewBox="0 0 24 24"><rect x="10" y="4" width="4" height="10.4" rx="2"/><circle cx="12" cy="17.4" r="3.2"/><path d="M12 14.4v3"/></symbol>
+  <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 3s6 7.2 6 11.2a6 6 0 0 1-12 0C6 10.2 12 3 12 3Z"/></symbol>
+  <symbol id="i-chev-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-square" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.9-5.4"/><path d="M20 12a8 8 0 0 1-13.9 5.4"/><path d="M18 4v4.6h-4.6"/><path d="M6 20v-4.6h4.6"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.2"/><rect x="14" y="3" width="7" height="7" rx="1.2"/><rect x="3" y="14" width="7" height="7" rx="1.2"/><rect x="14" y="14" width="7" height="7" rx="1.2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.2v5l3.4 2"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l11 7-11 7V5Z"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v6.2L5.6 17a2 2 0 0 0 1.8 3h9.2a2 2 0 0 0 1.8-3L14 9.2V3"/><path d="M8 15h8"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9"/><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9"/><path d="M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.4 6.4 0 0 0 10.2 10.2Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4"/><path d="M12 19.1v2.4"/><path d="M4.6 4.6l1.7 1.7"/><path d="M17.7 17.7l1.7 1.7"/><path d="M2.5 12h2.4"/><path d="M19.1 12h2.4"/><path d="M4.6 19.4l1.7-1.7"/><path d="M17.7 6.3l1.7-1.7"/></symbol>
+  <symbol id="i-moon-red" viewBox="0 0 24 24"><path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.4 6.4 0 0 0 10.2 10.2Z"/><circle cx="17.5" cy="7" r="1.1" style="fill:currentColor;stroke:none"/></symbol>
+  <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3.5 21.5 20h-19Z"/><path d="M12 9.5v4.2"/><circle cx="12" cy="17" r="0.9" style="fill:currentColor;stroke:none"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 6.5a1.5 1.5 0 0 1 1.5-1.5h4l2 2.4h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18Z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11.4"/><path d="M7.4 10.6 12 15.2l4.6-4.6"/><path d="M4.5 18.5h15"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.8 20c1-3.6 4-5.6 7.2-5.6s6.2 2 7.2 5.6"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3.5h11.5L20.5 7.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5Z"/><path d="M8 3.5V9h8V3.5"/><path d="M7.5 20v-6h9v6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2"/><path d="M6.5 7l1 12.5A1.5 1.5 0 0 0 9 21h6a1.5 1.5 0 0 0 1.5-1.5L17.5 7"/><path d="M10.3 11v6"/><path d="M13.7 11v6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 9 17l10.5-11"/></symbol>
+</defs>
+</svg>
+
+<div class="head">
+  <div class="brand">
+    <svg class="ic ic-lg" aria-hidden="true"><use href="#i-microscope"/></svg>
+    <h1>MICROSCOPE<span>OS</span></h1>
+  </div>
+  <div class="head-actions">
+    <button class="icon-only" id="themeBtn" onclick="cycleTheme()" aria-label="Cambiar tema" title="Cambiar tema">
+      <svg class="ic" aria-hidden="true"><use id="themeIconUse" href="#i-moon"/></svg>
+    </button>
+    <div class="badge"><span class="dot idle" id="dot"></span><span id="state">IDLE</span></div>
+  </div>
+</div>
+
+<div class="connbanner" id="connBanner" hidden role="alert">
+  <svg class="ic" aria-hidden="true"><use href="#i-warning"/></svg>
+  <span>Sin conexión con el servidor — reintentando…</span>
+</div>
+
+<div class="grid">
+  <div class="col">
+    <div class="panel">
+      <h2><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Vista en vivo — 2 cámaras</h2>
+      <div class="row">
+        <div>
+          <div class="view" id="view0" onclick="toggleExpand(0)" title="Click para ampliar">
+            <span class="ph" id="ph0">Cargando...</span>
+            <img id="img0" alt="Vista en vivo cámara 0">
+            <div class="scan"></div>
+            <div class="camtag">CAM 0</div>
+            <div class="live" id="liveTag0">EN VIVO</div>
+            <button class="expand-btn" onclick="event.stopPropagation();toggleExpand(0)" aria-label="Ampliar cámara 0"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
+          </div>
+          <div class="camsel" style="margin-top:8px">
+            <button id="liveBtn0" onclick="toggleLive(0)"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">En vivo</span></button>
+            <button id="cntBtn0" onclick="accionConteo(0)"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="lbl">Medir</span></button>
+            <button id="cntOff0" class="icon-only" onclick="apagarConteo(0)" style="display:none" aria-label="Apagar conteo cámara 0"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+          </div>
+          <div class="stat"><span class="k">Células (vivo)</span><span class="v" id="s_cnt0">—</span></div>
+        </div>
+        <div>
+          <div class="view" id="view1" onclick="toggleExpand(1)" title="Click para ampliar">
+            <span class="ph" id="ph1">Cargando...</span>
+            <img id="img1" alt="Vista en vivo cámara 1">
+            <div class="scan"></div>
+            <div class="camtag">CAM 1</div>
+            <div class="live" id="liveTag1">EN VIVO</div>
+            <button class="expand-btn" onclick="event.stopPropagation();toggleExpand(1)" aria-label="Ampliar cámara 1"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
+          </div>
+          <div class="camsel" style="margin-top:8px">
+            <button id="liveBtn1" onclick="toggleLive(1)"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">En vivo</span></button>
+            <button id="cntBtn1" onclick="accionConteo(1)"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="lbl">Medir</span></button>
+            <button id="cntOff1" class="icon-only" onclick="apagarConteo(1)" style="display:none" aria-label="Apagar conteo cámara 1"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+          </div>
+          <div class="stat"><span class="k">Células (vivo)</span><span class="v" id="s_cnt1">—</span></div>
+        </div>
+      </div>
+      <div class="camsel" style="margin-top:10px">
+        <button id="refresh" onclick="refrescarAmbas()"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Refrescar ambas</span></button>
+      </div>
+
+      <h2 style="margin-top:22px"><svg class="ic" aria-hidden="true"><use href="#i-grid"/></svg>Iluminación</h2>
+      <div class="field">
+        <label for="lightModo">Modo</label>
+        <select id="lightModo" onchange="lightModoChange()">
+          <option value="full">Campo claro</option>
+          <option value="left">DPC — izquierda</option>
+          <option value="right">DPC — derecha</option>
+          <option value="top">DPC — arriba</option>
+          <option value="bottom">DPC — abajo</option>
+          <option value="ring">Campo oscuro</option>
+          <option value="rheinberg">Rheinberg</option>
+        </select>
+      </div>
+      <div class="row" id="rheinbergColors" style="display:none">
+        <div class="field"><label for="colorCentro">Color centro</label><input type="color" id="colorCentro" value="#0000ff"></div>
+        <div class="field"><label for="colorAnillo">Color anillo</label><input type="color" id="colorAnillo" value="#ff6a00"></div>
+      </div>
+      <div class="field">
+        <label for="bright">Intensidad LED</label>
+        <div class="slider">
+          <input type="range" id="bright" min="0" max="100" value="80" oninput="brightLabel()">
+          <span class="val" id="brightVal">80%</span>
+        </div>
+      </div>
+      <div class="camsel">
+        <button id="lightBtn" onclick="aplicarLuz()"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg><span class="lbl">Aplicar</span></button>
+        <button id="lightOffBtn" onclick="apagarLuz()"><svg class="ic" aria-hidden="true"><use href="#i-power"/></svg><span class="lbl">Apagar</span></button>
+      </div>
+
+      <h2 style="margin-top:22px"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>Captura única</h2>
+      <div class="row">
+        <div class="field"><label for="capCam">Cámara</label>
+          <select id="capCam">
+            <option value="0">Cámara 0</option>
+            <option value="1">Cámara 1</option>
+            <option value="both">Ambas (paralelo)</option>
+          </select>
+        </div>
+        <div class="field"><label for="capModo">Modo de foto</label>
+          <select id="capModo">
+            <option value="blanco">Campo claro (1 foto)</option>
+            <option value="dpc">DPC (4 fotos L/R/T/B)</option>
+            <option value="oscuro">Campo oscuro (1 foto)</option>
+            <option value="rheinberg">Rheinberg (1 foto)</option>
+          </select>
+        </div>
+      </div>
+      <button id="snap" onclick="capturar()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg><span class="lbl">Tomar foto</span></button>
+    </div>
+  </div>
+
+  <div class="col">
+    <details class="panel" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="stitle">Foco motorizado</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="camsel">
+        <button id="mBtn0" class="active" onclick="selMotor(0)">Eje CAM 0</button>
+        <button id="mBtn1" onclick="selMotor(1)">Eje CAM 1</button>
+      </div>
+      <!-- Joystick: arrastrar arriba/abajo mueve el eje seleccionado de
+           forma continua; cuanto mas lejos del centro, mas rapido. -->
+      <div class="joy" id="joy" role="slider" aria-label="Joystick de enfoque vertical" tabindex="0" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0">
+        <span class="joylbl up"><svg class="ic" aria-hidden="true"><use href="#i-chev-up"/></svg>Subir</span>
+        <span class="joylbl dn"><svg class="ic" aria-hidden="true"><use href="#i-chev-down"/></svg>Bajar</span>
+        <div class="joyknob" id="joyKnob"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg></div>
+      </div>
+      <div class="row">
+        <button onclick="focusMove(-1)"><svg class="ic" aria-hidden="true"><use href="#i-chev-up"/></svg><span>Un paso</span></button>
+        <button onclick="focusMove(1)"><svg class="ic" aria-hidden="true"><use href="#i-chev-down"/></svg><span>Un paso</span></button>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label for="focusPasos">Pasos por click</label>
+        <input type="number" id="focusPasos" value="200" min="1">
+      </div>
+      <div class="field">
+        <label for="focusMicrosteps">Precisión (micropasos)</label>
+        <select id="focusMicrosteps" onchange="aplicarFocusConfig()">
+          <option value="1">1 — full step, máx. torque</option>
+          <option value="2">2</option>
+          <option value="4">4</option>
+          <option value="8">8</option>
+          <option value="16" selected>16</option>
+          <option value="32">32</option>
+          <option value="64">64</option>
+          <option value="128">128</option>
+          <option value="256">256 — máx. precisión</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="focusVel">Velocidad máxima</label>
+        <div class="slider">
+          <input type="range" id="focusVel" min="1" max="10" value="5" oninput="focusVelLabel()">
+          <span class="val" id="focusVelVal">5</span>
+        </div>
+      </div>
+      <div class="stat"><span class="k">Posición (micropasos)</span><span class="v" id="s_focus_pos">—</span></div>
+      <div class="stat"><span class="k">Driver</span><span class="v" id="s_focus_drv">—</span></div>
+      <div class="field" style="margin-top:14px;margin-bottom:8px">
+        <label for="afRango">Rango de búsqueda (µm desde la posición actual)</label>
+        <input type="number" id="afRango" value="60" min="5" step="5">
+      </div>
+      <button id="afBtn" onclick="autoenfocar()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Autofoco de CAM 0</span></button>
+      <button id="calBtn" onclick="calibrarDpc()" style="width:100%;margin-top:8px"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="lbl">Calibrar autofoco DPC</span></button>
+      <div class="stat" style="margin-top:6px"><span class="k">Autofoco DPC</span><span class="v" id="s_cal">—</span></div>
+      <div class="stat"><span class="k">Último autofoco</span><span class="v" id="s_af">—</span></div>
+      </div>
+    </details>
+
+    <details class="panel" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="stitle">Conteo de células</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="field">
+        <label for="cntModo">Modo</label>
+        <select id="cntModo" onchange="cntModoChange()">
+          <option value="manual" selected>Manual — mide al apretar y congela</option>
+          <option value="auto">Automático — vuelve a medir solo</option>
+        </select>
+      </div>
+      <p class="hint" id="cntModoNota">Manual: el botón mide una vez, devuelve la luz a como estaba y deja
+      el número dibujado hasta que vuelvas a apretar.</p>
+      <!-- El diámetro es la única perilla que hay que acertar: marca la
+           escala a la que se buscan las células. Está referido a un
+           ancho de 640 px y el código lo reescala solo para las fotos a
+           resolución nativa, así que el mismo número vale para las dos. -->
+      <div class="field">
+        <label for="cntDiam">Diámetro típico de célula (px)</label>
+        <input type="number" id="cntDiam" value="14" min="4" step="1" onchange="aplicarConteoConfig()">
+      </div>
+      <div class="field">
+        <label for="cntPeriodo">Refresco en vivo (s)</label>
+        <input type="number" id="cntPeriodo" value="0.6" min="0.1" step="0.1" onchange="aplicarConteoConfig()">
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="cntSeparar" checked onchange="aplicarConteoConfig()">
+        <label for="cntSeparar">Separar células pegadas (watershed)</label>
+      </div>
+      <!-- En campo claro una célula sin teñir es invisible EN EL FOCO
+           (es un objeto de fase). El vivo es un solo stream con una sola
+           iluminación, así que no puede hacer DPC; la media apertura es
+           un patrón estático que sí revela la fase sin costar fps. -->
+      <div class="field check">
+        <input type="checkbox" id="cntOblicua" checked>
+        <label for="cntOblicua">Usar media apertura al medir</label>
+      </div>
+      <p class="hint">En campo claro las células sin teñir
+      desaparecen en el foco y el conteo en vivo da «campo vacío».
+      Desmarcalo sólo con muestras teñidas, que sí absorben.
+      Las fotos no tienen este problema: usan el par L/R completo.</p>
+      <button id="cntFotoBtn" onclick="contarFoto()" style="width:100%;margin-top:6px"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg><span class="lbl">Contar en una foto nueva</span></button>
+      <div class="stat" style="margin-top:6px"><span class="k">Último conteo en foto</span><span class="v" id="s_cntfoto">—</span></div>
+      <div class="stat"><span class="k">Overlay guardado</span><span class="v" id="s_cntov" style="font-size:10px">—</span></div>
+      </div>
+    </details>
+
+    <details class="panel" id="galeriaDetails">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg><span class="stitle">Galería</span><span class="mini" id="galMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="camsel" style="margin-bottom:10px">
+        <button onclick="cargarGaleria()"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Actualizar</span></button>
+      </div>
+      <div id="galCapturas"></div>
+      <div id="galTimelapses"></div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span class="stitle">Perfiles</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <p class="hint">Guardá tu exposición/ganancia y los valores por defecto de
+      timelapse para no pisar la config de otra persona si el equipo es compartido.</p>
+      <div class="field">
+        <label for="profileSelect">Perfil guardado</label>
+        <select id="profileSelect"></select>
+      </div>
+      <div class="camsel">
+        <button onclick="cargarPerfil()"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span class="lbl">Cargar</span></button>
+        <button class="danger" onclick="borrarPerfil()"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg><span class="lbl">Eliminar</span></button>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label for="profileNombre">Guardar como</label>
+        <input type="text" id="profileNombre" placeholder="ej. alex, objetivo 40x">
+      </div>
+      <button onclick="guardarPerfil()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span class="lbl">Guardar perfil actual</span></button>
+      <div class="stat" style="margin-top:10px"><span class="k">Último cargado</span><span class="v" id="s_perfil">—</span></div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Cámara</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="row">
+        <div class="field"><label for="exp">Exposición µs</label><input type="number" id="exp" value="12000"></div>
+        <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
+      </div>
+      <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="stitle">Timelapse</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="field"><label for="nombre">Nombre experimento</label><input type="text" id="nombre" placeholder="ej. celulas_dia1"></div>
+      <div class="field"><label for="modo">Modo iluminación</label>
+        <select id="modo">
+          <option value="blanco">Campo claro (1 foto)</option>
+          <option value="dpc">DPC (4 fotos)</option>
+          <option value="oscuro">Campo oscuro (1 foto)</option>
+          <option value="rheinberg">Rheinberg (1 foto)</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="field"><label for="intv">Intervalo s</label><input type="number" id="intv" value="300"></div>
+        <div class="field"><label for="dur">Duración s</label><input type="number" id="dur" value="3600"></div>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="tlAf" onchange="tlAfChange()">
+        <label for="tlAf">Reenfocar automáticamente</label>
+      </div>
+      <div class="row" id="tlAfOpts" style="display:none">
+        <div class="field"><label for="tlAfCada">Cada N ciclos</label><input type="number" id="tlAfCada" value="1" min="1"></div>
+        <div class="field"><label for="tlAfRango">Rango µpasos</label><input type="number" id="tlAfRango" value="1600" min="100"></div>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="tlCnt" onchange="tlCntChange()">
+        <label for="tlCnt">Contar células por ciclo</label>
+      </div>
+      <div class="row" id="tlCntOpts" style="display:none">
+        <div class="field"><label for="tlCntCada">Cada N ciclos</label><input type="number" id="tlCntCada" value="1" min="1"></div>
+        <div class="field check" style="padding-top:18px">
+          <input type="checkbox" id="tlCntOverlay" checked>
+          <label for="tlCntOverlay">Guardar PNG marcado</label>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="start" onclick="iniciar()"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span>Iniciar Timelapse</span></button>
+        <button class="danger" id="stop" onclick="detener()" disabled><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span>STOP de emergencia</span></button>
+      </div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg><span class="stitle">Temperatura</span><span class="mini" id="tValMini">--.-°C</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="gauge-num">
+        <span class="n" id="tVal">--.-</span>
+        <span class="u">°C</span>
+        <span class="gauge-dot" id="tDot"></span>
+      </div>
+      <div class="stat"><span class="k">Setpoint</span><span class="v" id="tSp">-- °C</span></div>
+      <div class="stat"><span class="k">PWM calefactor</span><span class="v" id="tPwm">--</span></div>
+      <div class="gauge-bar"><div id="tBar" style="background:var(--amber)"></div></div>
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label for="spSlider">Setpoint objetivo</label>
+        <div class="slider">
+          <input type="range" id="spSlider" min="20" max="80" step="0.5" value="37" oninput="document.getElementById('spPrev').textContent=parseFloat(this.value).toFixed(1)">
+          <span class="val" id="spPrev">37.0</span>
+        </div>
+      </div>
+      <button onclick="aplicarSetpoint()" style="width:100%;margin-top:8px">Aplicar setpoint</button>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg><span class="stitle">CO2</span><span class="mini" id="cValMini">--.-ppm</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="gauge-num">
+        <span class="n" id="cVal">--.-</span>
+        <span class="u">ppm</span>
+        <span class="gauge-dot" id="cDot"></span>
+      </div>
+      <div class="stat"><span class="k">Setpoint</span><span class="v" id="cSp">-- ppm</span></div>
+      <div class="stat"><span class="k">Válvula solenoide</span><span class="v"><span class="valve-pill closed" id="valvePill"><span class="vdot"></span><span id="valveTxt">--</span></span></span></div>
+      <div class="stat"><span class="k">Duty cycle válvula</span><span class="v" id="cDuty">--</span></div>
+      <div class="gauge-bar"><div id="cBar" style="background:var(--blue)"></div></div>
+      <div class="stat"><span class="k">Temp. ambiente (SCD30)</span><span class="v" id="cAmbient">-- °C</span></div>
+      <div class="stat"><span class="k">Humedad</span><span class="v" id="cHum">-- %</span></div>
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label for="co2Slider">Setpoint CO2</label>
+        <div class="slider">
+          <input type="range" id="co2Slider" min="400" max="100000" step="500" value="40000" oninput="document.getElementById('co2Prev').textContent=parseInt(this.value)">
+          <span class="val" id="co2Prev">40000</span>
+        </div>
+      </div>
+      <button onclick="aplicarCo2Setpoint()" style="width:100%;margin-top:8px">Aplicar setpoint CO2</button>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg><span class="stitle">Estado</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="stat"><span class="k">Estado</span><span class="v" id="s_state">IDLE</span></div>
+      <div class="stat"><span class="k">Ciclo actual</span><span class="v" id="s_ciclo">—</span></div>
+      <div class="stat"><span class="k">Cámara activa</span><span class="v" id="s_cam">—</span></div>
+      <div class="stat"><span class="k">Carpeta</span><span class="v" id="s_folder" style="font-size:10px">—</span></div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista de cámara ampliada" onclick="if(event.target===this)closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()" aria-label="Cerrar vista ampliada"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg></button>
+  <div class="lightbox-stage" id="lightboxStage"></div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+let running=false,live=[false,false];
+
+// ===== Lightbox: ampliar una cámara momentaneamente =====
+// Mueve el MISMO nodo #view0/#view1 (con su <img> ya conectado al
+// stream MJPEG) adentro del lightbox, en vez de crear una segunda
+// conexion -- asi no duplica ancho de banda ni carga de CPU en la Pi.
+const viewHomes={};
+let expandedCam=null;
+
+function toggleExpand(n){
+  if(expandedCam===n){closeLightbox();return;}
+  if(expandedCam!==null)restoreView(expandedCam);
+  const view=document.getElementById('view'+n);
+  if(!viewHomes[n])viewHomes[n]={parent:view.parentNode,next:view.nextSibling};
+  document.getElementById('lightboxStage').appendChild(view);
+  view.classList.add('expanded');
+  expandedCam=n;
+  document.getElementById('lightbox').hidden=false;
+  document.body.style.overflow='hidden';
+}
+function restoreView(n){
+  const view=document.getElementById('view'+n), home=viewHomes[n];
+  view.classList.remove('expanded');
+  if(!home)return;
+  if(home.next&&home.next.parentNode===home.parent)home.parent.insertBefore(view,home.next);
+  else home.parent.appendChild(view);
+}
+function closeLightbox(){
+  if(expandedCam===null)return;
+  if(expandedCam==='img')document.getElementById('lightboxStage').innerHTML='';
+  else restoreView(expandedCam);
+  expandedCam=null;
+  document.getElementById('lightbox').hidden=true;
+  document.body.style.overflow='';
+}
+// Vista ampliada de una foto ya guardada (galeria): a diferencia de
+// toggleExpand (que mueve el <img> del stream en vivo), aca no hay
+// conexion que preservar -- solo se crea una <img> nueva apuntando a
+// una miniatura mas grande, generada por el servidor al vuelo.
+function openImagePreview(url){
+  const stage=document.getElementById('lightboxStage');
+  stage.innerHTML='';
+  const img=document.createElement('img');
+  img.src=url;img.alt='Vista ampliada';
+  img.style.cssText='width:100%;height:auto;max-height:86vh;border-radius:16px;display:block;cursor:zoom-out';
+  img.onclick=closeLightbox;
+  stage.appendChild(img);
+  expandedCam='img';
+  document.getElementById('lightbox').hidden=false;
+  document.body.style.overflow='hidden';
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
+
+// ===== Tema: oscuro (default) -> noche (rojo) -> claro -> oscuro =====
+const TEMAS=['oscuro','noche','claro'];
+const TEMA_ICONO={oscuro:'i-moon',noche:'i-moon-red',claro:'i-sun'};
+function aplicarTema(t){
+  if(t==='oscuro')document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',t==='claro'?'light':'night');
+  document.getElementById('themeIconUse').setAttribute('href','#'+TEMA_ICONO[t]);
+  document.getElementById('themeBtn').title='Tema: '+t+' (click para cambiar)';
+}
+function cycleTheme(){
+  const actual=TEMAS[(TEMAS.indexOf(temaActual)+1)%TEMAS.length];
+  temaActual=actual;
+  aplicarTema(actual);
+  try{localStorage.setItem('microscopeos_tema',actual);}catch(e){}
+  toast('Tema: '+actual);
+}
+let temaActual='oscuro';
+try{
+  const guardado=localStorage.getItem('microscopeos_tema');
+  if(guardado && TEMAS.includes(guardado))temaActual=guardado;
+}catch(e){}
+aplicarTema(temaActual);
+
+// ===== Indicador de conexion: se muestra solo si el servidor deja de
+// contestar (poll() o el SSE de temperatura fallan varias veces
+// seguidas), no en el primer fallo suelto de un fetch. =====
+let fallosConexion=0;
+function marcarConexion(ok){
+  if(ok){fallosConexion=0;document.getElementById('connBanner').hidden=true;return;}
+  fallosConexion++;
+  if(fallosConexion>=2)document.getElementById('connBanner').hidden=false;
+}
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function brightLabel(){document.getElementById('brightVal').textContent=document.getElementById('bright').value+'%';}
+
+async function refrescarUna(n){
+  if(running||live[n])return;
+  const ph=document.getElementById('ph'+n),img=document.getElementById('img'+n);
+  if(img.style.display!=='block'){ph.textContent='Capturando...';ph.style.display='block';}
+  try{
+    const r=await fetch('/preview/'+n+'?t='+Date.now());
+    if(r.status===409)return;
+    const blob=await r.blob();
+    img.src=URL.createObjectURL(blob);img.style.display='block';ph.style.display='none';
+  }catch(e){ph.textContent='Error';}
+}
+async function refrescarAmbas(){
+  if(running){toast('Timelapse en curso');return;}
+  await Promise.all([refrescarUna(0),refrescarUna(1)]);
+}
+async function toggleLive(n){
+  if(running)return;
+  live[n]=!live[n];
+  const btn=document.getElementById('liveBtn'+n);
+  const img=document.getElementById('img'+n);
+  const ph=document.getElementById('ph'+n);
+  btn.classList.toggle('active',live[n]);
+  btn.querySelector('.lbl').textContent=live[n]?'Detener vivo':'En vivo';
+  document.getElementById('liveTag'+n).style.display=live[n]?'flex':'none';
+
+  if(live[n]){
+    await fetch('/live/start/'+n,{method:'POST'});
+    ph.style.display='none';
+    img.style.display='block';
+    img.src='/live/stream/'+n+'?t='+Date.now();   // stream MJPEG continuo, independiente por camara
+  }else{
+    img.src='';
+    await fetch('/live/stop/'+n,{method:'POST'});
+    refrescarUna(n);
+  }
+}
+function lightModoChange(){
+  document.getElementById('rheinbergColors').style.display=
+    document.getElementById('lightModo').value==='rheinberg'?'grid':'none';
+}
+async function aplicarLuz(){
+  if(running)return;
+  const modo=document.getElementById('lightModo').value;
+  const body={modo:modo,percent:+document.getElementById('bright').value,camaras:[0,1]};
+  if(modo==='rheinberg'){
+    body.color_centro=document.getElementById('colorCentro').value.slice(1).toUpperCase();
+    body.color_anillo=document.getElementById('colorAnillo').value.slice(1).toUpperCase();
+  }
+  const r=await fetch('/light/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  document.getElementById('lightBtn').classList.add('lit');
+  toast('Luz: '+modo);
+}
+async function apagarLuz(){
+  await fetch('/light/off',{method:'POST'});
+  document.getElementById('lightBtn').classList.remove('lit');
+  toast('Luz apagada');
+}
+async function capturar(){
+  if(running)return;
+  await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));   // apaga el vivo antes de capturar
+  const cam=document.getElementById('capCam').value;
+  const modo=document.getElementById('capModo').value;
+  toast('Capturando ('+modo+')...');
+  const url=cam==='both'?'/capture/both/'+modo:'/capture/'+cam+'/'+modo;
+  const r=await fetch(url,{method:'POST'});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Guardado: '+(Array.isArray(d.saved)?d.saved.length+' fotos':d.saved));
+  document.getElementById('lightBtn').classList.remove('lit');
+}
+// ============================================================
+// Foco motorizado: un eje Z por camara, seleccionable.
+// ============================================================
+let motorSel=0;                 // eje activo (numero de camara)
+let jogTimer=null, jogActivo=false;
+
+function selMotor(n){
+  motorSel=n;
+  document.getElementById('mBtn0').classList.toggle('active',n===0);
+  document.getElementById('mBtn1').classList.toggle('active',n===1);
+  document.getElementById('afBtn').querySelector('.lbl').textContent='Autofoco de CAM '+n;
+  refrescarFoco();
+}
+function focusVelLabel(){document.getElementById('focusVelVal').textContent=document.getElementById('focusVel').value;}
+// El slider da la velocidad MAXIMA (delay minimo entre flancos STEP).
+// 1 -> 10ms (lento y con mucho par), 10 -> 1ms (rapido).
+function delayMinimo(){const v=+document.getElementById('focusVel').value;return 0.011-v*0.001;}
+
+async function focusMove(direction){
+  const pasos=+document.getElementById('focusPasos').value;
+  const r=await fetch('/api/focus/move',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({motor:motorSel,direction:direction,pasos:pasos,velocidad:delayMinimo()})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast((direction===1?'Bajando ':'Subiendo ')+pasos+' µpasos');
+  refrescarFoco();
+}
+async function aplicarFocusConfig(){
+  const microsteps=+document.getElementById('focusMicrosteps').value;
+  const r=await fetch('/api/focus/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({motor:motorSel,microsteps:microsteps})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Precisión: 1/'+microsteps+' de paso');
+  refrescarFoco();
+}
+
+// --- joystick vertical ---
+// Mientras esta apretado se reenvia /api/focus/jog cada 250 ms. Cada
+// pedido refresca el watchdog del servidor (1.5 s): si el navegador se
+// congela o se corta el WiFi con el joystick apretado, el motor se para
+// solo en vez de seguir bajando la plataforma contra la muestra.
+(function(){
+  const joy=document.getElementById('joy'), knob=document.getElementById('joyKnob');
+  const ZONA_MUERTA=0.14, RECORRIDO=85;   // px de desplazamiento maximo del knob
+  let t=0;                                // -1 (arriba) .. 1 (abajo)
+
+  function velocidad(){
+    // Fuera de la zona muerta, |t| mapea linealmente a la velocidad:
+    // apenas movido = 22ms entre flancos (lentisimo, para enfocar fino),
+    // al tope = el delay minimo del slider.
+    const u=(Math.abs(t)-ZONA_MUERTA)/(1-ZONA_MUERTA);
+    return 0.022-(0.022-delayMinimo())*u;
+  }
+  function pintar(){knob.style.transform='translateY('+(t*RECORRIDO)+'px)';joy.setAttribute('aria-valuenow',t.toFixed(2));}
+  function enviar(){
+    if(Math.abs(t)<ZONA_MUERTA)return;
+    fetch('/api/focus/jog',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({motor:motorSel,direction:t>0?1:-1,velocidad:velocidad(),watchdog:1.5})})
+      .then(r=>r.json()).then(d=>{if(d.error){toast(d.error);soltar();}}).catch(()=>{});
+  }
+  function mover(ev){
+    const r=joy.getBoundingClientRect();
+    const dy=(ev.clientY-(r.top+r.height/2))/(r.height/2);
+    t=Math.max(-1,Math.min(1,dy));
+    pintar();
+  }
+  function agarrar(ev){
+    if(running)return;
+    joy.setPointerCapture(ev.pointerId);
+    joy.classList.add('grab');jogActivo=true;
+    mover(ev);enviar();
+    jogTimer=setInterval(enviar,250);
+  }
+  function soltar(){
+    if(!jogActivo)return;
+    jogActivo=false;
+    clearInterval(jogTimer);jogTimer=null;
+    joy.classList.remove('grab');
+    t=0;pintar();
+    fetch('/api/focus/jog/stop',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({motor:motorSel})}).then(()=>refrescarFoco()).catch(()=>{});
+  }
+  joy.addEventListener('pointerdown',agarrar);
+  joy.addEventListener('pointermove',ev=>{if(jogActivo)mover(ev);});
+  joy.addEventListener('pointerup',soltar);
+  joy.addEventListener('pointercancel',soltar);
+  // Si la pestania pasa a segundo plano, los timers se ralentizan y el
+  // watchdog cortaria igual; soltar aca lo hace explicito.
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)soltar();});
+  window.addEventListener('blur',soltar);
+})();
+
+const driverAvisoPrevio={0:false,1:false};
+async function refrescarFoco(){
+  try{
+    const r=await fetch('/api/focus/status');const d=await r.json();
+    // Chequea alertas termicas/cortocircuito en LOS DOS ejes, no solo en
+    // el seleccionado -- el eje que no se esta mirando tambien puede
+    // recalentarse y hoy solo se ve el stat del que esta activo.
+    if(d.motores){
+      for(const eje of Object.keys(d.motores)){
+        const mm=d.motores[eje];
+        const problema=!!(mm.sobretemp_corte||mm.sobretemp_aviso||mm.corto_fase_a||mm.corto_fase_b);
+        if(problema && !driverAvisoPrevio[eje]){
+          toast('⚠ Eje CAM '+eje+': '+(mm.sobretemp_corte?'CORTE TÉRMICO':mm.corto_fase_a||mm.corto_fase_b?'CORTO':'motor caliente'));
+        }
+        driverAvisoPrevio[eje]=problema;
+      }
+    }
+    const m=d.motores&&d.motores[motorSel];
+    const pos=document.getElementById('s_focus_pos'), drv=document.getElementById('s_focus_drv');
+    if(!m){pos.textContent='—';drv.textContent='sin motor';return;}
+    pos.textContent=m.posicion+'  (1/'+m.microsteps+')';
+    if(m.uart!=='ok'){drv.textContent='UART: error';drv.className='v hot';return;}
+    const avisos=[];
+    if(m.sobretemp_corte)avisos.push('CORTE TÉRMICO');
+    else if(m.sobretemp_aviso)avisos.push('caliente');
+    if(m.corto_fase_a||m.corto_fase_b)avisos.push('CORTO');
+    drv.textContent=avisos.length?avisos.join(' · '):(m.irun_ma+'mA · OK');
+    drv.className='v'+(avisos.length?' hot':'');
+    const cal=document.getElementById('s_cal'), c=m.calibracion_dpc;
+    if(c){
+      cal.textContent=c.um_por_pixel.toFixed(2)+' µm/px · r²='+c.r2.toFixed(3);
+      cal.className='v';
+    }else{
+      cal.textContent='sin calibrar — usa barrido';
+      cal.className='v hot';
+    }
+  }catch(e){}
+}
+
+async function autoenfocar(){
+  const btn=document.getElementById('afBtn'), cam=motorSel;
+  btn.disabled=true;btn.querySelector('.lbl').textContent='Enfocando CAM '+cam+'...';
+  try{
+    // El rango se piensa en micras, no en micropasos: cuanto mas lejos
+    // del punto donde YA enfocaste a mano puede llegar a estar el foco
+    // real. Chico a proposito -- el autofoco arranca desde tu posicion
+    // actual (no la reemplaza a ciegas), asi que no hace falta un rango
+    // grande si ya enfocaste vos primero. Sin finales de carrera (ver
+    // TODO_HW.md 1.5), mas chico tambien es menos riesgo.
+    const rangoUm=+document.getElementById('afRango').value;
+    const r=await fetch('/api/focus/auto',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera:cam,rango_um:rangoUm,puntos:13,refinamientos:2})});
+    const d=await r.json();
+    if(d.error){toast(d.error);document.getElementById('s_af').textContent='error';return;}
+    const um=d.desplazamiento_um, signo=um>0?'+':'';
+    document.getElementById('s_af').textContent=
+      d.metodo+': '+signo+um.toFixed(1)+' µm · '+d.segundos+'s';
+    if(d.fuera_de_rango){
+      toast('Máximo en el borde del rango — repetí el autofoco o ampliá el rango');
+    }else if(d.fino && d.fino.en_borde){
+      toast('Enfocado ('+signo+um.toFixed(1)+' µm) pero el ajuste fino quedó en el borde — repetí');
+    }else{
+      // El DPC informa el corrimiento residual entre las dos medias
+      // aperturas; el barrido, la nitidez del máximo.
+      const detalle=d.metodo==='dpc'
+        ? 'resto '+d.corrimiento_px.toFixed(2)+' px'
+        : 'nitidez '+d.nitidez.toFixed(0);
+      toast('Enfocado por '+d.metodo+': '+signo+um.toFixed(1)+' µm ('+detalle+')');
+    }
+    refrescarFoco();
+  }catch(e){toast('Error de autofoco');}
+  finally{btn.disabled=false;btn.querySelector('.lbl').textContent='Autofoco de CAM '+cam;}
+}
+async function calibrarDpc(){
+  const btn=document.getElementById('calBtn'), cam=motorSel;
+  if(!confirm('Calibrar el autofoco DPC de CAM '+cam+'.\n\nVa a mover la '
+    +'plataforma ±125 µm alrededor de la posición actual midiendo el '
+    +'corrimiento entre las dos medias iluminaciones.\n\nEnfocá a ojo ANTES: '
+    +'la relación es lineal solo cerca del foco, y calibrar lejos sesga la '
+    +'ganancia. La muestra tiene que tener estructura visible.'))return;
+  btn.disabled=true;btn.querySelector('.lbl').textContent='Calibrando CAM '+cam+'...';
+  try{
+    const r=await fetch('/api/focus/calibrar',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera:cam,amplitud:1200,puntos:5,eje:'lr'})});
+    const d=await r.json();
+    if(d.error){toast(d.error);return;}
+    toast(d.confiable
+      ? 'Calibrado: '+d.calibracion.um_por_pixel.toFixed(2)+' µm/px (r²='+d.r2.toFixed(3)+')'
+      : 'Ajuste pobre (r²='+d.r2.toFixed(3)+') — campo vacío, o rango de calibración fuera del régimen lineal');
+    refrescarFoco();
+  }catch(e){toast('Error de calibración');}
+  finally{btn.disabled=false;btn.querySelector('.lbl').textContent='Calibrar autofoco DPC';}
+}
+function tlAfChange(){
+  document.getElementById('tlAfOpts').style.display=
+    document.getElementById('tlAf').checked?'grid':'none';
+}
+function tlCntChange(){
+  document.getElementById('tlCntOpts').style.display=
+    document.getElementById('tlCnt').checked?'grid':'none';
+}
+
+// ===== Conteo de celulas =====
+// El conteo en vivo se dibuja del lado del servidor, sobre el mismo
+// frame del stream MJPEG: no hay que tocar la <img> ni reconectar nada.
+//
+// Dos modos, porque las células no cambian en segundos:
+//
+//   MANUAL (por defecto)  el botón mide UNA vez -- pone media apertura
+//     un instante, cuenta, y devuelve la luz a como estaba -- y deja el
+//     dibujo congelado. Podés seguir mirando la muestra en campo claro
+//     con el número en pantalla.
+//   AUTOMÁTICO  vuelve a medir solo cada `periodo`. Útil mientras
+//     enfocás o barrés el campo, pero la matriz tiene que quedarse en
+//     media apertura todo el rato: si volvés a campo claro, la próxima
+//     medición no encuentra nada y el dibujo se vacía.
+const conteoOn={0:false,1:false};
+let conteoModo='manual';
+
+function pintarBotonConteo(n){
+  const btn=document.getElementById('cntBtn'+n);
+  const off=document.getElementById('cntOff'+n);
+  if(conteoModo==='manual'){
+    btn.querySelector('.lbl').textContent=conteoOn[n]?'Medir':'Medir';
+    btn.classList.remove('active');
+  }else{
+    btn.querySelector('.lbl').textContent=conteoOn[n]?'Contando':'Contar';
+    btn.classList.toggle('active',conteoOn[n]);
+  }
+  off.style.display=conteoOn[n]?'':'none';
+}
+
+async function accionConteo(n){
+  if(conteoModo==='manual') return medirConteo(n);
+  return toggleConteo(n);
+}
+
+async function medirConteo(n){
+  const btn=document.getElementById('cntBtn'+n);
+  btn.disabled=true;btn.querySelector('.lbl').textContent='Midiendo...';
+  try{
+    const oblicua=document.getElementById('cntOblicua').checked;
+    const r=await fetch('/api/analisis/medir',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera:n,patron:oblicua?'left':null})});
+    const d=await r.json();
+    if(d.error){toast(d.error);return;}
+    conteoOn[n]=true;
+    document.getElementById('s_cnt'+n).textContent=textoConteo(d)+' · recién';
+    if(d.vacio) toast('CAM '+n+': campo vacío — revisá la luz y el foco');
+    if(!live[n]) toast('Encendé el vivo de CAM '+n+' para ver las marcas');
+  }catch(e){toast('Error: '+e);}
+  finally{btn.disabled=false;pintarBotonConteo(n);}
+}
+
+async function apagarConteo(n){
+  const r=await fetch('/api/analisis/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({camara:n,activo:false})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  conteoOn[n]=false;
+  document.getElementById('s_cnt'+n).textContent='—';
+  pintarBotonConteo(n);
+}
+
+// Solo modo automático: enciende/apaga el ciclo de medición continua.
+async function toggleConteo(n){
+  const activo=!conteoOn[n];
+  if(!activo) return apagarConteo(n);
+  const r=await fetch('/api/analisis/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({camara:n,activo:true})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  conteoOn[n]=true;
+  pintarBotonConteo(n);
+  // En automático la luz se DEJA en media apertura: el ciclo vuelve a
+  // medir cada `periodo` y necesita la fase visible en cada medición.
+  if(document.getElementById('cntOblicua').checked){
+    await fetch('/light/set',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({modo:'left',percent:+document.getElementById('bright').value,camaras:[n]})});
+    toast('CAM '+n+': luz en media apertura, y ahí se queda mientras cuente');
+  }
+  if(!live[n]) toast('Encendé el vivo de CAM '+n+' para ver las marcas');
+}
+
+async function aplicarConteoConfig(){
+  const body={diametro_px:+document.getElementById('cntDiam').value,
+              periodo:+document.getElementById('cntPeriodo').value,
+              separar:document.getElementById('cntSeparar').checked};
+  const r=await fetch('/api/analisis/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Conteo actualizado');
+}
+
+function textoConteo(d){
+  if(d.vacio) return 'campo vacío';
+  let t=d.n+' células';
+  if(d.confluente) t+=' (confluente, mínimo)';
+  else if(d.cumulos) t+=' · '+d.cumulos+' cúmulo(s)';
+  return t;
+}
+
+async function refrescarConteo(){
+  if(!conteoOn[0] && !conteoOn[1]) return;
+  try{
+    const r=await fetch('/api/analisis/estado');const d=await r.json();
+    if(d.error) return;
+    [0,1].forEach(n=>{
+      const u=d.ultimos&&d.ultimos[n];
+      if(!conteoOn[n]||!u){document.getElementById('s_cnt'+n).textContent='—';return;}
+      // En manual el número está CONGELADO, así que lo que importa es
+      // cuándo se midió, no cuánto tardó: si el campo se movió hace 40 s,
+      // ese número ya no describe lo que estás viendo.
+      const sufijo = conteoModo==='manual'
+        ? ' · hace '+Math.round(u.edad_s)+'s'
+        : ' · '+u.ms+' ms';
+      document.getElementById('s_cnt'+n).textContent=textoConteo(u)+sufijo;
+    });
+  }catch(e){}
+}
+
+async function contarFoto(){
+  const btn=document.getElementById('cntFotoBtn'), cam=motorSel;
+  btn.disabled=true;btn.querySelector('.lbl').textContent='Capturando y contando...';
+  try{
+    // Captura el par L/R a resolución nativa y cuenta sobre la imagen
+    // DPC: es lo correcto para células sin teñir, y no depende del
+    // preview del ISP como sí depende el conteo en vivo.
+    const r=await fetch('/api/analisis/foto',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera:cam,modo:'dpc'})});
+    const d=await r.json();
+    if(d.error){toast(d.error);document.getElementById('s_cntfoto').textContent='error';return;}
+    document.getElementById('s_cntfoto').textContent=
+      'CAM '+cam+': '+textoConteo(d)+' · '+d.ms+' ms';
+    document.getElementById('s_cntov').textContent=d.overlay||'—';
+    if(d.vacio) toast('Campo vacío o sin luz — revisá la iluminación');
+    else if(d.confluente) toast('Campo confluente: el conteo es una cota inferior');
+  }catch(e){toast('Error: '+e);}
+  finally{btn.disabled=false;btn.querySelector('.lbl').textContent='Contar en una foto nueva';}
+}
+async function aplicarCamara(){
+  await fetch('/exposure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exposure:+document.getElementById('exp').value,gain:+document.getElementById('gain').value})});
+  toast('Exposición aplicada');
+}
+async function iniciar(){
+  await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));
+  const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1],
+    autofocus:document.getElementById('tlAf').checked,
+    autofocus_cada:+document.getElementById('tlAfCada').value,
+    autofocus_rango:+document.getElementById('tlAfRango').value,
+    contar:document.getElementById('tlCnt').checked,
+    contar_cada:+document.getElementById('tlCntCada').value,
+    contar_overlay:document.getElementById('tlCntOverlay').checked};
+  const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Timelapse iniciado');
+}
+async function detener(){await fetch('/timelapse/stop',{method:'POST'});toast('Detenido');}
+function setRunning(on){
+  running=on;
+  document.getElementById('dot').className='dot '+(on?'run':'idle');
+  document.getElementById('state').textContent=on?'RUNNING':'IDLE';
+  document.getElementById('s_state').textContent=on?'RUNNING':'IDLE';
+  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn','afBtn','calBtn','cntFotoBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  document.getElementById('stop').disabled=!on;
+  if(on){
+    [0,1].forEach(n=>{
+      if(live[n]){
+        live[n]=false;
+        document.getElementById('liveTag'+n).style.display='none';
+        document.getElementById('liveBtn'+n).querySelector('.lbl').textContent='En vivo';
+        document.getElementById('liveBtn'+n).classList.remove('active');
+      }
+    });
+  }
+}
+async function poll(){
+  try{
+    const r=await fetch('/status');const s=await r.json();
+    marcarConexion(true);
+    if(s.running!==running)setRunning(s.running);
+    document.getElementById('s_ciclo').textContent=s.ciclo||'—';
+    document.getElementById('s_ciclo').className='v'+(s.running?' hot':'');
+    document.getElementById('s_cam').textContent='CAM '+s.camara_activa;
+    document.getElementById('s_folder').textContent=s.carpeta||'—';
+  }catch(e){marcarConexion(false);}
+}
+// ===== Galeria =====
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtBytes(n){
+  if(n>1e9)return (n/1e9).toFixed(1)+' GB';
+  if(n>1e6)return (n/1e6).toFixed(1)+' MB';
+  if(n>1e3)return (n/1e3).toFixed(0)+' KB';
+  return n+' B';
+}
+function thumbCard(thumbUrl,bigUrl,dlUrl,alt){
+  return '<div class="thumb-card">'
+    +'<img class="thumb" src="'+thumbUrl+'" loading="lazy" alt="'+esc(alt)+'" onclick="openImagePreview(\''+bigUrl+'\')">'
+    +'<a class="thumb-dl" href="'+dlUrl+'" aria-label="Descargar '+esc(alt)+'" title="Descargar original .tif"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg></a>'
+    +'</div>';
+}
+function confirmZip(bytes){
+  if(bytes>400*1024*1024){
+    return confirm('Esta carpeta pesa '+fmtBytes(bytes)+'. Comprimirla en el servidor puede '
+      +'tardar y usar bastante memoria de la Pi. ¿Descargar igual?');
+  }
+  return true;
+}
+async function cargarGaleria(){
+  try{
+    const r=await fetch('/files/list');const d=await r.json();
+    marcarConexion(true);
+    const cd=d.capturas||[], tl=d.timelapses||[];
+    document.getElementById('galMini').textContent=
+      cd.length+' sueltas · '+tl.length+' timelapse';
+
+    document.getElementById('galCapturas').innerHTML = cd.length
+      ? '<div class="gal-section-head"><span>Capturas sueltas ('+cd.length+(cd.length>=60?'+':'')+')</span>'
+        +'<a class="gal-zip" href="/files/zip/capturas"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Descargar todas (.zip)</a></div>'
+        +'<div class="thumb-grid">'+cd.map(f=>thumbCard(
+            '/files/thumb/capturas/'+encodeURIComponent(f.filename)+'?size=160',
+            '/files/thumb/capturas/'+encodeURIComponent(f.filename)+'?size=1600',
+            '/files/raw/capturas/'+encodeURIComponent(f.filename), f.filename)).join('')+'</div>'
+      : '<p class="hint">Todavía no hay capturas sueltas.</p>';
+
+    document.getElementById('galTimelapses').innerHTML = tl.length
+      ? tl.map(exp=>{
+          const cams=Object.keys(exp.cams||{}).sort();
+          const camsHtml=cams.map(c=>'<p class="hint" style="margin-top:8px">CAM '+c+'</p>'
+            +'<div class="thumb-grid">'+(exp.cams[c]||[]).map(fn=>thumbCard(
+                '/files/thumb/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn)+'?size=160',
+                '/files/thumb/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn)+'?size=1600',
+                '/files/raw/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn), fn)).join('')+'</div>'
+          ).join('');
+          return '<details class="gal-exp"><summary>'+esc(exp.folder)+' · '+exp.n_files+' fotos · '+fmtBytes(exp.size_bytes)+'</summary>'
+            +'<div style="padding:8px 0 4px">'
+            +'<a class="gal-zip" href="/files/zip/timelapse/'+encodeURIComponent(exp.folder)+'" onclick="return confirmZip('+exp.size_bytes+')">'
+            +'<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Descargar carpeta completa (.zip, '+fmtBytes(exp.size_bytes)+')</a>'
+            +camsHtml+'</div></details>';
+        }).join('')
+      : '<p class="hint">Todavía no corriste ningún timelapse.</p>';
+  }catch(e){marcarConexion(false);}
+}
+document.getElementById('galeriaDetails').addEventListener('toggle',function(){if(this.open)cargarGaleria();});
+
+// ===== Perfiles =====
+async function cargarListaPerfiles(){
+  try{
+    const r=await fetch('/profiles/list');const d=await r.json();
+    const sel=document.getElementById('profileSelect'), actual=sel.value;
+    sel.innerHTML=(d.perfiles||[]).map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join('');
+    if(d.perfiles && d.perfiles.includes(actual))sel.value=actual;
+  }catch(e){}
+}
+async function cargarPerfil(){
+  const nombre=document.getElementById('profileSelect').value;
+  if(!nombre){toast('No hay perfiles guardados todavía');return;}
+  const r=await fetch('/profiles/load/'+encodeURIComponent(nombre),{method:'POST'});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  document.getElementById('exp').value=d.camera.exposure_us;
+  document.getElementById('gain').value=d.camera.gain;
+  document.getElementById('intv').value=d.timelapse.interval_seconds;
+  document.getElementById('dur').value=d.timelapse.duration_seconds;
+  document.getElementById('s_perfil').textContent=nombre;
+  toast('Perfil "'+nombre+'" cargado y exposición aplicada');
+}
+async function guardarPerfil(){
+  const nombre=document.getElementById('profileNombre').value.trim();
+  if(!nombre){toast('Poné un nombre para el perfil');return;}
+  const body={name:nombre,
+    interval_seconds:+document.getElementById('intv').value,
+    duration_seconds:+document.getElementById('dur').value};
+  const r=await fetch('/profiles/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Perfil "'+nombre+'" guardado');
+  document.getElementById('profileNombre').value='';
+  cargarListaPerfiles();
+}
+async function borrarPerfil(){
+  const nombre=document.getElementById('profileSelect').value;
+  if(!nombre){toast('No hay perfil seleccionado');return;}
+  if(!confirm('¿Eliminar el perfil "'+nombre+'"? No se puede deshacer.'))return;
+  const r=await fetch('/profiles/delete/'+encodeURIComponent(nombre),{method:'POST'});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Perfil eliminado');
+  cargarListaPerfiles();
+}
+cargarListaPerfiles();
+
+setInterval(poll,2000);poll();refrescarAmbas();
+setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();
+// Mas rapido que el resto de los sondeos: el conteo en vivo se refresca
+// varias veces por segundo del lado del servidor y el numero tiene que
+// acompaniar a lo que se ve dibujado en el stream.
+setInterval(refrescarConteo,1000);
+
+// --- Temperatura SSE ---
+(function(){
+  const evtSource = new EventSource('/api/temperature/stream');
+  evtSource.onmessage = function(e){
+    try{
+      const d = JSON.parse(e.data);
+      document.getElementById('tDot').style.background = d.connected ? 'var(--green)' : 'var(--red)';
+      if(d.temperature !== null && d.temperature !== undefined){
+        const t = parseFloat(d.temperature).toFixed(1);
+        const el = document.getElementById('tVal');
+        el.textContent = t;
+        const diff = Math.abs(d.temperature - d.setpoint);
+        el.style.color = diff < 0.5 ? 'var(--green)' : diff < 2 ? 'var(--amber)' : 'var(--red)';
+        document.getElementById('tValMini').textContent = t + '°C';
+      }
+      if(d.setpoint !== undefined){
+        document.getElementById('tSp').textContent = parseFloat(d.setpoint).toFixed(1) + ' °C';
+        if(document.activeElement !== document.getElementById('spSlider')){
+          document.getElementById('spSlider').value = d.setpoint;
+          document.getElementById('spPrev').textContent = parseFloat(d.setpoint).toFixed(1);
+        }
+      }
+      if(d.pwm !== null && d.pwm !== undefined){
+        document.getElementById('tPwm').textContent = d.pwm + ' / 255';
+        document.getElementById('tBar').style.width = ((d.pwm/255)*100).toFixed(1) + '%';
+      }
+
+      // --- CO2 / válvula (mismo stream) ---
+      const hasCo2 = d.co2 !== null && d.co2 !== undefined && !isNaN(d.co2);
+      document.getElementById('cDot').style.background = (d.connected && hasCo2) ? 'var(--green)' : 'var(--dim)';
+      const cVal = document.getElementById('cVal');
+      if(hasCo2){
+        cVal.textContent = parseFloat(d.co2).toFixed(0);
+        cVal.style.color = 'var(--text)';
+        document.getElementById('cValMini').textContent = parseFloat(d.co2).toFixed(0)+'ppm';
+      }else{
+        cVal.textContent = '--.-';
+        document.getElementById('cValMini').textContent = '--.-ppm';
+      }
+      if(d.co2_setpoint !== undefined && d.co2_setpoint !== null){
+        document.getElementById('cSp').textContent = parseFloat(d.co2_setpoint).toFixed(0) + ' ppm';
+        if(document.activeElement !== document.getElementById('co2Slider')){
+          document.getElementById('co2Slider').value = d.co2_setpoint;
+          document.getElementById('co2Prev').textContent = parseInt(d.co2_setpoint);
+        }
+      }
+      const pill = document.getElementById('valvePill'), vtxt = document.getElementById('valveTxt');
+      if(d.valve_open !== null && d.valve_open !== undefined){
+        const isOpen = !!d.valve_open;
+        pill.className = 'valve-pill ' + (isOpen ? 'open' : 'closed');
+        vtxt.textContent = isOpen ? 'ABIERTA' : 'CERRADA';
+      }else{
+        pill.className = 'valve-pill closed';
+        vtxt.textContent = '--';
+      }
+      if(d.co2_duty !== null && d.co2_duty !== undefined){
+        document.getElementById('cDuty').textContent = parseFloat(d.co2_duty).toFixed(1) + ' %';
+        document.getElementById('cBar').style.width = Math.min(100,parseFloat(d.co2_duty)).toFixed(1) + '%';
+      }
+      if(d.ambient_temp !== null && d.ambient_temp !== undefined){
+        document.getElementById('cAmbient').textContent = parseFloat(d.ambient_temp).toFixed(1) + ' °C';
+      }
+      if(d.humidity !== null && d.humidity !== undefined){
+        document.getElementById('cHum').textContent = parseFloat(d.humidity).toFixed(1) + ' %';
+      }
+    }catch(err){}
+  };
+  evtSource.onerror = function(){
+    document.getElementById('tDot').style.background = 'var(--red)';
+    document.getElementById('tVal').textContent = 'ERR';
+    document.getElementById('cDot').style.background = 'var(--red)';
+    marcarConexion(false);
+  };
+})();
+async function aplicarSetpoint(){
+  const val = parseFloat(document.getElementById('spSlider').value);
+  const r = await fetch('/api/temperature/setpoint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val})});
+  const d = await r.json();
+  toast(d.ok ? 'Setpoint: '+val+'°C' : 'Error: '+d.error);
+}
+async function aplicarCo2Setpoint(){
+  const val = parseFloat(document.getElementById('co2Slider').value);
+  const r = await fetch('/api/temperature/co2_setpoint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val})});
+  const d = await r.json();
+  toast(d.ok ? 'Setpoint CO2: '+val+' ppm' : 'Error: '+d.error);
+}
+</script>
+</body>
+</html>
