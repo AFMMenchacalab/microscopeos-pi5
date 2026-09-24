@@ -133,6 +133,13 @@ Navegador  ──HTTP/SSE──>  FastAPI (run_web.py + server/api.py)
 - **Interfaz web** con vivo simultáneo de las dos cámaras, selector de
   modo de iluminación, panel de foco por eje, conteo de células y
   control de temperatura/CO₂ en tiempo real (SSE).
+- **Memoria USB**: al conectarla, la interfaz ofrece guardar ahí el
+  próximo timelapse o copiar uno ya hecho, y permite expulsarla de forma
+  segura. Ver [docs/USB_Y_ENVIO_PC.md](docs/USB_Y_ENVIO_PC.md).
+- **Envío a computadora**: cada imagen del timelapse se manda a la PC al
+  guardarse, donde se segmenta en vivo con Cellpose-SAM (receptor y
+  segmentador en el repositorio `pipeline-migracion-celular`). Con cola y
+  reintentos: un corte de red no frena ni pierde el timelapse.
 
 ## Instalación
 

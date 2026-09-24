@@ -5,3 +5,6 @@ captures/
 capturas_unicas/
 test_capturas/
 venv/
+
+# Configuracion de envio a la PC: contiene la clave compartida
+profiles/envio_pc.json

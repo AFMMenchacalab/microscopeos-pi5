@@ -120,6 +120,29 @@ class TimelapseReq(BaseModel):
     contar: bool = False
     contar_cada: int = 1
     contar_overlay: bool = True
+    # Donde guardar: "local" (directorio del servicio, como siempre) o
+    # "usb" (en usb_punto, que tiene que ser una memoria USB detectada
+    # por core/usb.py -- la API no acepta rutas arbitrarias del cliente).
+    destino: str = "local"
+    usb_punto: str = ""
+    # Mandar cada imagen a la PC que segmenta en vivo (core/envio.py).
+    enviar_pc: bool = False
+
+
+class UsbAccionReq(BaseModel):
+    punto: str
+
+class UsbCopiarReq(BaseModel):
+    carpeta: str              # nombre timelapse_YYYYMMDD_HHMMSS (local)
+    punto: str
+
+class EnvioConfigReq(BaseModel):
+    url: str | None = None
+    token: str | None = None
+    activo: bool | None = None
+
+class EnvioReenviarReq(BaseModel):
+    carpeta: str              # timelapse_... local, o ruta dentro de una USB detectada
 
 class SetpointPayload(BaseModel):
     value: float
@@ -236,7 +259,8 @@ class CalibrarDpcReq(BaseModel):
 
 
 def create_app(camera, illuminations, timelapse, motores=None,
-               autofocus=None, motor=None, conteo=None):
+               autofocus=None, motor=None, conteo=None, usb=None,
+               enviador=None):
     """motores: {numero_de_camara: FocusMotorController}. `motor` se
     acepta todavia como un solo eje suelto (compatibilidad con la
     version de un motor) y se mapea a la camara 0.
@@ -477,6 +501,27 @@ def create_app(camera, illuminations, timelapse, motores=None,
     def start_timelapse(req: TimelapseReq):
         if timelapse.is_running():
             return {"error": "Ya hay un timelapse corriendo"}
+        carpeta_raiz = ""
+        if req.destino == "usb":
+            d = usb.punto_valido(req.usb_punto) if usb is not None else None
+            if d is None:
+                return {"error": "La memoria USB elegida no esta disponible "
+                        "o es de solo lectura"}
+            # Estimacion grosera de espacio: ~16 MB por TIFF de 16 bits a
+            # 3280x2464. Avisar antes de empezar, no a mitad de la noche.
+            n_fotos = len(MODOS.get(req.modo, [1])) * len(req.camaras)
+            ciclos = max(1, req.duration // max(1, req.interval))
+            necesario = ciclos * n_fotos * 16e6
+            if d.get("libre_bytes") is not None and necesario > d["libre_bytes"]:
+                return {"error": f"La memoria no alcanza: el timelapse ocupa "
+                        f"~{necesario / 1e9:.1f} GB y hay "
+                        f"{d['libre_bytes'] / 1e9:.1f} GB libres"}
+            carpeta_raiz = d["punto"]
+        elif req.destino != "local":
+            return {"error": f"destino invalido: {req.destino}"}
+        if req.enviar_pc and (enviador is None or not enviador.url):
+            return {"error": "Falta configurar la direccion de la PC "
+                    "(panel 'Envío a computadora')"}
         timelapse.start(
             modo=req.modo,
             interval_seconds=req.interval,
@@ -491,9 +536,13 @@ def create_app(camera, illuminations, timelapse, motores=None,
             contar=req.contar,
             contar_cada=req.contar_cada,
             contar_opts={"overlay": req.contar_overlay},
+            carpeta_raiz=carpeta_raiz,
+            enviar_pc=req.enviar_pc,
+            nombre=req.nombre,
         )
         return {"status": "started", "autofocus": req.autofocus,
-                "contar": req.contar}
+                "contar": req.contar, "destino": carpeta_raiz or "local",
+                "enviar_pc": req.enviar_pc}
 
     @app.post("/timelapse/stop")
     def stop_timelapse():
@@ -842,6 +891,78 @@ def create_app(camera, illuminations, timelapse, motores=None,
             return analisis.resumir_timelapse(req.carpeta, req.intervalo_s)
         except Exception as e:
             return {"error": str(e)}
+
+    # ===============================
+    # Memorias USB (core/usb.py)
+    # ===============================
+    @app.get("/api/usb/estado")
+    def usb_estado():
+        if usb is None:
+            return {"dispositivos": [], "evento": 0, "error": "monitor USB no disponible"}
+        return usb.estado()
+
+    @app.post("/api/usb/expulsar")
+    def usb_expulsar(req: UsbAccionReq):
+        if usb is None:
+            return {"error": "monitor USB no disponible"}
+        if timelapse.is_running() and str(getattr(timelapse, "base_folder", "")).startswith(req.punto):
+            return {"error": "Hay un timelapse guardando en esa memoria: detenlo antes de expulsar"}
+        return usb.expulsar(req.punto)
+
+    @app.post("/api/usb/copiar")
+    def usb_copiar(req: UsbCopiarReq):
+        if usb is None:
+            return {"error": "monitor USB no disponible"}
+        if not _FOLDER_RE.match(req.carpeta):
+            return {"error": "Nombre de carpeta invalido"}
+        origen = (BASE_DIR / req.carpeta).resolve()
+        if origen.parent != BASE_DIR.resolve() or not origen.is_dir():
+            return {"error": f"No existe {req.carpeta}"}
+        if timelapse.is_running() and Path(str(timelapse.base_folder)).resolve() == origen:
+            return {"error": "Ese timelapse todavia esta corriendo"}
+        return usb.copiar(origen, req.punto)
+
+    # ===============================
+    # Envio a la PC de segmentacion (core/envio.py)
+    # ===============================
+    @app.get("/api/envio/estado")
+    def envio_estado():
+        if enviador is None:
+            return {"error": "envio no disponible"}
+        return enviador.estado()
+
+    @app.post("/api/envio/config")
+    def envio_config(req: EnvioConfigReq):
+        if enviador is None:
+            return {"error": "envio no disponible"}
+        return enviador.configurar(url=req.url, token=req.token, activo=req.activo)
+
+    @app.post("/api/envio/probar")
+    def envio_probar():
+        if enviador is None:
+            return {"ok": False, "error": "envio no disponible"}
+        return enviador.probar()
+
+    @app.post("/api/envio/reenviar")
+    def envio_reenviar(req: EnvioReenviarReq):
+        """Completa en la PC lo que falto (corte de red, reinicio). Lo
+        que la PC ya tiene con el mismo hash no se vuelve a mandar."""
+        if enviador is None:
+            return {"error": "envio no disponible"}
+        if _FOLDER_RE.match(req.carpeta):
+            carpeta = (BASE_DIR / req.carpeta).resolve()
+            if carpeta.parent != BASE_DIR.resolve():
+                return {"error": "Carpeta invalida"}
+        else:
+            carpeta = Path(req.carpeta).resolve()
+            en_usb = usb is not None and any(
+                d.get("punto") and carpeta.parent == Path(d["punto"]).resolve()
+                for d in usb.estado()["dispositivos"])
+            if not (en_usb and _FOLDER_RE.match(carpeta.name)):
+                return {"error": "Carpeta invalida"}
+        if not carpeta.is_dir():
+            return {"error": f"No existe {req.carpeta}"}
+        return enviador.reenviar_carpeta(carpeta)
 
     # ===============================
     # Galeria / descarga (solo lectura sobre lo ya guardado en disco)

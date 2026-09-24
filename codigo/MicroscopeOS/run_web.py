@@ -8,6 +8,8 @@ from core.motor_focus import crear_motores
 from core.autofocus import Autofocus
 from core.autofocus_ia import AutofocoIA
 from core.analisis import Contador, ContadorEnVivo
+from core.usb import MonitorUSB
+from core.envio import EnviadorPC
 from server.api import create_app
 import uvicorn
 
@@ -68,10 +70,18 @@ autofocus = Autofocus(camera, motores, illuminations, ia=ia) if motores else Non
 contador = Contador()
 conteo = ContadorEnVivo(contador, periodo=0.6)
 
+# Memorias USB: detecta al conectarlas y la interfaz ofrece guardar ahi
+# el timelapse. Envio a la PC: cada imagen guardada se manda a la
+# computadora que segmenta en vivo. Ninguno de los dos es obligatorio:
+# si fallan, el microscopio sigue funcionando como antes.
+usb = MonitorUSB()
+enviador = EnviadorPC()
+
 timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus,
-                             contador=contador)
+                             contador=contador, enviador=enviador)
 
 app = create_app(camera, illuminations, timelapse,
-                 motores=motores, autofocus=autofocus, conteo=conteo)
+                 motores=motores, autofocus=autofocus, conteo=conteo,
+                 usb=usb, enviador=enviador)
 print("Servidor en http://0.0.0.0:8000")
 uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

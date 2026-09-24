@@ -1,0 +1,16 @@
+// Permite al usuario del servicio de MicroscopeOS montar, desmontar y
+// apagar memorias USB sin sesion grafica (Pi OS Lite + udisks2).
+// Instalar:  sudo cp 50-microscopeos-usb.rules /etc/polkit-1/rules.d/
+// Si el servicio corre con otro usuario, cambiar "microscope2".
+polkit.addRule(function(action, subject) {
+    if (subject.user == "microscope2" &&
+        (action.id == "org.freedesktop.udisks2.filesystem-mount" ||
+         action.id == "org.freedesktop.udisks2.filesystem-mount-other-seat" ||
+         action.id == "org.freedesktop.udisks2.filesystem-unmount-others" ||
+         action.id == "org.freedesktop.udisks2.eject-media" ||
+         action.id == "org.freedesktop.udisks2.eject-media-other-seat" ||
+         action.id == "org.freedesktop.udisks2.power-off-drive" ||
+         action.id == "org.freedesktop.udisks2.power-off-drive-other-seat")) {
+        return polkit.Result.YES;
+    }
+});

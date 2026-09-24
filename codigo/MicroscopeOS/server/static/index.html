@@ -321,10 +321,35 @@
           <label for="tlCntOverlay" style="margin:0;text-transform:none;letter-spacing:0">Guardar PNG marcado</label>
         </div>
       </div>
+      <div class="field"><label>Guardar en</label>
+        <select id="tlDestino"><option value="local">Raspberry (tarjeta interna)</option></select>
+      </div>
+      <div class="field" style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="tlEnviar" style="width:auto">
+        <label for="tlEnviar" style="margin:0;text-transform:none;letter-spacing:0">Enviar cada imagen a la computadora (segmentación en vivo)</label>
+      </div>
       <div class="actions">
         <button class="primary" id="start" onclick="iniciar()">▶ Iniciar Timelapse</button>
         <button class="danger" id="stop" onclick="detener()" disabled>■ STOP de emergencia</button>
       </div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Memoria USB</h2>
+      <div id="usbLista" style="font-size:12px;color:var(--dim)">Sin memorias conectadas</div>
+      <div id="usbCopia" style="font-size:12px;margin-top:8px;display:none"></div>
+      <div id="usbError" style="font-size:11px;color:var(--amber);margin-top:8px;display:none"></div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Envío a computadora</h2>
+      <div class="field"><label>Dirección de la PC</label><input type="text" id="envUrl" placeholder="http://192.168.1.50:8765"></div>
+      <div class="field"><label>Clave (la misma que en la PC)</label><input type="password" id="envToken" placeholder="clave compartida"></div>
+      <div class="row">
+        <button onclick="guardarEnvio()">Guardar</button>
+        <button onclick="probarEnvio()">Probar conexión</button>
+      </div>
+      <div class="stat" style="margin-top:10px"><span class="k">Pendientes</span><span class="v" id="envPend">—</span></div>
+      <div class="stat"><span class="k">Enviadas</span><span class="v" id="envOk">—</span></div>
+      <div class="stat"><span class="k">Último error</span><span class="v" id="envErr" style="font-size:10px">—</span></div>
     </div>
     <div class="panel" style="margin-bottom:18px">
       <h2>Temperatura</h2>
@@ -381,6 +406,18 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<div id="usbAviso" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;align-items:center;justify-content:center">
+  <div class="panel" style="max-width:460px;width:92%">
+    <h2>Memoria USB conectada</h2>
+    <p id="usbAvisoTxt" style="margin-bottom:14px;line-height:1.5"></p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="primary" onclick="usbUsarParaTimelapse()">Guardar el próximo timelapse aquí</button>
+      <div class="field" style="margin:0"><select id="usbCopiarSel"></select></div>
+      <button onclick="usbCopiarElegido()">Copiar ese timelapse a la memoria</button>
+      <button onclick="cerrarUsbAviso()">Nada por ahora</button>
+    </div>
+  </div>
+</div>
 <script>
 let running=false,live=[false,false];
 
@@ -806,6 +843,10 @@ async function iniciar(){
     contar:document.getElementById('tlCnt').checked,
     contar_cada:+document.getElementById('tlCntCada').value,
     contar_overlay:document.getElementById('tlCntOverlay').checked};
+  const dest=document.getElementById('tlDestino').value;
+  body.destino=dest==='local'?'local':'usb';
+  body.usb_punto=dest==='local'?'':dest;
+  body.enviar_pc=document.getElementById('tlEnviar').checked;
   const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   if(d.error){toast(d.error);return;}
@@ -840,6 +881,83 @@ async function poll(){
     document.getElementById('s_folder').textContent=s.carpeta||'—';
   }catch(e){}
 }
+// --- Memoria USB y envio a la computadora ---
+let usbEventoVisto=null,usbUltimo=null,envCargado=false;
+const gb=b=>b==null?'?':(b/1e9).toFixed(1)+' GB';
+// La etiqueta la pone quien formateo la memoria: escaparla antes de meterla en el HTML.
+const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let usbMontadas=[];
+async function pollUsb(){
+  try{
+    const u=await (await fetch('/api/usb/estado')).json();
+    const sel=document.getElementById('tlDestino'),previo=sel.value;
+    const montadas=(u.dispositivos||[]).filter(d=>d.montado);
+    sel.innerHTML='<option value="local">Raspberry (tarjeta interna)</option>'+
+      montadas.filter(d=>d.escribible).map(d=>`<option value="${esc(d.punto)}">USB «${esc(d.etiqueta)}» (${gb(d.libre_bytes)} libres)</option>`).join('');
+    usbMontadas=montadas;
+    if([...sel.options].some(o=>o.value===previo))sel.value=previo;
+    document.getElementById('usbLista').innerHTML=montadas.length?montadas.map((d,i)=>
+      `<div class="stat"><span class="k">«${esc(d.etiqueta)}» · ${gb(d.libre_bytes)} libres de ${gb(d.total_bytes)}</span>
+       <button style="padding:4px 10px" onclick="usbExpulsar(${i})">Expulsar</button></div>`).join(''):'Sin memorias conectadas';
+    const c=u.copia||{},cd=document.getElementById('usbCopia');
+    if(c.activa||c.error||c.total){cd.style.display='block';
+      cd.textContent=c.error?('Copia con error: '+c.error):(c.activa?`Copiando ${c.copiados}/${c.total} archivos…`:`Copia terminada (${c.total} archivos)`);}
+    const ue=document.getElementById('usbError');ue.style.display=u.error?'block':'none';ue.textContent=u.error||'';
+    if(usbEventoVisto===null)usbEventoVisto=u.evento;          // no avisar por lo que ya estaba al abrir la pagina
+    else if(u.evento!==usbEventoVisto&&u.ultimo_nuevo&&u.ultimo_nuevo.punto){
+      usbEventoVisto=u.evento;usbUltimo=u.ultimo_nuevo;mostrarUsbAviso();}
+  }catch(e){}
+  try{
+    const e=await (await fetch('/api/envio/estado')).json();
+    if(!envCargado){document.getElementById('envUrl').value=e.url||'';
+      document.getElementById('tlEnviar').checked=!!e.activo;envCargado=true;}
+    document.getElementById('envPend').textContent=e.pendientes??'—';
+    document.getElementById('envOk').textContent=(e.enviados??0)+(e.ya_estaban?` (+${e.ya_estaban} ya estaban)`:'');
+    document.getElementById('envErr').textContent=e.ultimo_error||'—';
+  }catch(e){}
+}
+async function mostrarUsbAviso(){
+  const d=usbUltimo;
+  document.getElementById('usbAvisoTxt').textContent=
+    `Se conectó la memoria «${d.etiqueta}» con ${gb(d.libre_bytes)} libres. ¿Qué quieres hacer?`;
+  try{
+    const f=await (await fetch('/files/list')).json();
+    document.getElementById('usbCopiarSel').innerHTML=(f.timelapses||[]).map(t=>
+      `<option value="${esc(t.folder)}">${esc(t.folder)} · ${t.n_files} archivos · ${gb(t.size_bytes)}</option>`).join('')||'<option value="">(no hay timelapses guardados)</option>';
+  }catch(e){}
+  document.getElementById('usbAviso').style.display='flex';
+}
+function cerrarUsbAviso(){document.getElementById('usbAviso').style.display='none';}
+function usbUsarParaTimelapse(){
+  document.getElementById('tlDestino').value=usbUltimo.punto;cerrarUsbAviso();
+  toast('El próximo timelapse se guardará en la memoria USB');
+}
+async function usbCopiarElegido(){
+  const carpeta=document.getElementById('usbCopiarSel').value;
+  if(!carpeta){toast('No hay timelapses para copiar');return;}
+  const d=await (await fetch('/api/usb/copiar',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({carpeta,punto:usbUltimo.punto})})).json();
+  if(d.error){toast(d.error);return;}
+  cerrarUsbAviso();toast(`Copiando ${d.archivos} archivos…`);
+}
+async function usbExpulsar(i){
+  const punto=(usbMontadas[i]||{}).punto;if(!punto)return;
+  const d=await (await fetch('/api/usb/expulsar',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({punto})})).json();
+  toast(d.error||d.mensaje);pollUsb();
+}
+async function guardarEnvio(){
+  const body={url:document.getElementById('envUrl').value,activo:document.getElementById('tlEnviar').checked};
+  const tok=document.getElementById('envToken').value;if(tok)body.token=tok;
+  const d=await (await fetch('/api/envio/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  document.getElementById('envUrl').value=d.url||'';toast('Configuración guardada');
+}
+async function probarEnvio(){
+  await guardarEnvio();
+  const d=await (await fetch('/api/envio/probar',{method:'POST'})).json();
+  toast(d.ok?'Conexión con la PC correcta':('Sin conexión: '+(d.error||'?')));
+}
+setInterval(pollUsb,2000);pollUsb();
 setInterval(poll,2000);poll();refrescarAmbas();
 setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();
 // Mas rapido que el resto de los sondeos: el conteo en vivo se refresca
