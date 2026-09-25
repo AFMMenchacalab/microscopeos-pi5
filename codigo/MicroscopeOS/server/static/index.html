@@ -135,6 +135,15 @@
         <option value="rheinberg">Rheinberg</option>
       </select>
     </div>
+    <div class="field">
+      <label>Color de los patrones DPC</label>
+      <select id="colorDpc" onchange="cambiarColorDpc()">
+        <option value="00FF00">Verde (recomendado)</option>
+        <option value="FFFFFF">Blanco</option>
+        <option value="FF0000">Rojo</option>
+        <option value="0000FF">Azul</option>
+      </select>
+    </div>
     <div class="row" id="rheinbergColors" style="display:none">
       <div class="field"><label>Color centro</label><input type="color" id="colorCentro" value="#0000ff"></div>
       <div class="field"><label>Color anillo</label><input type="color" id="colorAnillo" value="#ff6a00"></div>
@@ -1055,6 +1064,17 @@ async function probarNas(){
   const d=await (await fetch('/api/nas/probar',{method:'POST'})).json();
   toast(d.ok?('El NAS acepta archivos: '+d.destino):('No se pudo escribir: '+(d.error||'?')));
 }
+// --- color de los patrones DPC (vivo, capturas, timelapse y autofoco) ---
+async function cargarColorDpc(){
+  try{const d=await (await fetch('/light/color_dpc')).json();if(d.color)document.getElementById('colorDpc').value=d.color;}catch(e){}
+}
+async function cambiarColorDpc(){
+  const color=document.getElementById('colorDpc').value;
+  const d=await (await fetch('/light/color_dpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({color})})).json();
+  if(d.error){toast(d.error);cargarColorDpc();return;}
+  toast(color==='00FF00'?'DPC en verde':'DPC en '+document.getElementById('colorDpc').selectedOptions[0].text.toLowerCase());
+}
+cargarColorDpc();
 setInterval(pollNas,2000);pollNas();
 setInterval(pollUsb,2000);pollUsb();
 setInterval(poll,2000);poll();refrescarAmbas();

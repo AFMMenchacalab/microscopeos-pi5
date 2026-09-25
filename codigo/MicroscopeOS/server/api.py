@@ -98,6 +98,9 @@ class LightReq(BaseModel):
     color_anillo: str = "FF6A00"
     camaras: list = [0, 1]
 
+class ColorDpcReq(BaseModel):
+    color: str = "00FF00"     # RRGGBB; "FFFFFF" = blanco
+
 class TimelapseReq(BaseModel):
     modo: str = "blanco"
     interval: int = 300
@@ -418,6 +421,37 @@ def create_app(camera, illuminations, timelapse, motores=None,
             _luz_aplicar(cam, req.modo, req.percent,
                          req.color_centro, req.color_anillo)
         return {"status": "ok", "modo": req.modo}
+
+    # Color de los patrones DPC (L/R/T/B), para todas las matrices. Se guarda
+    # en profiles/iluminacion.json para que sobreviva a un reinicio.
+    ARCHIVO_ILUM = BASE_DIR / "profiles" / "iluminacion.json"
+
+    def _color_dpc_actual():
+        for luz in illuminations.values():
+            if luz is not None:
+                return getattr(luz, "color_dpc", None) or "FFFFFF"
+        return None
+
+    @app.get("/light/color_dpc")
+    def color_dpc_get():
+        return {"color": _color_dpc_actual()}
+
+    @app.post("/light/color_dpc")
+    def color_dpc_set(req: ColorDpcReq):
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        try:
+            for luz in illuminations.values():
+                if luz is not None:
+                    luz.set_color_dpc(req.color)
+        except ValueError as e:
+            return {"error": str(e)}
+        try:
+            ARCHIVO_ILUM.parent.mkdir(parents=True, exist_ok=True)
+            ARCHIVO_ILUM.write_text(json.dumps({"color_dpc": _color_dpc_actual()}))
+        except OSError:
+            pass
+        return {"color": _color_dpc_actual()}
 
     @app.post("/light/on")
     def light_on():

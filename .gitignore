@@ -10,3 +10,5 @@ venv/
 profiles/envio_pc.json
 # Configuracion del NAS: contiene usuario y contraseña
 profiles/respaldo_nas.json
+# Preferencia de color DPC (se crea al usar la interfaz)
+profiles/iluminacion.json

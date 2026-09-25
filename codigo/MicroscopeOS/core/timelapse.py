@@ -371,6 +371,10 @@ class TimelapseManager:
             "intervalo_s": interval_seconds,
             "duracion_s": duration_seconds,
             "camaras": list(camaras),
+            # color de los patrones DPC (la longitud de onda importa para
+            # reconstruir la fase en la PC); "FFFFFF" = blanco
+            "color_dpc": next((getattr(l, "color_dpc", None) or "FFFFFF"
+                               for l in self.illuminations.values() if l is not None), None),
         }
         ruta = os.path.join(self.base_folder, "experimento.json")
         with open(ruta, "w") as f:
