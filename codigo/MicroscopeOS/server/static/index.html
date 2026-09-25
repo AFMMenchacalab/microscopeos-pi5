@@ -341,8 +341,10 @@
     </div>
     <div class="panel" style="margin-bottom:18px">
       <h2>Envío a computadora</h2>
-      <div class="field"><label>Dirección de la PC</label><input type="text" id="envUrl" placeholder="http://192.168.1.50:8765"></div>
-      <div class="field"><label>Clave (la misma que en la PC)</label><input type="password" id="envToken" placeholder="clave compartida"></div>
+      <button onclick="buscarPcs()" id="envBuscar" style="width:100%">🔍 Buscar computadoras en la red</button>
+      <div id="envLista" style="display:flex;flex-direction:column;gap:6px;margin:10px 0"></div>
+      <div class="field"><label>Computadora</label><input type="text" id="envUrl" placeholder="se llena al elegir una, o escribir http://IP:8765"></div>
+      <div class="field"><label>Código que muestra la PC (6 dígitos)</label><input type="text" id="envToken" inputmode="numeric" maxlength="64" placeholder="ej. 482915" autocomplete="off"></div>
       <div class="row">
         <button onclick="guardarEnvio()">Guardar</button>
         <button onclick="probarEnvio()">Probar conexión</button>
@@ -909,7 +911,7 @@ async function pollUsb(){
   }catch(e){}
   try{
     const e=await (await fetch('/api/envio/estado')).json();
-    if(!envCargado){document.getElementById('envUrl').value=e.url||'';
+    if(!envCargado){document.getElementById('envUrl').value=e.url||'';envNombre=e.nombre_pc||null;
       document.getElementById('tlEnviar').checked=!!e.activo;envCargado=true;}
     document.getElementById('envPend').textContent=e.pendientes??'—';
     document.getElementById('envOk').textContent=(e.enviados??0)+(e.ya_estaban?` (+${e.ya_estaban} ya estaban)`:'');
@@ -946,8 +948,27 @@ async function usbExpulsar(i){
     body:JSON.stringify({punto})})).json();
   toast(d.error||d.mensaje);pollUsb();
 }
+let envNombre=null;
+async function buscarPcs(){
+  const b=document.getElementById('envBuscar'),L=document.getElementById('envLista');
+  b.disabled=true;b.textContent='Buscando…';L.innerHTML='';
+  try{
+    const d=await (await fetch('/api/envio/buscar',{method:'POST'})).json();
+    const pcs=d.pcs||[];
+    L.innerHTML=pcs.length?pcs.map((p,i)=>`<button data-i="${i}" style="text-align:left">🖥 <b>${esc(p.nombre)}</b> · ${esc(p.ip)}${p.gpu?' · '+esc(p.gpu):''}</button>`).join('')
+      :'<div style="font-size:12px;color:var(--dim)">No se encontró ninguna. Revisa que en la PC esté iniciada la recepción y que las dos estén en la misma red; si no, escribe la dirección que muestra la PC.</div>';
+    L.querySelectorAll('button').forEach(x=>x.onclick=()=>{
+      const p=pcs[+x.dataset.i];document.getElementById('envUrl').value=p.url;envNombre=p.nombre;
+      L.querySelectorAll('button').forEach(y=>y.classList.toggle('active',y===x));
+      document.getElementById('envToken').focus();toast('Escribe el código que muestra '+p.nombre);});
+  }catch(e){toast('Error al buscar: '+e);}
+  finally{b.disabled=false;b.textContent='🔍 Buscar computadoras en la red';}
+}
+// si se escribe la direccion a mano, ya no es "la PC que se eligio de la lista"
+document.getElementById('envUrl').addEventListener('input',()=>{envNombre='';});
 async function guardarEnvio(){
   const body={url:document.getElementById('envUrl').value,activo:document.getElementById('tlEnviar').checked};
+  if(envNombre!==null)body.nombre_pc=envNombre;
   const tok=document.getElementById('envToken').value;if(tok)body.token=tok;
   const d=await (await fetch('/api/envio/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
   document.getElementById('envUrl').value=d.url||'';toast('Configuración guardada');

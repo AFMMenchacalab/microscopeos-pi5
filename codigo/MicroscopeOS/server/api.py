@@ -140,6 +140,7 @@ class EnvioConfigReq(BaseModel):
     url: str | None = None
     token: str | None = None
     activo: bool | None = None
+    nombre_pc: str | None = None
 
 class EnvioReenviarReq(BaseModel):
     carpeta: str              # timelapse_... local, o ruta dentro de una USB detectada
@@ -935,7 +936,17 @@ def create_app(camera, illuminations, timelapse, motores=None,
     def envio_config(req: EnvioConfigReq):
         if enviador is None:
             return {"error": "envio no disponible"}
-        return enviador.configurar(url=req.url, token=req.token, activo=req.activo)
+        return enviador.configurar(url=req.url, token=req.token, activo=req.activo,
+                                   nombre_pc=req.nombre_pc)
+
+    @app.post("/api/envio/buscar")
+    def envio_buscar():
+        """PCs con el receptor activo en la red local (UDP broadcast)."""
+        from core.envio import buscar_pcs
+        try:
+            return {"pcs": buscar_pcs()}
+        except OSError as e:
+            return {"pcs": [], "error": str(e)}
 
     @app.post("/api/envio/probar")
     def envio_probar():

@@ -38,11 +38,13 @@ No hay dependencias nuevas de Python: la detección lee `/proc/mounts` y
 
 ## Instalación en la PC (repositorio `pipeline-migracion-celular`)
 
-Dos programas, en dos terminales:
+Lo más simple es la **interfaz gráfica** (rama `experimental/interfaz-cuda`
+del pipeline, ver su `INSTALAR.md`): `./iniciar_interfaz.sh` y *Iniciar
+recepción*. También existe en consola:
 
 ```bash
-# 1) receptor: recibe lo que manda la Pi
-venv/bin/python scripts/31_receptor_microscopio.py --token UNA_CLAVE
+# 1) receptor: recibe lo que manda la Pi (muestra el código de 6 dígitos)
+venv/bin/python scripts/31_receptor_microscopio.py
 
 # 2) segmentación en vivo: procesa cada ciclo en cuanto está completo
 venv/bin/python scripts/32_segmentar_en_vivo.py
@@ -52,16 +54,33 @@ venv/bin/python scripts/32_segmentar_en_vivo.py
 - Las máscaras en `~/microscopio_cache/masks/propio/<experimento>/cam<N>/`,
   con `ultima.png` (contornos de la última imagen, para revisar a ojo) y
   `segmentacion.csv` (células y segundos por ciclo).
-- Si la PC tiene cortafuegos, abrir el puerto **8765/tcp** para la red local.
+- Si la PC tiene cortafuegos, abrir en la red local el puerto **8765/tcp**
+  (imágenes) y el **8766/udp** (búsqueda automática).
 
 ## Uso
 
-1. En la PC, arrancar los dos programas.
-2. En la interfaz de la Pi, panel **Envío a computadora**: dirección
-   `http://<IP de la PC>:8765` y la misma clave → *Probar conexión*.
+1. En la PC, iniciar la recepción: muestra un **código de 6 dígitos**.
+2. En la interfaz de la Pi, panel **Envío a computadora**: *Buscar
+   computadoras en la red* → elegir la PC → escribir su código → *Probar
+   conexión*. Se hace una sola vez (queda guardado).
 3. En **Timelapse**: elegir *Guardar en* (Raspberry o la memoria USB) y
    marcar *Enviar cada imagen a la computadora*.
 4. Al terminar, **Expulsar** la memoria desde el panel antes de retirarla.
+
+## Cómo se encuentran la Pi y la PC
+
+- **Búsqueda automática.** La Pi manda por difusión (UDP 8766) un mensaje
+  de búsqueda a su red; cada PC con la recepción activa responde con su
+  nombre, puerto y GPU. No hace falta saber la IP.
+- **Emparejamiento con código.** La respuesta no incluye la clave: la PC
+  muestra un código de 6 dígitos que se escribe en la Pi. Otro equipo de la
+  red puede ver que la PC existe, pero no mandarle archivos.
+- **Si la PC cambia de IP** (el router se la reasigna), tras varios fallos
+  seguidos la Pi la vuelve a buscar por su **nombre** y actualiza la
+  dirección sola, sin perder imágenes (quedan en cola).
+- **Respaldo manual.** La difusión no cruza routers ni funciona en redes
+  Wi-Fi que aíslan a los clientes: en ese caso se escribe la dirección que
+  muestra la PC (`http://IP:8765`).
 
 ## Detalles de diseño
 
