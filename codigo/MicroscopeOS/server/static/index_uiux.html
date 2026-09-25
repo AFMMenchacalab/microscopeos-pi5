@@ -331,6 +331,11 @@
   <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3.5h11.5L20.5 7.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5Z"/><path d="M8 3.5V9h8V3.5"/><path d="M7.5 20v-6h9v6"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2"/><path d="M6.5 7l1 12.5A1.5 1.5 0 0 0 9 21h6a1.5 1.5 0 0 0 1.5-1.5L17.5 7"/><path d="M10.3 11v6"/><path d="M13.7 11v6"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 9 17l10.5-11"/></symbol>
+  <symbol id="i-usb" viewBox="0 0 24 24"><rect x="7" y="9" width="10" height="12" rx="2"/><path d="M9 9V3.5h6V9"/><path d="M10.8 5.8h.01"/><path d="M13.2 5.8h.01"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8.5 20h7"/><path d="M12 16v4"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="7" rx="1.8"/><rect x="3.5" y="13" width="17" height="7" rx="1.8"/><path d="M7.5 7.5h.01"/><path d="M7.5 16.5h.01"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.2"/><path d="M15.2 15.2 20 20"/></symbol>
+  <symbol id="i-eject" viewBox="0 0 24 24"><path d="M12 5 5 13h14Z"/><path d="M5 18h14"/></symbol>
 </defs>
 </svg>
 
@@ -405,6 +410,15 @@
           <option value="bottom">DPC — abajo</option>
           <option value="ring">Campo oscuro</option>
           <option value="rheinberg">Rheinberg</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="colorDpc">Color de los patrones DPC</label>
+        <select id="colorDpc" onchange="cambiarColorDpc()">
+          <option value="00FF00">Verde (recomendado)</option>
+          <option value="FFFFFF">Blanco</option>
+          <option value="FF0000">Rojo</option>
+          <option value="0000FF">Azul</option>
         </select>
       </div>
       <div class="row" id="rheinbergColors" style="display:none">
@@ -627,10 +641,79 @@
           <label for="tlCntOverlay">Guardar PNG marcado</label>
         </div>
       </div>
+      <div class="field"><label for="tlDestino">Guardar en</label>
+        <select id="tlDestino"><option value="local">Raspberry (tarjeta interna)</option></select>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="tlEnviar">
+        <label for="tlEnviar">Enviar cada imagen a la computadora (segmentación en vivo)</label>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="tlNas">
+        <label for="tlNas">Respaldar cada imagen en el NAS</label>
+      </div>
       <div class="actions">
         <button class="primary" id="start" onclick="iniciar()"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span>Iniciar Timelapse</span></button>
         <button class="danger" id="stop" onclick="detener()" disabled><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span>STOP de emergencia</span></button>
       </div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-usb"/></svg><span class="stitle">Memoria USB</span><span class="mini" id="usbMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div id="usbLista" class="hint">Sin memorias conectadas</div>
+      <div id="usbCopia" class="hint" style="display:none"></div>
+      <div id="usbError" class="hint" style="color:var(--amber);display:none"></div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><span class="stitle">Envío a computadora</span><span class="mini" id="envMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <button onclick="buscarPcs()" id="envBuscar" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span class="lbl">Buscar computadoras en la red</span></button>
+      <div id="envLista" style="display:flex;flex-direction:column;gap:6px;margin:10px 0"></div>
+      <div class="field"><label for="envUrl">Computadora</label><input type="text" id="envUrl" placeholder="se llena al elegir una, o http://IP:8765"></div>
+      <div class="field"><label for="envToken">Código que muestra la PC (6 dígitos)</label><input type="text" id="envToken" inputmode="numeric" maxlength="64" placeholder="ej. 482915" autocomplete="off"></div>
+      <div class="camsel">
+        <button onclick="guardarEnvio()"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span class="lbl">Guardar</span></button>
+        <button onclick="probarEnvio()"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">Probar conexión</span></button>
+      </div>
+      <div class="stat" style="margin-top:10px"><span class="k">Pendientes</span><span class="v" id="envPend">—</span></div>
+      <div class="stat"><span class="k">Enviadas</span><span class="v" id="envOk">—</span></div>
+      <div class="stat"><span class="k">Último error</span><span class="v" id="envErr" style="font-size:10px">—</span></div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-server"/></svg><span class="stitle">Respaldo en NAS</span><span class="mini" id="nasMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <button onclick="buscarNas()" id="nasBuscar" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span class="lbl">Buscar NAS en la red</span></button>
+      <div id="nasLista" style="display:flex;flex-direction:column;gap:6px;margin:10px 0"></div>
+      <div class="field"><label for="nasModo">Tipo</label>
+        <select id="nasModo" onchange="nasModoCambio()">
+          <option value="smb">Carpeta compartida del NAS (SMB)</option>
+          <option value="carpeta">Carpeta ya montada en la Pi (NFS/CIFS)</option>
+        </select></div>
+      <div id="nasSmb">
+        <div class="row">
+          <div class="field"><label for="nasServidor">Servidor (IP o nombre)</label><input type="text" id="nasServidor" placeholder="192.168.1.20"></div>
+          <div class="field"><label for="nasRecurso">Carpeta compartida</label><input type="text" id="nasRecurso" placeholder="respaldo"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="nasUsuario">Usuario del NAS</label><input type="text" id="nasUsuario" autocomplete="off"></div>
+          <div class="field"><label for="nasContrasena">Contraseña</label><input type="password" id="nasContrasena" autocomplete="new-password" placeholder="(sin cambios)"></div>
+        </div>
+      </div>
+      <div class="field" id="nasCarpeta" style="display:none"><label for="nasRuta">Ruta montada en la Pi</label><input type="text" id="nasRuta" placeholder="/mnt/nas"></div>
+      <div class="field"><label for="nasSub">Subcarpeta dentro del NAS</label><input type="text" id="nasSub" value="microscopio"></div>
+      <div class="camsel">
+        <button onclick="guardarNas()"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span class="lbl">Guardar</span></button>
+        <button onclick="probarNas()"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span class="lbl">Probar escritura</span></button>
+      </div>
+      <div class="stat" style="margin-top:10px"><span class="k">Pendientes</span><span class="v" id="nasPend">—</span></div>
+      <div class="stat"><span class="k">Respaldadas</span><span class="v" id="nasOk">—</span></div>
+      <div class="stat"><span class="k">Último error</span><span class="v" id="nasErr" style="font-size:10px">—</span></div>
       </div>
     </details>
 
@@ -696,6 +779,19 @@
 <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista de cámara ampliada" onclick="if(event.target===this)closeLightbox()">
   <button class="lightbox-close" onclick="closeLightbox()" aria-label="Cerrar vista ampliada"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg></button>
   <div class="lightbox-stage" id="lightboxStage"></div>
+</div>
+
+<div class="lightbox" id="usbAviso" hidden role="dialog" aria-modal="true" aria-labelledby="usbAvisoTit">
+  <div class="panel" style="max-width:460px;width:100%;background:var(--panel-solid)">
+    <h2 id="usbAvisoTit"><svg class="ic" aria-hidden="true"><use href="#i-usb"/></svg>Memoria USB conectada</h2>
+    <p id="usbAvisoTxt" style="margin-bottom:14px"></p>
+    <div class="actions">
+      <button class="primary" onclick="usbUsarParaTimelapse()"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span>Guardar el próximo timelapse aquí</span></button>
+      <div class="field" style="margin:0"><select id="usbCopiarSel" aria-label="Timelapse a copiar"></select></div>
+      <button onclick="usbCopiarElegido()"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg><span>Copiar ese timelapse a la memoria</span></button>
+      <button onclick="cerrarUsbAviso()">Nada por ahora</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1209,6 +1305,11 @@ async function iniciar(){
     contar:document.getElementById('tlCnt').checked,
     contar_cada:+document.getElementById('tlCntCada').value,
     contar_overlay:document.getElementById('tlCntOverlay').checked};
+  const dest=document.getElementById('tlDestino').value;
+  body.destino=dest==='local'?'local':'usb';
+  body.usb_punto=dest==='local'?'':dest;
+  body.enviar_pc=document.getElementById('tlEnviar').checked;
+  body.respaldar_nas=document.getElementById('tlNas').checked;
   const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   if(d.error){toast(d.error);return;}
@@ -1348,6 +1449,159 @@ async function borrarPerfil(){
   cargarListaPerfiles();
 }
 cargarListaPerfiles();
+
+// ===== Memoria USB, envio a la computadora y respaldo en NAS =====
+// Misma logica que en index.html; solo cambia el marcado.
+const $v=id=>document.getElementById(id);
+const gb=b=>b==null?'?':(b/1e9).toFixed(1)+' GB';
+let usbEventoVisto=null,usbUltimo=null,usbMontadas=[],envCargado=false,envNombre=null,nasCargado=false;
+async function pollUsb(){
+  try{
+    const u=await (await fetch('/api/usb/estado')).json();
+    const sel=$v('tlDestino'),previo=sel.value;
+    const montadas=(u.dispositivos||[]).filter(d=>d.montado);
+    // La etiqueta la pone quien formateo la memoria: siempre escapada.
+    sel.innerHTML='<option value="local">Raspberry (tarjeta interna)</option>'+
+      montadas.filter(d=>d.escribible).map(d=>`<option value="${esc(d.punto)}">USB «${esc(d.etiqueta??'')}» (${gb(d.libre_bytes)} libres)</option>`).join('');
+    usbMontadas=montadas;
+    if([...sel.options].some(o=>o.value===previo))sel.value=previo;
+    $v('usbMini').textContent=montadas.length?montadas.length+' conectada'+(montadas.length>1?'s':''):'—';
+    $v('usbLista').innerHTML=montadas.length?montadas.map((d,i)=>
+      `<div class="stat"><span class="k">«${esc(d.etiqueta??'')}» · ${gb(d.libre_bytes)} libres de ${gb(d.total_bytes)}</span>
+       <button style="min-height:32px;padding:4px 10px" onclick="usbExpulsar(${i})"><svg class="ic" aria-hidden="true"><use href="#i-eject"/></svg>Expulsar</button></div>`).join(''):'Sin memorias conectadas';
+    const c=u.copia||{},cd=$v('usbCopia');
+    if(c.activa||c.error||c.total){cd.style.display='block';
+      cd.textContent=c.error?('Copia con error: '+c.error):(c.activa?`Copiando ${c.copiados}/${c.total} archivos…`:`Copia terminada (${c.total} archivos)`);}
+    const ue=$v('usbError');ue.style.display=u.error?'block':'none';ue.textContent=u.error||'';
+    if(usbEventoVisto===null)usbEventoVisto=u.evento;          // no avisar por lo que ya estaba al abrir la pagina
+    else if(u.evento!==usbEventoVisto&&u.ultimo_nuevo&&u.ultimo_nuevo.punto){
+      usbEventoVisto=u.evento;usbUltimo=u.ultimo_nuevo;mostrarUsbAviso();}
+  }catch(e){}
+  try{
+    const e=await (await fetch('/api/envio/estado')).json();
+    if(!envCargado){$v('envUrl').value=e.url||'';envNombre=e.nombre_pc||null;
+      $v('tlEnviar').checked=!!e.activo;envCargado=true;}
+    $v('envMini').textContent=e.url?(e.nombre_pc||'configurada'):'—';
+    $v('envPend').textContent=e.pendientes??'—';
+    $v('envOk').textContent=(e.enviados??0)+(e.ya_estaban?` (+${e.ya_estaban} ya estaban)`:'');
+    $v('envErr').textContent=e.ultimo_error||'—';
+  }catch(e){}
+}
+async function mostrarUsbAviso(){
+  const d=usbUltimo;
+  $v('usbAvisoTxt').textContent=`Se conectó la memoria «${d.etiqueta??''}» con ${gb(d.libre_bytes)} libres. ¿Qué quieres hacer?`;
+  try{
+    const f=await (await fetch('/files/list')).json();
+    $v('usbCopiarSel').innerHTML=(f.timelapses||[]).map(t=>
+      `<option value="${esc(t.folder)}">${esc(t.folder)} · ${t.n_files} archivos · ${gb(t.size_bytes)}</option>`).join('')||'<option value="">(no hay timelapses guardados)</option>';
+  }catch(e){}
+  $v('usbAviso').hidden=false;
+}
+function cerrarUsbAviso(){$v('usbAviso').hidden=true;}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarUsbAviso();});
+function usbUsarParaTimelapse(){
+  $v('tlDestino').value=usbUltimo.punto;cerrarUsbAviso();
+  toast('El próximo timelapse se guardará en la memoria USB');
+}
+async function usbCopiarElegido(){
+  const carpeta=$v('usbCopiarSel').value;
+  if(!carpeta){toast('No hay timelapses para copiar');return;}
+  const d=await (await fetch('/api/usb/copiar',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({carpeta,punto:usbUltimo.punto})})).json();
+  if(d.error){toast(d.error);return;}
+  cerrarUsbAviso();toast(`Copiando ${d.archivos} archivos…`);
+}
+async function usbExpulsar(i){
+  const punto=(usbMontadas[i]||{}).punto;if(!punto)return;
+  const d=await (await fetch('/api/usb/expulsar',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({punto})})).json();
+  toast(d.error||d.mensaje);pollUsb();
+}
+function botonBuscar(id,buscando,texto){
+  const b=$v(id);b.disabled=buscando;b.querySelector('.lbl').textContent=texto;
+}
+async function buscarPcs(){
+  const L=$v('envLista');botonBuscar('envBuscar',true,'Buscando…');L.innerHTML='';
+  try{
+    const d=await (await fetch('/api/envio/buscar',{method:'POST'})).json();
+    const pcs=d.pcs||[];
+    L.innerHTML=pcs.length?pcs.map((p,i)=>`<button data-i="${i}" style="justify-content:flex-start;text-align:left"><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><span><b>${esc(p.nombre)}</b> · ${esc(p.ip)}${p.gpu?' · '+esc(p.gpu):''}</span></button>`).join('')
+      :'<p class="hint">No se encontró ninguna. Revisa que en la PC esté iniciada la recepción y que las dos estén en la misma red; si no, escribe la dirección que muestra la PC.</p>';
+    L.querySelectorAll('button').forEach(x=>x.onclick=()=>{
+      const p=pcs[+x.dataset.i];$v('envUrl').value=p.url;envNombre=p.nombre;
+      L.querySelectorAll('button').forEach(y=>y.classList.toggle('active',y===x));
+      $v('envToken').focus();toast('Escribe el código que muestra '+p.nombre);});
+  }catch(e){toast('Error al buscar: '+e);}
+  finally{botonBuscar('envBuscar',false,'Buscar computadoras en la red');}
+}
+// si se escribe la direccion a mano, ya no es "la PC que se eligio de la lista"
+$v('envUrl').addEventListener('input',()=>{envNombre='';});
+async function guardarEnvio(){
+  const body={url:$v('envUrl').value,activo:$v('tlEnviar').checked};
+  if(envNombre!==null)body.nombre_pc=envNombre;
+  const tok=$v('envToken').value;if(tok)body.token=tok;
+  const d=await (await fetch('/api/envio/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  $v('envUrl').value=d.url||'';toast('Configuración guardada');
+}
+async function probarEnvio(){
+  await guardarEnvio();
+  const d=await (await fetch('/api/envio/probar',{method:'POST'})).json();
+  toast(d.ok?'Conexión con la PC correcta':('Sin conexión: '+(d.error||'?')));
+}
+function nasModoCambio(){const c=$v('nasModo').value==='carpeta';$v('nasSmb').style.display=c?'none':'block';$v('nasCarpeta').style.display=c?'block':'none';}
+async function pollNas(){
+  try{
+    const n=await (await fetch('/api/nas/estado')).json();
+    if(n.error)return;
+    if(!nasCargado){nasCargado=true;
+      $v('nasModo').value=n.modo||'smb';$v('nasServidor').value=n.servidor||'';$v('nasRecurso').value=n.recurso||'';
+      $v('nasUsuario').value=n.usuario||'';$v('nasRuta').value=n.ruta_local||'';$v('nasSub').value=n.subcarpeta??'microscopio';
+      $v('tlNas').checked=!!n.activo;nasModoCambio();}
+    $v('nasMini').textContent=n.activo?'activo':'—';
+    $v('nasPend').textContent=n.pendientes+(n.esperando_pc?' (esperando a la PC)':'');
+    $v('nasOk').textContent=(n.enviados??0)+(n.ya_estaban?` (+${n.ya_estaban} ya estaban)`:'');
+    $v('nasErr').textContent=n.ultimo_error||'—';
+  }catch(e){}
+}
+async function buscarNas(){
+  const L=$v('nasLista');botonBuscar('nasBuscar',true,'Buscando… (unos segundos)');L.innerHTML='';
+  try{
+    const d=await (await fetch('/api/nas/buscar',{method:'POST'})).json();
+    const eq=d.equipos||[];
+    L.innerHTML=eq.length?eq.map((x,i)=>`<button data-i="${i}" style="justify-content:flex-start;text-align:left"><svg class="ic" aria-hidden="true"><use href="#i-server"/></svg><span><b>${esc(x.nombre)}</b> · ${esc(x.ip)}${x.anunciado?' · servidor de archivos':''}</span></button>`).join('')
+      :'<p class="hint">No se encontró ningún equipo con carpetas compartidas. Revisa que el NAS esté encendido y en la misma red, o escribe su IP.</p>';
+    L.querySelectorAll('button').forEach(x=>x.onclick=()=>{const e=eq[+x.dataset.i];
+      $v('nasModo').value='smb';nasModoCambio();$v('nasServidor').value=e.ip;
+      L.querySelectorAll('button').forEach(y=>y.classList.toggle('active',y===x));
+      $v('nasRecurso').focus();toast('Escribe la carpeta compartida, usuario y contraseña del NAS');});
+  }catch(e){toast('Error al buscar: '+e);}
+  finally{botonBuscar('nasBuscar',false,'Buscar NAS en la red');}
+}
+async function guardarNas(){
+  const body={modo:$v('nasModo').value,servidor:$v('nasServidor').value,recurso:$v('nasRecurso').value,
+    usuario:$v('nasUsuario').value,subcarpeta:$v('nasSub').value,ruta_local:$v('nasRuta').value,activo:$v('tlNas').checked};
+  if($v('nasContrasena').value)body.contrasena=$v('nasContrasena').value;
+  await fetch('/api/nas/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  $v('nasContrasena').value='';toast('Configuración del NAS guardada');
+}
+async function probarNas(){
+  await guardarNas();
+  const d=await (await fetch('/api/nas/probar',{method:'POST'})).json();
+  toast(d.ok?('El NAS acepta archivos: '+d.destino):('No se pudo escribir: '+(d.error||'?')));
+}
+// --- color de los patrones DPC (vivo, capturas, timelapse y autofoco) ---
+async function cargarColorDpc(){
+  try{const d=await (await fetch('/light/color_dpc')).json();if(d.color)$v('colorDpc').value=d.color;}catch(e){}
+}
+async function cambiarColorDpc(){
+  const color=$v('colorDpc').value;
+  const d=await (await fetch('/light/color_dpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({color})})).json();
+  if(d.error){toast(d.error);cargarColorDpc();return;}
+  toast('DPC en '+$v('colorDpc').selectedOptions[0].text.replace(' (recomendado)','').toLowerCase());
+}
+cargarColorDpc();
+setInterval(pollNas,2000);pollNas();
+setInterval(pollUsb,2000);pollUsb();
 
 setInterval(poll,2000);poll();refrescarAmbas();
 setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();
