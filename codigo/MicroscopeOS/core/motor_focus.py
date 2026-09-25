@@ -100,6 +100,7 @@ except ImportError:  # permite importar el modulo para pruebas sin hardware
 # =============================
 REG_GCONF = 0x00
 REG_IHOLD_IRUN = 0x10
+REG_TPOWERDOWN = 0x11
 REG_CHOPCONF = 0x6C
 REG_DRV_STATUS = 0x6F
 
@@ -262,8 +263,21 @@ class FocusMotorController:
     def __init__(self, step_pin=21, dir_pin=20, en_pin=16,
                  uart_port="/dev/ttyAMA0", uart_address=0, rsense=0.11,
                  max_current_ma=550, microsteps=16, bus=None, nombre=None,
-                 verificar=True):
+                 verificar=True, retener=True, ihold_ma=150):
         """
+        retener: si es True (por defecto), al terminar un movimiento el
+          driver queda HABILITADO y baja solo a la corriente de reposo
+          IHOLD. Si se deshabilita (EN en HIGH) el rotor queda sin
+          corriente y cae al paso completo mas cercano: con el husillo
+          T6x1 un paso completo son 5 um, asi que el foco puede saltar
+          hasta ~2.5 um, casi toda la profundidad de campo del 20x.
+          False recupera el comportamiento anterior (motor suelto).
+        ihold_ma: corriente de reposo en mA. Tiene que vencer el par de
+          retencion magnetica (detent) del NEMA11 para que el rotor se
+          quede en el micropaso pedido; demasiado alta calienta el motor
+          dentro de la incubadora y el calor tambien desenfoca. 150 mA es
+          un punto de partida (~0.3 W en las bobinas); ver
+          probar_retencion() para ajustarlo.
         max_current_ma: tope duro de IRUN en mA RMS. El motor
           (28HB30-401A) esta especificado a 0.6A/fase = 600mA; se deja el
           tope en 550 (no en 600) a proposito, con margen. Subir esto solo
@@ -288,6 +302,8 @@ class FocusMotorController:
         self.en_pin = en_pin
         self.rsense = rsense
         self.max_current_ma = max_current_ma
+        self.retener = retener
+        self.ihold_objetivo_ma = ihold_ma
         self.nombre = nombre or f"motor@{uart_address}"
         self.irun_ma_real = 0
         self.ihold_ma_real = 0
@@ -357,6 +373,10 @@ class FocusMotorController:
 
         # Corriente de arranque deliberadamente baja -- ver test_motor_enfoque.py
         self.set_current(irun_ma=min(300, self.max_current_ma))
+        # TPOWERDOWN: tiempo sin pulsos STEP antes de bajar de IRUN a
+        # IHOLD, en unidades de 2^18 ciclos de reloj (~22 ms a 12 MHz).
+        # 20 -> ~0.44 s, el valor tipico del datasheet.
+        self._uart.write(REG_TPOWERDOWN, 20)
 
         if verificar:
             # Releer GCONF cierra el lazo: confirma que hay un chip en
@@ -398,12 +418,16 @@ class FocusMotorController:
         return microsteps
 
     def set_current(self, irun_ma, ihold_ma=None, iholddelay=4):
-        """Fija IRUN (corriente moviendose) e IHOLD (corriente en reposo,
-        por defecto un tercio de IRUN) via UART. Ambos quedan topados por
-        max_current_ma pase lo que pase."""
+        """Fija IRUN (corriente moviendose) e IHOLD (corriente en reposo)
+        via UART. Si no se pasa ihold_ma se usa la de retencion configurada
+        en el constructor (o un tercio de IRUN si no hay). Ambas quedan
+        topadas por max_current_ma, e IHOLD nunca supera a IRUN."""
         irun_ma = max(0, min(irun_ma, self.max_current_ma))
         if ihold_ma is None:
-            ihold_ma = irun_ma // 3
+            ihold_ma = getattr(self, "ihold_objetivo_ma", None)
+            if ihold_ma is None:
+                ihold_ma = irun_ma // 3
+        ihold_ma = min(ihold_ma, irun_ma)
         ihold_ma = max(0, min(ihold_ma, self.max_current_ma))
 
         cs_irun = _corriente_a_cs(irun_ma / 1000, self.rsense)
@@ -472,6 +496,42 @@ class FocusMotorController:
     def disable(self):
         GPIO.output(self.en_pin, GPIO.HIGH)
 
+    def reposo(self):
+        """Lo que hay que llamar al terminar un movimiento.
+
+        Con retener=True deja el driver habilitado: tras TPOWERDOWN el
+        TMC2209 baja solo a IHOLD y el rotor se queda en el micropaso
+        donde termino, en vez de caer al paso completo mas cercano.
+        Con retener=False deshabilita, como antes. disable() queda para
+        apagar de verdad (close(), emergencias).
+        """
+        if not self.retener:
+            self.disable()
+        elif not self.is_enabled():
+            self.enable()
+
+    def probar_retencion(self, medir, espera=5.0):
+        """Comprueba si IHOLD alcanza para que el foco no se mueva.
+
+        medir: funcion sin argumentos que devuelve el corrimiento DPC en
+          pixeles (p. ej. lambda: af.medir_par(cam, repeticiones=3)["delta_px"]).
+        Mide justo al terminar un movimiento (todavia con IRUN) y despues
+        de `espera` segundos (ya en IHOLD). Si la diferencia es mayor que
+        el ruido de la medicion, el rotor se esta corriendo al bajar la
+        corriente: subir ihold_ma.
+        """
+        with self._lock:
+            self.enable()
+            # ida y vuelta de medio paso completo, terminando en sentido +
+            # (el mismo lado del juego que usa mover_a con backlash)
+            self.move_steps(self.microsteps // 2, direction=-1)
+            self.move_steps(self.microsteps // 2, direction=1)
+        antes = medir()
+        time.sleep(espera)
+        despues = medir()
+        return {"antes_px": antes, "despues_px": despues,
+                "diferencia_px": despues - antes, "ihold_ma": self.ihold_ma_real}
+
     def is_enabled(self):
         return GPIO.input(self.en_pin) == GPIO.LOW
 
@@ -511,7 +571,7 @@ class FocusMotorController:
                 return self.move_steps(pasos, direction=direction, delay=delay)
             finally:
                 if not mantener:
-                    self.disable()
+                    self.reposo()
 
     def mover_a(self, posicion, delay=0.003, backlash=0, mantener=False):
         """Va a una posicion (en la escala relativa de self.position).
@@ -541,7 +601,7 @@ class FocusMotorController:
                                     delay=delay)
             finally:
                 if not mantener:
-                    self.disable()
+                    self.reposo()
             return self.position
 
     # =============================
@@ -576,7 +636,7 @@ class FocusMotorController:
                     self.move_steps(self._JOG_CHUNK, direction=direction,
                                     delay=delay)
         finally:
-            self.disable()
+            self.reposo()
 
     def jog_activo(self):
         t = self._jog_thread
