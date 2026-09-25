@@ -328,6 +328,10 @@
         <input type="checkbox" id="tlEnviar" style="width:auto">
         <label for="tlEnviar" style="margin:0;text-transform:none;letter-spacing:0">Enviar cada imagen a la computadora (segmentación en vivo)</label>
       </div>
+      <div class="field" style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="tlNas" style="width:auto">
+        <label for="tlNas" style="margin:0;text-transform:none;letter-spacing:0">Respaldar cada imagen en el NAS</label>
+      </div>
       <div class="actions">
         <button class="primary" id="start" onclick="iniciar()">▶ Iniciar Timelapse</button>
         <button class="danger" id="stop" onclick="detener()" disabled>■ STOP de emergencia</button>
@@ -352,6 +356,35 @@
       <div class="stat" style="margin-top:10px"><span class="k">Pendientes</span><span class="v" id="envPend">—</span></div>
       <div class="stat"><span class="k">Enviadas</span><span class="v" id="envOk">—</span></div>
       <div class="stat"><span class="k">Último error</span><span class="v" id="envErr" style="font-size:10px">—</span></div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Respaldo en NAS</h2>
+      <button onclick="buscarNas()" id="nasBuscar" style="width:100%">🔍 Buscar NAS en la red</button>
+      <div id="nasLista" style="display:flex;flex-direction:column;gap:6px;margin:10px 0"></div>
+      <div class="field"><label>Tipo</label>
+        <select id="nasModo" onchange="nasModoCambio()">
+          <option value="smb">Carpeta compartida del NAS (SMB)</option>
+          <option value="carpeta">Carpeta ya montada en la Pi (NFS/CIFS)</option>
+        </select></div>
+      <div id="nasSmb">
+        <div class="row">
+          <div class="field"><label>Servidor (IP o nombre)</label><input type="text" id="nasServidor" placeholder="192.168.1.20"></div>
+          <div class="field"><label>Carpeta compartida</label><input type="text" id="nasRecurso" placeholder="respaldo"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Usuario del NAS</label><input type="text" id="nasUsuario" autocomplete="off"></div>
+          <div class="field"><label>Contraseña</label><input type="password" id="nasContrasena" autocomplete="new-password" placeholder="(sin cambios)"></div>
+        </div>
+      </div>
+      <div class="field" id="nasCarpeta" style="display:none"><label>Ruta montada en la Pi</label><input type="text" id="nasRuta" placeholder="/mnt/nas"></div>
+      <div class="field"><label>Subcarpeta dentro del NAS</label><input type="text" id="nasSub" value="microscopio"></div>
+      <div class="row">
+        <button onclick="guardarNas()">Guardar</button>
+        <button onclick="probarNas()">Probar escritura</button>
+      </div>
+      <div class="stat" style="margin-top:10px"><span class="k">Pendientes</span><span class="v" id="nasPend">—</span></div>
+      <div class="stat"><span class="k">Respaldadas</span><span class="v" id="nasOk">—</span></div>
+      <div class="stat"><span class="k">Último error</span><span class="v" id="nasErr" style="font-size:10px">—</span></div>
     </div>
     <div class="panel" style="margin-bottom:18px">
       <h2>Temperatura</h2>
@@ -849,6 +882,7 @@ async function iniciar(){
   body.destino=dest==='local'?'local':'usb';
   body.usb_punto=dest==='local'?'':dest;
   body.enviar_pc=document.getElementById('tlEnviar').checked;
+  body.respaldar_nas=document.getElementById('tlNas').checked;
   const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   if(d.error){toast(d.error);return;}
@@ -978,6 +1012,50 @@ async function probarEnvio(){
   const d=await (await fetch('/api/envio/probar',{method:'POST'})).json();
   toast(d.ok?'Conexión con la PC correcta':('Sin conexión: '+(d.error||'?')));
 }
+// --- Respaldo en NAS ---
+let nasCargado=false;
+const $v=id=>document.getElementById(id);
+function nasModoCambio(){const c=$v('nasModo').value==='carpeta';$v('nasSmb').style.display=c?'none':'block';$v('nasCarpeta').style.display=c?'block':'none';}
+async function pollNas(){
+  try{
+    const n=await (await fetch('/api/nas/estado')).json();
+    if(n.error)return;
+    if(!nasCargado){nasCargado=true;
+      $v('nasModo').value=n.modo||'smb';$v('nasServidor').value=n.servidor||'';$v('nasRecurso').value=n.recurso||'';
+      $v('nasUsuario').value=n.usuario||'';$v('nasRuta').value=n.ruta_local||'';$v('nasSub').value=n.subcarpeta??'microscopio';
+      $v('tlNas').checked=!!n.activo;nasModoCambio();}
+    $v('nasPend').textContent=n.pendientes+(n.esperando_pc?' (esperando a la PC)':'');
+    $v('nasOk').textContent=(n.enviados??0)+(n.ya_estaban?` (+${n.ya_estaban} ya estaban)`:'');
+    $v('nasErr').textContent=n.ultimo_error||'—';
+  }catch(e){}
+}
+async function buscarNas(){
+  const b=$v('nasBuscar'),L=$v('nasLista');b.disabled=true;b.textContent='Buscando… (unos segundos)';L.innerHTML='';
+  try{
+    const d=await (await fetch('/api/nas/buscar',{method:'POST'})).json();
+    const eq=d.equipos||[];
+    L.innerHTML=eq.length?eq.map((x,i)=>`<button data-i="${i}" style="text-align:left">🗄 <b>${esc(x.nombre)}</b> · ${esc(x.ip)}${x.anunciado?' · servidor de archivos':''}</button>`).join('')
+      :'<div style="font-size:12px;color:var(--dim)">No se encontró ningún equipo con carpetas compartidas. Revisa que el NAS esté encendido y en la misma red, o escribe su IP.</div>';
+    L.querySelectorAll('button').forEach(x=>x.onclick=()=>{const e=eq[+x.dataset.i];
+      $v('nasModo').value='smb';nasModoCambio();$v('nasServidor').value=e.ip;
+      L.querySelectorAll('button').forEach(y=>y.classList.toggle('active',y===x));
+      $v('nasRecurso').focus();toast('Escribe la carpeta compartida, usuario y contraseña del NAS');});
+  }catch(e){toast('Error al buscar: '+e);}
+  finally{b.disabled=false;b.textContent='🔍 Buscar NAS en la red';}
+}
+async function guardarNas(){
+  const body={modo:$v('nasModo').value,servidor:$v('nasServidor').value,recurso:$v('nasRecurso').value,
+    usuario:$v('nasUsuario').value,subcarpeta:$v('nasSub').value,ruta_local:$v('nasRuta').value,activo:$v('tlNas').checked};
+  if($v('nasContrasena').value)body.contrasena=$v('nasContrasena').value;
+  await fetch('/api/nas/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  $v('nasContrasena').value='';toast('Configuración del NAS guardada');
+}
+async function probarNas(){
+  await guardarNas();
+  const d=await (await fetch('/api/nas/probar',{method:'POST'})).json();
+  toast(d.ok?('El NAS acepta archivos: '+d.destino):('No se pudo escribir: '+(d.error||'?')));
+}
+setInterval(pollNas,2000);pollNas();
 setInterval(pollUsb,2000);pollUsb();
 setInterval(poll,2000);poll();refrescarAmbas();
 setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();

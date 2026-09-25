@@ -127,6 +127,9 @@ class TimelapseReq(BaseModel):
     usb_punto: str = ""
     # Mandar cada imagen a la PC que segmenta en vivo (core/envio.py).
     enviar_pc: bool = False
+    # Copia de respaldo de cada imagen en el NAS (core/respaldo_nas.py),
+    # en paralelo con el envio a la PC.
+    respaldar_nas: bool = False
 
 
 class UsbAccionReq(BaseModel):
@@ -141,6 +144,16 @@ class EnvioConfigReq(BaseModel):
     token: str | None = None
     activo: bool | None = None
     nombre_pc: str | None = None
+
+class NasConfigReq(BaseModel):
+    modo: str | None = None           # smb | carpeta
+    servidor: str | None = None
+    recurso: str | None = None        # carpeta compartida del NAS
+    subcarpeta: str | None = None
+    usuario: str | None = None
+    contrasena: str | None = None     # vacia = conservar la guardada
+    ruta_local: str | None = None     # modo carpeta
+    activo: bool | None = None
 
 class EnvioReenviarReq(BaseModel):
     carpeta: str              # timelapse_... local, o ruta dentro de una USB detectada
@@ -261,7 +274,7 @@ class CalibrarDpcReq(BaseModel):
 
 def create_app(camera, illuminations, timelapse, motores=None,
                autofocus=None, motor=None, conteo=None, usb=None,
-               enviador=None):
+               enviador=None, respaldo_nas=None):
     """motores: {numero_de_camara: FocusMotorController}. `motor` se
     acepta todavia como un solo eje suelto (compatibilidad con la
     version de un motor) y se mapea a la camara 0.
@@ -523,6 +536,8 @@ def create_app(camera, illuminations, timelapse, motores=None,
         if req.enviar_pc and (enviador is None or not enviador.url):
             return {"error": "Falta configurar la direccion de la PC "
                     "(panel 'Envío a computadora')"}
+        if req.respaldar_nas and (respaldo_nas is None or not respaldo_nas.configurado()):
+            return {"error": "Falta configurar el NAS (panel 'Respaldo en NAS')"}
         timelapse.start(
             modo=req.modo,
             interval_seconds=req.interval,
@@ -540,10 +555,11 @@ def create_app(camera, illuminations, timelapse, motores=None,
             carpeta_raiz=carpeta_raiz,
             enviar_pc=req.enviar_pc,
             nombre=req.nombre,
+            respaldar_nas=req.respaldar_nas,
         )
         return {"status": "started", "autofocus": req.autofocus,
                 "contar": req.contar, "destino": carpeta_raiz or "local",
-                "enviar_pc": req.enviar_pc}
+                "enviar_pc": req.enviar_pc, "respaldar_nas": req.respaldar_nas}
 
     @app.post("/timelapse/stop")
     def stop_timelapse():
@@ -974,6 +990,48 @@ def create_app(camera, illuminations, timelapse, motores=None,
         if not carpeta.is_dir():
             return {"error": f"No existe {req.carpeta}"}
         return enviador.reenviar_carpeta(carpeta)
+
+    # ===============================
+    # Respaldo en NAS (core/respaldo_nas.py)
+    # ===============================
+    @app.get("/api/nas/estado")
+    def nas_estado():
+        if respaldo_nas is None:
+            return {"error": "respaldo en NAS no disponible"}
+        return respaldo_nas.estado()
+
+    @app.post("/api/nas/config")
+    def nas_config(req: NasConfigReq):
+        if respaldo_nas is None:
+            return {"error": "respaldo en NAS no disponible"}
+        return respaldo_nas.configurar(**req.model_dump())
+
+    @app.post("/api/nas/buscar")
+    def nas_buscar():
+        """Equipos de la red con carpetas compartidas (SMB)."""
+        from core.respaldo_nas import buscar_nas
+        try:
+            return {"equipos": buscar_nas()}
+        except Exception as e:
+            return {"equipos": [], "error": str(e)}
+
+    @app.post("/api/nas/probar")
+    def nas_probar():
+        if respaldo_nas is None:
+            return {"ok": False, "error": "respaldo en NAS no disponible"}
+        return respaldo_nas.probar()
+
+    @app.post("/api/nas/reenviar")
+    def nas_reenviar(req: EnvioReenviarReq):
+        """Respalda un timelapse completo; lo que ya esta en el NAS se saltea."""
+        if respaldo_nas is None:
+            return {"error": "respaldo en NAS no disponible"}
+        if not _FOLDER_RE.match(req.carpeta):
+            return {"error": "Carpeta invalida"}
+        carpeta = (BASE_DIR / req.carpeta).resolve()
+        if carpeta.parent != BASE_DIR.resolve() or not carpeta.is_dir():
+            return {"error": f"No existe {req.carpeta}"}
+        return respaldo_nas.reenviar_carpeta(carpeta)
 
     # ===============================
     # Galeria / descarga (solo lectura sobre lo ya guardado en disco)

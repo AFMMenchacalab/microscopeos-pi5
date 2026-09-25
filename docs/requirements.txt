@@ -22,6 +22,9 @@ tifffile==2026.1.28
 typing_extensions==4.15.0
 typing_inspection==0.4.2
 uvicorn==0.40.0
+# Respaldo en NAS por SMB (core/respaldo_nas.py). Sin esto, el modo
+# "carpeta montada" sigue funcionando.
+smbprotocol>=1.15
 
 # [PI5] PyQt6 SIN version fijada. PyQt6 6.10.2 no tiene garantia de wheel
 # aarch64 para el Python de Bookworm/Trixie, y compilarlo en la Pi tarda

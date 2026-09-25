@@ -10,6 +10,7 @@ from core.autofocus_ia import AutofocoIA
 from core.analisis import Contador, ContadorEnVivo
 from core.usb import MonitorUSB
 from core.envio import EnviadorPC
+from core.respaldo_nas import RespaldoNAS
 from server.api import create_app
 import uvicorn
 
@@ -76,12 +77,15 @@ conteo = ContadorEnVivo(contador, periodo=0.6)
 # si fallan, el microscopio sigue funcionando como antes.
 usb = MonitorUSB()
 enviador = EnviadorPC()
+# Respaldo en el NAS: cola propia, en paralelo; cede el turno a la PC.
+respaldo_nas = RespaldoNAS(ceder_a=enviador)
 
 timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus,
-                             contador=contador, enviador=enviador)
+                             contador=contador, enviador=enviador,
+                             respaldo_nas=respaldo_nas)
 
 app = create_app(camera, illuminations, timelapse,
                  motores=motores, autofocus=autofocus, conteo=conteo,
-                 usb=usb, enviador=enviador)
+                 usb=usb, enviador=enviador, respaldo_nas=respaldo_nas)
 print("Servidor en http://0.0.0.0:8000")
 uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

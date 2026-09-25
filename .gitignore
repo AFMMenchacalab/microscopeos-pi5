@@ -8,3 +8,5 @@ venv/
 
 # Configuracion de envio a la PC: contiene la clave compartida
 profiles/envio_pc.json
+# Configuracion del NAS: contiene usuario y contraseña
+profiles/respaldo_nas.json

@@ -1,4 +1,4 @@
-# Memoria USB y envío de imágenes a la computadora
+# Memoria USB, envío a la computadora y respaldo en NAS
 
 Dos funciones nuevas de la interfaz web (`/`):
 
@@ -17,6 +17,33 @@ una copia. Si se corta la red o la PC está apagada, las imágenes quedan en
 cola y se mandan solas al reconectar, sin frenar el timelapse.
 
 ---
+
+## Respaldo en NAS
+
+Además de mandarlas a la PC, cada imagen se puede **respaldar en un NAS al
+mismo tiempo** (casilla *Respaldar cada imagen en el NAS* del timelapse).
+
+- **Van en paralelo:** el NAS tiene su propia cola; un NAS lento o apagado
+  nunca frena el envío a la PC.
+- **Preferencia a la PC:** si la PC está recibiendo bien y tiene imágenes
+  esperando, el respaldo espera su turno para no competir por la red. Si la
+  PC está caída, el respaldo avanza igual. Nada se pierde, solo se demora.
+- **Cómo se conecta:** panel *Respaldo en NAS* → *Buscar NAS en la red*
+  (encuentra los equipos que comparten carpetas, por mDNS y por el puerto
+  445) → elegir el NAS → escribir la **carpeta compartida**, el **usuario** y
+  la **contraseña** del NAS → *Probar escritura*.
+- **Dos modos:** *carpeta compartida (SMB)*, que es lo que ofrecen Synology,
+  QNAP, TrueNAS o Windows, sin montar nada ni usar sudo; o *carpeta ya
+  montada en la Pi* (por ejemplo NFS en `/etc/fstab`).
+- En el NAS queda `<carpeta>/<subcarpeta>/timelapse_<fecha>/cam0/…`. Cada
+  archivo se escribe con nombre temporal y se renombra al final; lo que ya
+  está con el mismo tamaño no se vuelve a copiar
+  (`POST /api/nas/reenviar` completa un timelapse entero).
+- La contraseña queda en `profiles/respaldo_nas.json` (permisos 600, fuera
+  de git). Conviene crear en el NAS un usuario solo para esto, con permiso
+  de escritura en una sola carpeta.
+- Requiere `pip install smbprotocol` en el venv de la Pi (ya está en
+  `docs/requirements.txt`).
 
 ## Instalación en la Raspberry Pi (una sola vez)
 
@@ -111,3 +138,8 @@ venv/bin/python scripts/32_segmentar_en_vivo.py
 - Probado en la PC con un timelapse simulado (cámara falsa), con un corte de
   red a mitad del experimento y con una memoria USB simulada. Falta probarlo
   en la Pi con la cámara real y una memoria física.
+- Respaldo en NAS: probada la lógica completa (envío simultáneo a PC y NAS,
+  preferencia a la PC, PC caída, reenvío sin duplicados, carpeta montada) y
+  las llamadas SMB con un sustituto local. **Falta probar contra un NAS
+  real**; la conexión SMB la hace la biblioteca smbprotocol, probada con
+  Samba y Windows.

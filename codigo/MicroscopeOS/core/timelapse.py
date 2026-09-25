@@ -28,7 +28,7 @@ MODOS = {
 class TimelapseManager:
 
     def __init__(self, camera, illuminations, autofocus=None, contador=None,
-                 enviador=None):
+                 enviador=None, respaldo_nas=None):
         self.camera = camera
         self.illuminations = illuminations
         # Instancia de core.autofocus.Autofocus, o None si no hay
@@ -43,6 +43,10 @@ class TimelapseManager:
         # la computadora que segmenta en vivo (ver core/envio.py).
         self.enviador = enviador
         self.enviar_pc = False
+        # core.respaldo_nas.RespaldoNAS, o None: copia de respaldo de cada
+        # imagen en el NAS, en paralelo con el envio a la PC.
+        self.respaldo_nas = respaldo_nas
+        self.respaldar_nas = False
         self.state = TimelapseState.STOPPED
         self.thread = None
         self.base_folder = None
@@ -343,15 +347,17 @@ class TimelapseManager:
         return guardadas
 
     def _enviar(self, ruta, camara=""):
-        """Encola un archivo ya guardado para mandarlo a la PC. Nunca
-        frena ni interrumpe el timelapse: el envio corre en su propio hilo
-        y, si la red falla, reintenta solo."""
-        if self.enviar_pc and self.enviador is not None:
-            try:
-                self.enviador.encolar(ruta, os.path.basename(self.base_folder),
-                                      camara)
-            except Exception as e:
-                self._log(f"  envio: no se pudo encolar {ruta} -> {e}")
+        """Encola un archivo ya guardado para mandarlo a la PC y/o
+        respaldarlo en el NAS. Nunca frena ni interrumpe el timelapse: cada
+        destino corre en su propio hilo y, si la red falla, reintenta solo."""
+        exp = os.path.basename(self.base_folder)
+        for activo, destino, nombre in ((self.enviar_pc, self.enviador, "envio"),
+                                        (self.respaldar_nas, self.respaldo_nas, "nas")):
+            if activo and destino is not None:
+                try:
+                    destino.encolar(ruta, exp, camara)
+                except Exception as e:
+                    self._log(f"  {nombre}: no se pudo encolar {ruta} -> {e}")
 
     def _escribir_metadatos(self, modo, interval_seconds, duration_seconds,
                             camaras, nombre):
@@ -410,7 +416,8 @@ class TimelapseManager:
                   f"autofoco={'cada ' + str(autofocus_cada) + ' ciclo(s)' if autofocus else 'no'} | "
                   f"conteo={'cada ' + str(contar_cada) + ' ciclo(s)' if contar else 'no'} | "
                   f"destino={os.path.abspath(self.base_folder)} | "
-                  f"envio_pc={'si' if self.enviar_pc and self.enviador else 'no'}")
+                  f"envio_pc={'si' if self.enviar_pc and self.enviador else 'no'} | "
+                  f"respaldo_nas={'si' if self.respaldar_nas and self.respaldo_nas else 'no'}")
 
         start_time = time.monotonic()
         next_capture_time = start_time
@@ -478,7 +485,7 @@ class TimelapseManager:
               stabilization_time=0.3, camaras=[0, 1], simultaneo=False,
               autofocus=False, autofocus_cada=1, autofocus_opts=None,
               contar=False, contar_cada=1, contar_opts=None,
-              carpeta_raiz="", enviar_pc=False, nombre=""):
+              carpeta_raiz="", enviar_pc=False, nombre="", respaldar_nas=False):
         """carpeta_raiz: donde crear timelapse_<fecha> ("" = directorio
         de trabajo, o el punto de montaje de una memoria USB).
         enviar_pc: mandar cada imagen a la PC de segmentacion mientras
@@ -491,6 +498,7 @@ class TimelapseManager:
             return
 
         self.enviar_pc = bool(enviar_pc)
+        self.respaldar_nas = bool(respaldar_nas)
         self.thread = threading.Thread(
             target=self._run,
             args=(modo, interval_seconds, duration_seconds,
