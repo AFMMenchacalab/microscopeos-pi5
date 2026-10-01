@@ -1,4 +1,5 @@
 import sys, os
+from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.camera import CameraController
@@ -8,6 +9,9 @@ from core.motor_focus import crear_motores
 from core.autofocus import Autofocus
 from core.autofocus_ia import AutofocoIA
 from core.analisis import Contador, ContadorEnVivo
+from core.usb import MonitorUSB
+from core.envio import EnviadorPC
+from core.respaldo_nas import RespaldoNAS
 from server.api import create_app
 import uvicorn
 
@@ -32,6 +36,17 @@ illuminations = {0: luz_cam0, 1: luz_cam1}
 
 luz_cam0.set_brightness(80)
 luz_cam1.set_brightness(80)
+
+# Color de los patrones DPC: verde por defecto (ver core/illumination.py);
+# se cambia desde la interfaz y queda guardado en profiles/iluminacion.json.
+try:
+    import json as _json
+    _color = _json.loads((Path(__file__).resolve().parent / "profiles" /
+                          "iluminacion.json").read_text()).get("color_dpc", "00FF00")
+except (OSError, ValueError):
+    _color = "00FF00"
+for _l in (luz_cam0, luz_cam1):
+    _l.set_color_dpc(_color)
 
 # Un motor de enfoque por camara, los dos en el mismo bus UART con
 # direcciones distintas (ver el docstring de core/motor_focus.py).
@@ -68,10 +83,21 @@ autofocus = Autofocus(camera, motores, illuminations, ia=ia) if motores else Non
 contador = Contador()
 conteo = ContadorEnVivo(contador, periodo=0.6)
 
+# Memorias USB: detecta al conectarlas y la interfaz ofrece guardar ahi
+# el timelapse. Envio a la PC: cada imagen guardada se manda a la
+# computadora que segmenta en vivo. Ninguno de los dos es obligatorio:
+# si fallan, el microscopio sigue funcionando como antes.
+usb = MonitorUSB()
+enviador = EnviadorPC()
+# Respaldo en el NAS: cola propia, en paralelo; cede el turno a la PC.
+respaldo_nas = RespaldoNAS(ceder_a=enviador)
+
 timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus,
-                             contador=contador)
+                             contador=contador, enviador=enviador,
+                             respaldo_nas=respaldo_nas)
 
 app = create_app(camera, illuminations, timelapse,
-                 motores=motores, autofocus=autofocus, conteo=conteo)
+                 motores=motores, autofocus=autofocus, conteo=conteo,
+                 usb=usb, enviador=enviador, respaldo_nas=respaldo_nas)
 print("Servidor en http://0.0.0.0:8000")
 uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

@@ -515,7 +515,7 @@ class Autofocus:
             }
         finally:
             try:
-                motor.disable()
+                motor.reposo()
             except Exception:
                 pass
             if luz is not None and apagar_luz:
@@ -750,7 +750,7 @@ class Autofocus:
             return resultado
         finally:
             try:
-                motor.disable()
+                motor.reposo()
             except Exception:
                 pass
             if luz is not None and apagar_luz:
@@ -948,7 +948,7 @@ class Autofocus:
             # Si algo falla a mitad del barrido, el driver quedaria
             # habilitado (los movimientos internos usan mantener=True).
             try:
-                motor.disable()
+                motor.reposo()
             except Exception:
                 pass
             if luz is not None and apagar_luz:

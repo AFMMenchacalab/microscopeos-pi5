@@ -22,8 +22,19 @@ La API publica sigue siendo la misma que la version RP2040
 tocar server/api.py, core/timelapse.py ni la interfaz web.
 """
 
+import re
 import serial
 import time
+
+_HEX = re.compile(r"^[0-9A-Fa-f]{6}$")
+
+
+def canales_encendidos(color):
+    """Cuantos de los 3 LEDs (R, G, B) de cada pixel se encienden con ese
+    color. None = blanco (los 3)."""
+    if not color:
+        return 3
+    return max(1, sum(int(color[i:i + 2], 16) > 0 for i in (0, 2, 4)))
 
 # Patrones que acepta el firmware. "FULL" reemplaza al "ON"/"ALL" del RP2040.
 # RING (campo oscuro, agregado en el firmware reescrito 2026-08-31) es un
@@ -64,6 +75,13 @@ class IlluminationController:
         # reenviarlo con los mismos dos colores si esta activo.
         self._rheinberg_colors = ("0000FF", "FF6A00")
         self.current_pattern = "OFF"
+        self.current_color = None
+        # Color de los patrones DPC (LEFT/RIGHT/TOP/BOTTOM) en RRGGBB, o None
+        # = blanco. Verde es lo recomendado: la fase depende de la longitud
+        # de onda y la luz "blanca" de la WS2812B son tres LEDs (R, G, B) con
+        # tres contrastes distintos sumados; el objetivo acromatico esta
+        # mejor corregido en verde y el sensor tiene mas pixeles verdes.
+        self.color_dpc = None
         self.last_error = None
 
         # El baudrate es virtual (USB-CDC nativo lo ignora), pero pyserial
@@ -107,23 +125,31 @@ class IlluminationController:
     # =============================
     # TRANSPORTE
     # =============================
-    def _valor(self):
-        """Brillo actual en la escala 0-255 del firmware, con tope aplicado."""
-        return min(round(self.brightness_percent * 255 / 100), self.max_value)
+    def _valor(self, color=None):
+        """Brillo actual en la escala 0-255 del firmware, con tope aplicado.
 
-    def _enviar(self, patron, valor=None):
-        """Envia 'PATRON:brillo' y devuelve la respuesta cruda de la placa."""
+        El tope max_value protege la corriente del USB con los 3 LEDs de
+        cada pixel encendidos (blanco). Con un solo color se enciende 1/3 de
+        cada pixel, asi que el mismo consumo admite un brillo 3 veces mayor:
+        el tope se escala por los canales encendidos. Asi una imagen en verde
+        sale con una exposicion parecida a la de blanco, sin pasar del
+        consumo que ya se consideraba seguro."""
+        tope = min(255, round(self.max_value * 3 / canales_encendidos(color)))
+        return min(round(self.brightness_percent * 255 / 100), tope)
+
+    def _enviar(self, patron, valor=None, color=None):
+        """Envia 'PATRON:brillo[:RRGGBB]' y devuelve la respuesta cruda."""
         if valor is None:
-            valor = self._valor()
+            valor = self._valor(color)
 
-        linea = f"{patron}:{valor}"
+        linea = f"{patron}:{valor}" + (f":{color.upper()}" if color else "")
         if len(linea) + 1 > MAX_LINEA:
             raise IlluminationError(f"comando demasiado largo: {linea!r}")
 
         self.ser.write((linea + "\n").encode())
         respuesta = self.ser.readline().decode(errors="ignore").strip()
 
-        esperada = f"OK:{patron}:{valor}"
+        esperada = f"OK:{linea}"
         if respuesta != esperada:
             self.last_error = respuesta or "sin respuesta (timeout)"
             if self.strict:
@@ -135,9 +161,10 @@ class IlluminationController:
 
         return respuesta
 
-    def _patron(self, nombre):
-        self._enviar(nombre)
+    def _patron(self, nombre, color=None):
+        self._enviar(nombre, color=color)
         self.current_pattern = nombre
+        self.current_color = color
         self.state = (nombre != "OFF")
 
     # =============================
@@ -165,22 +192,35 @@ class IlluminationController:
         if self.state and self.current_pattern == "RHEINBERG":
             self.rheinberg(*self._rheinberg_colors)
         elif self.state and self.current_pattern != "OFF":
-            self._enviar(self.current_pattern)
+            self._enviar(self.current_pattern, color=self.current_color)
 
     # =============================
     # PATRONES DPC
     # =============================
+    def set_color_dpc(self, color):
+        """Color de los patrones DPC: RRGGBB (ej. "00FF00") o None/"FFFFFF"
+        para blanco. Se usa en el vivo, las capturas, el timelapse y el
+        autofoco (todos llaman a left/right/top/bottom)."""
+        if color and color.upper() != "FFFFFF":
+            if not _HEX.match(color):
+                raise ValueError(f"color invalido: {color!r} (usar RRGGBB)")
+            self.color_dpc = color.upper()
+        else:
+            self.color_dpc = None
+        if self.state and self.current_pattern in ("LEFT", "RIGHT", "TOP", "BOTTOM"):
+            self._patron(self.current_pattern, self.color_dpc)
+
     def left(self):
-        self._patron("LEFT")
+        self._patron("LEFT", self.color_dpc)
 
     def right(self):
-        self._patron("RIGHT")
+        self._patron("RIGHT", self.color_dpc)
 
     def top(self):
-        self._patron("TOP")
+        self._patron("TOP", self.color_dpc)
 
     def bottom(self):
-        self._patron("BOTTOM")
+        self._patron("BOTTOM", self.color_dpc)
 
     # =============================
     # CAMPO OSCURO Y RHEINBERG

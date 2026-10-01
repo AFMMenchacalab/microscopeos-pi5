@@ -1,3 +1,4 @@
+import json
 import time
 import os
 import threading
@@ -26,7 +27,8 @@ MODOS = {
 
 class TimelapseManager:
 
-    def __init__(self, camera, illuminations, autofocus=None, contador=None):
+    def __init__(self, camera, illuminations, autofocus=None, contador=None,
+                 enviador=None, respaldo_nas=None):
         self.camera = camera
         self.illuminations = illuminations
         # Instancia de core.autofocus.Autofocus, o None si no hay
@@ -36,6 +38,15 @@ class TimelapseManager:
         # core.analisis.Contador para contar celulas por ciclo. Tambien
         # opcional: un timelapse sin conteo tiene que seguir andando.
         self.contador = contador
+        # core.envio.EnviadorPC, o None. Si el timelapse se inicia con
+        # enviar_pc=True, cada imagen guardada se encola para mandarla a
+        # la computadora que segmenta en vivo (ver core/envio.py).
+        self.enviador = enviador
+        self.enviar_pc = False
+        # core.respaldo_nas.RespaldoNAS, o None: copia de respaldo de cada
+        # imagen en el NAS, en paralelo con el envio a la PC.
+        self.respaldo_nas = respaldo_nas
+        self.respaldar_nas = False
         self.state = TimelapseState.STOPPED
         self.thread = None
         self.base_folder = None
@@ -337,19 +348,59 @@ class TimelapseManager:
                             pass
         return guardadas
 
+    def _enviar(self, ruta, camara=""):
+        """Encola un archivo ya guardado para mandarlo a la PC y/o
+        respaldarlo en el NAS. Nunca frena ni interrumpe el timelapse: cada
+        destino corre en su propio hilo y, si la red falla, reintenta solo."""
+        exp = os.path.basename(self.base_folder)
+        for activo, destino, nombre in ((self.enviar_pc, self.enviador, "envio"),
+                                        (self.respaldar_nas, self.respaldo_nas, "nas")):
+            if activo and destino is not None:
+                try:
+                    destino.encolar(ruta, exp, camara)
+                except Exception as e:
+                    self._log(f"  {nombre}: no se pudo encolar {ruta} -> {e}")
+
+    def _escribir_metadatos(self, modo, interval_seconds, duration_seconds,
+                            camaras, nombre):
+        """experimento.json: lo que la PC necesita para agrupar las fotos
+        de un mismo ciclo (sufijos del modo) sin adivinar por el nombre."""
+        meta = {
+            "nombre": nombre,
+            "inicio": datetime.now().isoformat(timespec="seconds"),
+            "modo": modo,
+            "sufijos": [s for s, _ in MODOS[modo]],
+            "intervalo_s": interval_seconds,
+            "duracion_s": duration_seconds,
+            "camaras": list(camaras),
+            # color de los patrones DPC (la longitud de onda importa para
+            # reconstruir la fase en la PC); "FFFFFF" = blanco
+            "color_dpc": next((getattr(l, "color_dpc", None) or "FFFFFF"
+                               for l in self.illuminations.values() if l is not None), None),
+        }
+        ruta = os.path.join(self.base_folder, "experimento.json")
+        with open(ruta, "w") as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
+        return ruta
+
     def _run(self, modo, interval_seconds, duration_seconds,
              stabilization_time, camaras, simultaneo,
              autofocus, autofocus_cada, autofocus_opts,
-             contar, contar_cada, contar_opts):
+             contar, contar_cada, contar_opts,
+             carpeta_raiz="", nombre=""):
 
         self.state = TimelapseState.RUNNING
         patrones = MODOS[modo]
 
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.base_folder = f"timelapse_{stamp}"
+        # carpeta_raiz vacia = directorio de trabajo del servicio (lo de
+        # siempre); si no, p. ej. el punto de montaje de una memoria USB.
+        self.base_folder = os.path.join(carpeta_raiz or "", f"timelapse_{stamp}")
         os.makedirs(self.base_folder, exist_ok=True)
         for cam in camaras:
             os.makedirs(os.path.join(self.base_folder, f"cam{cam}"), exist_ok=True)
+        self._enviar(self._escribir_metadatos(modo, interval_seconds,
+                                              duration_seconds, camaras, nombre))
 
         # Crear CSV con cabecera
         csv_path = os.path.join(self.base_folder, "temperatura.csv")
@@ -369,7 +420,10 @@ class TimelapseManager:
                   f"intervalo={interval_seconds}s | duracion={duration_seconds}s | "
                   f"captura={'simultanea' if simultaneo else 'secuencial'} | "
                   f"autofoco={'cada ' + str(autofocus_cada) + ' ciclo(s)' if autofocus else 'no'} | "
-                  f"conteo={'cada ' + str(contar_cada) + ' ciclo(s)' if contar else 'no'}")
+                  f"conteo={'cada ' + str(contar_cada) + ' ciclo(s)' if contar else 'no'} | "
+                  f"destino={os.path.abspath(self.base_folder)} | "
+                  f"envio_pc={'si' if self.enviar_pc and self.enviador else 'no'} | "
+                  f"respaldo_nas={'si' if self.respaldar_nas and self.respaldo_nas else 'no'}")
 
         start_time = time.monotonic()
         next_capture_time = start_time
@@ -404,6 +458,11 @@ class TimelapseManager:
                     guardadas = self._capturar_secuencial(
                         patrones, camaras, ts, stabilization_time)
 
+                for cam, rutas in sorted(guardadas.items()):
+                    for sufijo, _ in patrones:
+                        if sufijo in rutas:
+                            self._enviar(rutas[sufijo], f"cam{cam}")
+
                 if contar and (ciclo - 1) % max(1, contar_cada) == 0:
                     self._contar_ciclo(guardadas, ciclo, ts, contar_opts)
 
@@ -422,12 +481,21 @@ class TimelapseManager:
         self._graficar_temperatura()
         if contar:
             self._resumir_analisis(interval_seconds)
+        for extra in ("temperatura.csv", "autofoco.csv", "conteo.csv"):
+            ruta = os.path.join(self.base_folder, extra)
+            if os.path.exists(ruta):
+                self._enviar(ruta)
         self.state = TimelapseState.STOPPED
 
     def start(self, modo="blanco", interval_seconds=300, duration_seconds=3600,
               stabilization_time=0.3, camaras=[0, 1], simultaneo=False,
               autofocus=False, autofocus_cada=1, autofocus_opts=None,
-              contar=False, contar_cada=1, contar_opts=None):
+              contar=False, contar_cada=1, contar_opts=None,
+              carpeta_raiz="", enviar_pc=False, nombre="", respaldar_nas=False):
+        """carpeta_raiz: donde crear timelapse_<fecha> ("" = directorio
+        de trabajo, o el punto de montaje de una memoria USB).
+        enviar_pc: mandar cada imagen a la PC de segmentacion mientras
+        corre (requiere un EnviadorPC configurado)."""
         if self.state == TimelapseState.RUNNING:
             print("Timelapse ya esta corriendo.")
             return
@@ -435,12 +503,15 @@ class TimelapseManager:
             print(f"Modo invalido: {modo}. Usa uno de: {', '.join(MODOS)}.")
             return
 
+        self.enviar_pc = bool(enviar_pc)
+        self.respaldar_nas = bool(respaldar_nas)
         self.thread = threading.Thread(
             target=self._run,
             args=(modo, interval_seconds, duration_seconds,
                   stabilization_time, camaras, simultaneo,
                   autofocus, autofocus_cada, autofocus_opts or {},
-                  contar, contar_cada, contar_opts or {}),
+                  contar, contar_cada, contar_opts or {},
+                  carpeta_raiz, nombre),
             daemon=True
         )
         self.thread.start()
