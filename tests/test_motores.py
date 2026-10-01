@@ -212,7 +212,10 @@ check("100 micropasos = 100 pulsos de STEP", gpio.pulsos.get(21) == 100)
 check("posicion acumulada +100", motores[0].position == 100)
 motores[0].mover(40, direction=-1, delay=0)
 check("posicion 60 tras volver 40", motores[0].position == 60)
-check("deja el driver deshabilitado", not motores[0].is_enabled())
+# Con retener=True (default) queda habilitado a IHOLD para no perder el
+# micropaso; con retener=False, deshabilitado como antes.
+check("deja el driver en reposo (retenido a IHOLD o deshabilitado)",
+      motores[0].is_enabled() == motores[0].retener)
 check("mover un eje no toca el otro",
       motores[1].position == 0 and gpio.pulsos.get(26) is None)
 
@@ -252,7 +255,8 @@ motores[0].stop_jog()
 parado = gpio.pulsos.get(21, 0)
 time.sleep(0.15)
 check("stop_jog frena de verdad", gpio.pulsos.get(21, 0) == parado)
-check("deshabilita el driver al soltar", not motores[0].is_enabled())
+check("deja el driver en reposo al soltar",
+      motores[0].is_enabled() == motores[0].retener)
 check("la posicion refleja exactamente los pulsos del jog",
       motores[0].position == pos_pre + parado)
 
@@ -294,7 +298,8 @@ for cam in (0, 1):
           motores[cam].position == r["posicion"])
     check(f"cam{cam}: no lo reporta como fuera de rango", not r["fuera_de_rango"])
     check(f"cam{cam}: apaga la luz al terminar", not luces[cam].encendida)
-    check(f"cam{cam}: deja el driver deshabilitado", not motores[cam].is_enabled())
+    check(f"cam{cam}: deja el driver en reposo",
+          motores[cam].is_enabled() == motores[cam].retener)
     check(f"cam{cam}: devuelve la curva de nitidez", len(r["curva"]) == 13)
 
 foco_real[0] = motores[0].position + 9000

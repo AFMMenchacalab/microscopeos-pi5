@@ -25,6 +25,12 @@ import tifffile
 # Resolucion nativa del IMX219.
 STILL_SIZE = (3280, 2464)
 PREVIEW_SIZE = (640, 480)
+# Modo del sensor para el vivo: el IMX219 completo, binneado 2x2. Si no se
+# pide explicitamente, libcamera elige para 640x480 el modo nativo de
+# 640x480, que lee solo un recorte central de ~1280x960 del sensor: el
+# vivo mostraba ~40 % del ancho de la foto, como si tuviera zoom. Con
+# este modo el vivo y las capturas ven el MISMO campo.
+PREVIEW_RAW_SIZE = (1640, 1232)
 
 # TODO-HW: formato raw. En Pi 4 (Unicam) "SBGGR10" devolvia un buffer que
 # .view(np.uint16) interpretaba correctamente. El Pi 5 usa PiSP/CFE y puede
@@ -68,9 +74,11 @@ class CameraController:
 
     def _config(self, picam2, mode):
         if mode == "preview":
-            # Baja resolucion, rapido, para video fluido
+            # Baja resolucion, rapido, para video fluido, pero leyendo el
+            # sensor entero (ver PREVIEW_RAW_SIZE).
             return picam2.create_video_configuration(
-                main={"size": PREVIEW_SIZE, "format": "RGB888"}
+                main={"size": PREVIEW_SIZE, "format": "RGB888"},
+                raw={"size": PREVIEW_RAW_SIZE},
             )
         # (el modo still va mas abajo)
         # Full res, raw, para captura cientifica
@@ -107,6 +115,12 @@ class CameraController:
             # distinto en la imagen de la mitad izquierda que en la de
             # la derecha y contamina la resta del DPC.
             controles.update(self._controles_planos(picam2))
+            # Y sin recorte digital: todo el campo que lee el sensor.
+            maximo = (getattr(picam2, "camera_properties", {}) or {}).get(
+                "ScalerCropMaximum")
+            if maximo and "ScalerCrop" in (
+                    getattr(picam2, "camera_controls", {}) or {}):
+                controles["ScalerCrop"] = tuple(maximo)
         picam2.set_controls(controles)
         self._modes[camera_num] = mode
         # TODO-HW: 0.3 s heredado de Pi 4 para que los controles se apliquen.
