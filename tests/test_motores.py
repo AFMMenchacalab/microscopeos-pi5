@@ -223,8 +223,11 @@ print("\n=== BACKLASH (repetibilidad del autofoco) ===")
 gpio.reset_pulsos()
 motores[0].mover_a(0, delay=0, backlash=64)
 check("llega exacto a la posicion pedida", motores[0].position == 0)
+# La compensacion nunca baja de HOLGURA_MIN_UM: a 16 micropasos son 80,
+# mas que los 64 pedidos.
+holgura = max(64, round(mf.HOLGURA_MIN_UM / mf.UM_POR_PASO_COMPLETO * 16))
 check("al cambiar de sentido sobrepasa y vuelve",
-      gpio.pulsos.get(21) == 60 + 64 + 64, str(gpio.pulsos.get(21)))
+      gpio.pulsos.get(21) == 60 + 2 * holgura, str(gpio.pulsos.get(21)))
 gpio.reset_pulsos()
 motores[0].mover_a(200, delay=0, backlash=64)
 check("no sobrepasa si ya viene del lado bueno", gpio.pulsos.get(21) == 200)

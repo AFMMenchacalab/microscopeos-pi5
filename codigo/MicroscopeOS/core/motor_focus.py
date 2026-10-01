@@ -117,6 +117,16 @@ _RSENSE_EXTRA = 0.02
 _VFS_ALTA_SENSIBILIDAD = 0.180
 
 # MRES (CHOPCONF bits 24-27): resolucion de micropasos -> codigo.
+# Holgura del eje Z: medida el 2026-10-01 en cam0 barriendo la nitidez de
+# campo claro hacia arriba y hacia abajo, el pico cae ~12 um corrido segun
+# el sentido. La compensacion de mover_a() nunca baja de este valor (con
+# margen x2), expresado en MICRAS: antes era un numero fijo de micropasos
+# (64), que a 16 micropasos son 20 um pero a 256 apenas 1.25 um -- con esa
+# resolucion el autofoco no tomaba la holgura y caia ~12 um fuera de foco.
+# 5 um por paso completo: husillo T6x1 y 200 pasos/vuelta (ver autofocus.py).
+HOLGURA_MIN_UM = 25.0
+UM_POR_PASO_COMPLETO = 5.0
+
 MRES_MAP = {256: 0, 128: 1, 64: 2, 32: 3, 16: 4, 8: 5, 4: 6, 2: 7, 1: 8}
 
 # Pines por eje. La clave es el numero de camara: cada canal optico tiene
@@ -580,8 +590,12 @@ class FocusMotorController:
         avanzando en sentido + (bajando). Para eso, si hay que subir, se
         pasa de largo `backlash` micropasos y se vuelve. Asi el juego
         mecanico del husillo queda siempre tomado del mismo lado, que es
-        lo que hace repetible el autofoco.
+        lo que hace repetible el autofoco. Nunca menos de HOLGURA_MIN_UM,
+        sea cual sea el microstepping.
         """
+        if backlash > 0:
+            backlash = max(int(backlash), int(round(
+                HOLGURA_MIN_UM / UM_POR_PASO_COMPLETO * self.microsteps)))
         with self._lock:
             delta = posicion - self.position
             if delta == 0 and backlash <= 0:

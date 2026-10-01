@@ -111,6 +111,21 @@ RESPUESTA_MINIMA = 0.05
 # de max_micropasos) y el autofoco parece "hacer cosas distintas" cada
 # vez.
 R2_MINIMO = 0.9
+
+# En el barrido, ademas del piso absoluto, se descartan las lecturas con
+# respuesta menor a esta fraccion de la mejor del barrido. Lejos del foco
+# (>~15 um en cam0 con el objetivo actual) la muestra se borra y la
+# correlacion mide ruido: da corrimientos chicos de signo arbitrario con
+# respuesta ~0.1, contra 0.2-0.55 cerca del foco. Con solo el piso de
+# 0.05 esas lecturas entraban y fabricaban un cruce por cero falso ~19 um
+# debajo del foco real (medido 2026-10-01). Relativo y no fijo porque la
+# respuesta depende de cuanta textura tenga la muestra.
+FRACCION_RESPUESTA_BARRIDO = 0.3
+# Y un piso absoluto mas alto que RESPUESTA_MINIMA para el barrido: las
+# lecturas fuera de foco medidas llegaban a 0.12. Si el barrido entero
+# queda fuera de foco, mejor no encontrar cruce (no se mueve) que
+# encontrar uno falso.
+RESPUESTA_MINIMA_BARRIDO = 0.15
 RESPUESTA_MINIMA_CALIBRACION = 0.1
 
 
@@ -199,6 +214,10 @@ def _cruce_cero(curva, respuesta_minima=RESPUESTA_MINIMA, lineal=False):
     que absorbe, y ademas tiene signo, asi que si no cruza dentro del
     rango se sabe de que lado quedo el foco.
 
+    Se descartan las lecturas de respuesta baja: por debajo de
+    respuesta_minima o de FRACCION_RESPUESTA_BARRIDO de la mejor del
+    barrido (lejos del foco la correlacion inventa cruces).
+
     Si hay mas de un cambio de signo (ruido cerca del cero, o una
     lectura espuria de la correlacion) se queda con el mas consistente:
     el que deja de un lado y del otro la mayor cantidad de puntos con el
@@ -209,6 +228,9 @@ def _cruce_cero(curva, respuesta_minima=RESPUESTA_MINIMA, lineal=False):
     esta en el regimen lineal (un barrido fino alrededor del foco);
     promediar todas las lecturas es lo que le da resolucion.
     """
+    if curva:
+        respuesta_minima = max(respuesta_minima, FRACCION_RESPUESTA_BARRIDO *
+                               max(r for _, _, r in curva))
     validos = [(p, d) for p, d, r in curva if r >= respuesta_minima]
     if len(validos) < 2:
         return None, True
@@ -891,7 +913,9 @@ class Autofocus:
                     # lineal: ahi la recta por todos los puntos promedia
                     # el ruido. El barrido grueso puede tocar la zona
                     # saturada, asi que alli solo se interpola.
-                    pos, en_borde = _cruce_cero(curva, lineal=etapa > 0)
+                    pos, en_borde = _cruce_cero(
+                        curva, respuesta_minima=RESPUESTA_MINIMA_BARRIDO,
+                        lineal=etapa > 0)
                     if pos is None:
                         # Ninguna lectura engancho (campo vacio o muy
                         # lejos del foco): no hay base para moverse.
