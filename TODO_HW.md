@@ -152,7 +152,13 @@ físico.
 ### 2.4 Qué métrica corresponde a tu muestra
 `codigo/MicroscopeOS/core/autofocus.py`
 
-El default es `metrica="dpc"` (Tenengrad sobre `(L−R)/(L+R)`), que es lo
+> **Actualización:** el autofoco ya no usa ninguna de estas dos métricas
+> por defecto. La etapa fina y el barrido de respaldo buscan donde el
+> corrimiento L/R cruza el cero (`metrica="corrimiento"`), que vale igual
+> para muestras de fase y absorbentes. `dpc` y `bruta` quedan para
+> comparar. Lo de abajo explica por qué.
+
+La métrica `metrica="dpc"` (Tenengrad sobre `(L−R)/(L+R)`) es lo
 correcto para **objetos de fase**: células vivas sin teñir. Está
 verificado en simulación que sobre ese tipo de muestra la métrica cruda
 tiene un valle en el foco y un barrido que la maximiza se va ~170 µm al
@@ -167,11 +173,15 @@ que pasar `metrica="bruta"`.
 
 Lo que falta comprobar en el microscopio real:
 
-- Que la curva de Tenengrad sobre el DPC tenga pico distinguible con el
-  ruido de lectura real del IMX219. En la simulación no hay ruido, y
-  cerca del foco esa curva es MUY plana (0.1 % de variación en ±6 µm).
-  Si en la práctica el ajuste fino salta de un lado a otro, promediar
-  varias mediciones por plano antes que agrandar el rango.
+- Que el cero del corrimiento L/R coincida con el foco visual. En
+  teoría sí (con iluminación simétrica el corrimiento es 0 en el foco),
+  pero una muestra con contraste de fase y de amplitud parecidos puede
+  sesgarlo: en la simulación con 50/50 quedó a ~3 µm. Si en la práctica
+  siempre queda corrido en la misma dirección, es candidato a un
+  desfase fijo configurable.
+- (Resuelto) La curva de Tenengrad sobre el DPC resultó demasiado plana
+  cerca del foco: con ruido de lectura el ajuste fino caía en un borde
+  del barrido (±4 µm) a cada vez. Ya no se usa para decidir.
 - Que enfocar en campo claro/DPC deje bien enfocadas también las
   capturas en campo oscuro y Rheinberg del mismo ciclo.
 

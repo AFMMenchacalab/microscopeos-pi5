@@ -82,14 +82,20 @@ Navegador  ──HTTP/SSE──>  FastAPI (run_web.py + server/api.py)
      por objetivo (`/api/focus/calibrar`): la calibración ya deja la
      cámara enfocada, porque el foco es donde la recta
      corrimiento-vs-posición cruza el cero.
-  2. *Ajuste fino* — cerca del foco el corrimiento se vuelve ruidoso, así
-     que la métrica pasa a ser Tenengrad sobre la imagen DPC (que tiene
-     pico en el foco, no valle, a diferencia de la imagen cruda con
-     muestras vivas sin teñir): 7 planos + ajuste parabólico dan
-     resolución por debajo del paso del motor.
+  2. *Ajuste fino* — cerca del foco una sola lectura del corrimiento es
+     ruidosa, así que se mide en 7 planos cercanos y se toma la mediana
+     de las 7 estimaciones del cero. No se usa una métrica de nitidez:
+     el Tenengrad sobre el DPC es casi plano cerca del foco con células
+     sin teñir y tiene un *valle* con muestras que absorben, y hacía que
+     cada autofoco terminara en un plano distinto.
 
-  Sin calibrar, o si la correlación no engancha (campo vacío), cae solo
-  a un barrido grueso-a-fino de respaldo. Todo movimiento final se
+  Sin calibrar, si la correlación no engancha (campo vacío), o si una
+  corrección DPC empeora en vez de acercar (calibración que no
+  corresponde), vuelve a la posición inicial y cae a un barrido
+  grueso-a-fino de respaldo que busca **el mismo criterio** (donde el
+  corrimiento cruza el cero), así que los dos métodos terminan en el
+  mismo plano. Ninguno se aleja más de ±rango/2 de donde arrancó, y la
+  interfaz avisa qué método se usó y por qué. Todo movimiento final se
   alcanza siempre desde el mismo sentido, para no arrastrar el juego
   mecánico del husillo entre una medición y la siguiente.
 

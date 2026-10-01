@@ -145,8 +145,10 @@ class TimelapseManager:
                           f"pos={r['posicion']} "
                           f"(mov {r['desplazamiento']:+d}) "
                           + (f"nitidez={r['nitidez']:.1f} "
-                             if "nitidez" in r else
-                             f"corrimiento={r['corrimiento_px']:+.2f}px ")
+                             if r.get("nitidez") is not None else
+                             f"corrimiento={r['corrimiento_px']:+.2f}px "
+                             if r.get("corrimiento_px") is not None else "")
+                          + (f"[{r['aviso']}] " if r.get("aviso") else "")
                           + f"{r['segundos']}s"
                           + ("  [MAXIMO EN EL BORDE DEL RANGO]"
                              if r.get("fuera_de_rango") else ""))

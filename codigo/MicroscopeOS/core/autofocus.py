@@ -44,15 +44,21 @@ Cerca del foco delta tiende a cero y la medicion se vuelve ruidosa
 comparada con su propia magnitud, asi que el salto grueso deja a ~1-2 um,
 no en el foco.
 
-Ahi entra la metrica de nitidez, pero NO sobre la imagen cruda: sobre el
-DPC. El cociente
+La etapa fina NO usa una metrica de nitidez. Se probo con el Tenengrad
+sobre el DPC y no sirve como arbitro: cerca del foco su curva es plana
+(0.1 % en +-6 um, menos que el ruido de lectura), asi que el "maximo"
+caia en cualquier punto del barrido -- casi siempre en un borde -- y
+movia la plataforma 4 um para un lado o para el otro cada vez. Y con una
+muestra que absorbe (tenida, pigmentada) es peor: el Tenengrad del DPC
+tiene un VALLE en el foco y la etapa fina se iba sistematicamente al
+plano equivocado.
 
-    DPC = (I_izq - I_der) / (I_izq + I_der)
-
-convierte el gradiente de fase en contraste de amplitud real, y sobre esa
-imagen el Tenengrad se comporta normal -- pico en el foco, no valle. Se
-barren 7 puntos, se ajusta una parabola a los tres de alrededor del
-maximo, y el vertice da precision por debajo del paso del motor.
+Lo que si es confiable en los dos tipos de muestra es el propio
+corrimiento: cruza el cero en el foco, sea el objeto de fase o de
+amplitud. La etapa fina barre 7 planos cercanos, mide delta en cada uno
+(la misma medicion de la etapa 1, sin costo extra) y estima el cero con
+todos a la vez (mediana de las 7 estimaciones). Promediar siete lecturas
+es lo que la hace mas fina que la etapa 1.
 
 EL DETALLE MECANICO
 ===================
@@ -64,8 +70,8 @@ objetivo decente. Por eso TODA posicion final se alcanza siempre desde la
 misma direccion: se pasa de largo y se regresa (ver
 FocusMotorController.mover_a con backlash > 0).
 
-En resumen: la iluminacion oblicua da direccion, el DPC da una metrica
-que no miente, y la parabola da resolucion.
+En resumen: la iluminacion oblicua da direccion y magnitud, y medir el
+mismo corrimiento en varios planos cercanos da resolucion.
 """
 
 import json
@@ -95,6 +101,17 @@ EJES_DPC = {
 # micropasos; si alguna vez se cambia el husillo, se cambia aca.
 PASO_HUSILLO_MM = 1.0
 PASOS_POR_VUELTA = 200
+
+# Por debajo de esta respuesta de la correlacion de fase el pico no
+# significa nada (campo vacio o sin textura) y la medicion se descarta.
+RESPUESTA_MINIMA = 0.05
+
+# Una calibracion por debajo de esto no se guarda ni se usa: con una
+# pendiente mal medida la etapa 1 salta a cualquier lado (hasta el tope
+# de max_micropasos) y el autofoco parece "hacer cosas distintas" cada
+# vez.
+R2_MINIMO = 0.9
+RESPUESTA_MINIMA_CALIBRACION = 0.1
 
 
 def um_por_micropaso(microsteps):
@@ -171,6 +188,68 @@ def _pico_parabolico(puntos, i):
     return int(round(x1 + desplazamiento))
 
 
+def _cruce_cero(curva, respuesta_minima=RESPUESTA_MINIMA, lineal=False):
+    """Donde el corrimiento L/R cruza el cero en un barrido.
+
+    curva: [(posicion, delta_px, respuesta)] en orden de posicion.
+    Devuelve (posicion, fuera_de_rango).
+
+    Es la metrica del barrido que no depende del tipo de muestra: delta
+    cruza el cero en el foco tanto con un objeto de fase como con uno
+    que absorbe, y ademas tiene signo, asi que si no cruza dentro del
+    rango se sabe de que lado quedo el foco.
+
+    Si hay mas de un cambio de signo (ruido cerca del cero, o una
+    lectura espuria de la correlacion) se queda con el mas consistente:
+    el que deja de un lado y del otro la mayor cantidad de puntos con el
+    signo que corresponde. Una sola lectura loca no lo mueve.
+
+    lineal=True: ademas ajusta una recta por minimos cuadrados con todos
+    los puntos validos y usa su cero. Solo vale cuando todo el barrido
+    esta en el regimen lineal (un barrido fino alrededor del foco);
+    promediar todas las lecturas es lo que le da resolucion.
+    """
+    validos = [(p, d) for p, d, r in curva if r >= respuesta_minima]
+    if len(validos) < 2:
+        return None, True
+
+    def signo(v):
+        return 1 if v > 0 else (-1 if v < 0 else 0)
+
+    candidatos = []
+    for i in range(len(validos) - 1):
+        d0, d1 = validos[i][1], validos[i + 1][1]
+        if d0 * d1 > 0:
+            continue
+        s_izq = signo(d0) or -signo(d1)
+        if s_izq == 0:
+            continue
+        puntaje = (sum(signo(d) == s_izq for _, d in validos[:i + 1]) +
+                   sum(signo(d) == -s_izq for _, d in validos[i + 1:]))
+        candidatos.append((puntaje, abs(d0 - d1), i, s_izq))
+
+    if not candidatos:
+        # Todo el barrido del mismo lado: el foco esta afuera. Se queda
+        # en el punto mas cercano al cero, que es el borde correcto.
+        return min(validos, key=lambda v: abs(v[1]))[0], True
+
+    _, _, i, s_izq = max(candidatos)
+    (x0, d0), (x1, d1) = validos[i], validos[i + 1]
+    cero = (x0 + x1) / 2 if d0 == d1 else x0 + (x1 - x0) * d0 / (d0 - d1)
+
+    if lineal and len(validos) >= 3:
+        x = np.array([v[0] for v in validos], dtype=float)
+        y = np.array([v[1] for v in validos], dtype=float)
+        pendiente, ordenada = np.polyfit(x, y, 1)
+        # La recta tiene que bajar/subir en el mismo sentido que el cruce
+        # observado; si no, el ajuste es ruido y vale la interpolacion.
+        if pendiente != 0 and signo(pendiente) == -s_izq:
+            cero_recta = -ordenada / pendiente
+            if x[0] <= cero_recta <= x[-1]:
+                cero = cero_recta
+    return int(round(cero)), False
+
+
 class Autofocus:
 
     def __init__(self, camera, motores, illuminations=None, ia=None):
@@ -203,7 +282,16 @@ class Autofocus:
             with open(ARCHIVO_CALIBRACION) as f:
                 datos = json.load(f)
             # Las claves de JSON son strings; adentro se usan enteros.
-            self.calibracion = {int(k): v for k, v in datos.items()}
+            self.calibracion = {}
+            for k, v in datos.items():
+                if v.get("r2", 0.0) < R2_MINIMO:
+                    # Versiones anteriores guardaban la calibracion aunque
+                    # el ajuste fuera malo, y despues el autofoco la usaba.
+                    print(f"[autofoco] cam{k}: calibracion DPC con r2="
+                          f"{v.get('r2', 0.0):.2f} < {R2_MINIMO}, se ignora "
+                          f"-- recalibrar")
+                    continue
+                self.calibracion[int(k)] = v
         except FileNotFoundError:
             self.calibracion = {}
         except Exception as e:
@@ -258,8 +346,10 @@ class Autofocus:
         """Enciende las dos medias aperturas opuestas y saca de ESE MISMO
         par las dos cosas que necesitan las dos etapas:
 
-          - el corrimiento con signo (etapa 1), por correlacion de fase;
-          - la nitidez del DPC (etapa 2), por Tenengrad.
+          - el corrimiento con signo (las dos etapas y el barrido), por
+            correlacion de fase;
+          - la nitidez del DPC, por Tenengrad (solo para el barrido con
+            metrica="dpc" y como diagnostico).
 
         Sacar las dos de un solo par de imagenes es lo que hace que la
         etapa 2 no cueste el doble de capturas.
@@ -356,7 +446,8 @@ class Autofocus:
 
         puntos = max(3, int(puntos))
         paso = max(1, int(round(amplitud / (puntos - 1))))
-        inicio = int(round(motor.position - paso * (puntos - 1) / 2))
+        inicial = motor.position
+        inicio = int(round(inicial - paso * (puntos - 1) / 2))
         t0 = time.monotonic()
 
         posiciones, corrimientos, respuestas = [], [], []
@@ -387,6 +478,8 @@ class Autofocus:
                     "campo no este vacio")
 
             foco = int(round(-ordenada / pendiente))
+            confiable = bool(r2 >= R2_MINIMO and
+                             np.mean(respuestas) >= RESPUESTA_MINIMA_CALIBRACION)
             um = um_por_micropaso(motor.microsteps)
             cal = {
                 "micropasos_por_pixel": float(1.0 / pendiente),
@@ -398,17 +491,24 @@ class Autofocus:
                 "respuesta_media": float(np.mean(respuestas)),
                 "fecha": datetime.now().isoformat(timespec="seconds"),
             }
-            self.calibracion[camera_num] = cal
-            self._guardar_calibracion()
-
-            motor.mover_a(foco, delay=delay, backlash=backlash)
+            if confiable:
+                self.calibracion[camera_num] = cal
+                self._guardar_calibracion()
+                motor.mover_a(foco, delay=delay, backlash=backlash)
+            else:
+                # Una calibracion mala NO reemplaza a la anterior: si se
+                # guardara, cada autofoco posterior saltaria segun una
+                # pendiente que no corresponde, y el "foco" de esta recta
+                # tampoco vale, asi que se vuelve a donde estaba.
+                motor.mover_a(inicial, delay=delay, backlash=backlash)
 
             return {
                 "camera": camera_num,
                 "calibracion": cal,
-                "posicion": foco,
+                "guardada": confiable,
+                "posicion": motor.position,
                 "r2": float(r2),
-                "confiable": bool(r2 >= 0.9 and np.mean(respuestas) >= 0.1),
+                "confiable": confiable,
                 "curva": [[int(p), float(c)] for p, c in
                           zip(posiciones, corrimientos)],
                 "segundos": round(time.monotonic() - t0, 1),
@@ -430,7 +530,19 @@ class Autofocus:
     def _ajuste_fino(self, camera_num, motor, eje, rango, puntos,
                      delay, settle, roi, backlash):
         """Barre `puntos` planos alrededor de la posicion actual midiendo
-        Tenengrad sobre el DPC, y va al vertice de la parabola.
+        el corrimiento L/R en cada uno, y va a donde se anula.
+
+        Con calibracion, cada plano da su propia estimacion del foco
+        (posicion - delta * micropasos_por_pixel) y se toma la MEDIANA de
+        todas: promedia el ruido de las siete lecturas y descarta una
+        lectura espuria de la correlacion. Sin calibracion (autofoco IA
+        sobre una camara no calibrada) se ajusta una recta y se usa su
+        cero. Ver el encabezado del modulo: por que no es la parabola
+        sobre el Tenengrad que se usaba antes.
+
+        Nunca se aleja mas alla del barrido: si la estimacion cae afuera
+        se queda en el borde y lo informa (en_borde), porque el que
+        deberia haber llegado cerca es la etapa gruesa.
 
         Todos los puntos se miden avanzando en el mismo sentido y la
         posicion final se alcanza tambien desde el mismo lado, porque el
@@ -443,23 +555,40 @@ class Autofocus:
         luz = self.illuminations.get(camera_num)
         if luz is not None:
             luz.on()
+        centro = motor.position
         motor.mover_a(inicio, delay=delay, backlash=backlash, mantener=True)
-        curva = []
+        curva, nitideces = [], []
         for i in range(puntos):
             if i:
                 motor.mover(paso, direction=1, delay=delay, mantener=True)
             m = self.medir_par(camera_num, eje=eje, settle=settle, roi=roi)
-            curva.append((motor.position, m["nitidez"]))
+            curva.append((motor.position, m["delta_px"], m["respuesta"]))
+            nitideces.append(m["nitidez"])
 
-        i_max = max(range(len(curva)), key=lambda i: curva[i][1])
-        destino = _pico_parabolico(curva, i_max)
+        validos = [(p, d) for p, d, r in curva if r >= RESPUESTA_MINIMA]
+        if self.calibrado(camera_num) and validos:
+            k = self._micropasos_por_pixel(camera_num, motor)
+            estimado = int(round(float(np.median(
+                [p - d * k for p, d in validos]))))
+        else:
+            estimado, _ = _cruce_cero(curva, lineal=True)
+        if estimado is None:
+            # Ninguna lectura confiable: no hay en que basarse para
+            # moverse, se vuelve a donde dejo la etapa gruesa.
+            estimado = centro
+
+        lo, hi = curva[0][0], curva[-1][0]
+        destino = max(lo, min(hi, estimado))
         motor.mover_a(destino, delay=delay, backlash=backlash, mantener=True)
         return {
             "posicion": destino,
-            "nitidez": curva[i_max][1],
-            "en_borde": i_max in (0, len(curva) - 1),
+            "estimado": estimado,
+            "nitidez": max(nitideces),
+            "en_borde": not (lo < estimado < hi),
             "paso_micropasos": paso,
-            "curva": [[int(p), float(v)] for p, v in curva],
+            "curva": [[int(p), float(d)] for p, d, _ in curva],
+            "nitidez_curva": [[int(p), float(v)]
+                              for (p, _, _), v in zip(curva, nitideces)],
         }
 
     # =============================
@@ -467,9 +596,9 @@ class Autofocus:
     # =============================
     def enfocar_dpc(self, camera_num, iteraciones=2, settle=0.25, roi=0.8,
                     delay=0.003, backlash=64, tolerancia_px=0.3,
-                    max_micropasos=4000, respuesta_minima=0.05,
+                    max_micropasos=4000, respuesta_minima=RESPUESTA_MINIMA,
                     repeticiones=3, fino=True, rango_fino_um=8.0,
-                    puntos_fino=7, apagar_luz=True):
+                    puntos_fino=7, apagar_luz=True, rango_max=None):
         """Etapa 1 (salto grueso con signo) + etapa 2 (ajuste fino).
 
         iteraciones son las correcciones de la etapa 1: la primera deja
@@ -485,12 +614,25 @@ class Autofocus:
         iteracion (sigue siendo un par de segundos), a cambio de no
         mandar una correccion basada en ruido.
 
-        La etapa 2 existe porque cerca del foco delta tiende a cero y su
-        medicion se vuelve ruido: el salto grueso deja a ~1-2 um, y de ahi
-        en mas manda la nitidez del DPC.
+        La etapa 2 existe porque cerca del foco delta tiende a cero y una
+        sola medicion se vuelve ruido: el salto grueso deja a ~1-2 um, y
+        la etapa fina lo afina midiendo delta en varios planos.
 
         max_micropasos topea cada correccion: sin finales de carrera, una
         correlacion mala no puede mandar la plataforma contra la muestra.
+
+        rango_max (micropasos, amplitud total como en el barrido): la
+        plataforma no se aleja mas de rango_max/2 de donde arranco. Es el
+        mismo rango que respeta el barrido, para que los dos metodos se
+        comporten igual: antes el DPC lo ignoraba y podia saltar hasta
+        2 x max_micropasos (2.5 mm a 1/16) mientras el barrido se quedaba
+        en +-30 um.
+
+        Si una correccion EMPEORA el corrimiento en vez de achicarlo, la
+        calibracion no corresponde (otro objetivo, otra muestra, o se
+        calibro lejos del foco): vuelve a la posicion inicial y falla,
+        para que enfocar_auto() caiga al barrido en vez de dejar la
+        plataforma donde la mando una pendiente equivocada.
         """
         motor = self.motores.get(camera_num)
         if motor is None:
@@ -508,6 +650,12 @@ class Autofocus:
         t0 = time.monotonic()
         pasos = []
         convergio = False
+        topado = False
+        if rango_max is not None:
+            limite_bajo = inicial - abs(int(rango_max)) // 2
+            limite_alto = inicial + abs(int(rango_max)) // 2
+        else:
+            limite_bajo, limite_alto = None, None
 
         try:
             # ---- Etapa 1: direccion y magnitud, sin barrer ----
@@ -522,14 +670,36 @@ class Autofocus:
                         f"correlacion sin enganche (respuesta "
                         f"{m['respuesta']:.3f}) -- campo vacio o desenfoque "
                         f"fuera del rango lineal; probar el barrido")
+                # (Si la correccion anterior quedo acotada por el rango, es
+                # normal que delta casi no haya bajado: no es divergencia.)
+                if len(pasos) > 1 and not topado:
+                    antes = abs(pasos[-2]["corrimiento_px"])
+                    ahora = abs(m["delta_px"])
+                    if antes > 2 * tolerancia_px and ahora > 0.8 * antes:
+                        motor.mover_a(inicial, delay=delay, backlash=backlash,
+                                      mantener=True)
+                        raise RuntimeError(
+                            f"la correccion DPC no acerco al foco "
+                            f"({antes:.2f} px -> {ahora:.2f} px): la "
+                            f"calibracion no corresponde a esta muestra u "
+                            f"objetivo -- recalibrar cerca del foco")
                 if abs(m["delta_px"]) <= tolerancia_px:
                     convergio = True
                     break
+                if topado:
+                    # Ya estaba contra el limite del rango y sigue pidiendo
+                    # ir mas alla: el foco esta afuera.
+                    break
                 correccion = int(round(-m["delta_px"] * k))
                 correccion = max(-max_micropasos, min(max_micropasos, correccion))
-                if correccion == 0:
+                destino = motor.position + correccion
+                if limite_bajo is not None:
+                    acotado = max(limite_bajo, min(limite_alto, destino))
+                    topado = acotado != destino
+                    destino = acotado
+                if destino == motor.position:
                     break
-                motor.mover_a(motor.position + correccion, delay=delay,
+                motor.mover_a(destino, delay=delay,
                               backlash=backlash, mantener=True)
 
             resultado = {
@@ -542,14 +712,21 @@ class Autofocus:
                 # y de eso se encarga la etapa fina).
                 "corrimiento_px": pasos[-1]["corrimiento_px"],
                 "convergio": convergio,
+                # El foco que pidio la etapa 1 cae fuera de +-rango_max/2:
+                # la plataforma quedo en el borde. Mismo nombre que en el
+                # barrido para que la interfaz avise igual.
+                "fuera_de_rango": topado,
                 "respuesta": pasos[-1]["respuesta"],
                 "iteraciones": pasos,
                 "posicion_grueso": motor.position,
                 "microsteps": motor.microsteps,
             }
 
-            # ---- Etapa 2: parabola sobre el Tenengrad del DPC ----
-            if fino:
+            # ---- Etapa 2: cero del corrimiento medido en varios planos ----
+            # Si la etapa 1 quedo contra el limite del rango, el foco esta
+            # afuera: afinar ahi no tiene sentido y el barrido fino se
+            # saldria del rango pedido.
+            if fino and not topado:
                 rango = max(puntos_fino - 1,
                             micropasos_por_um(rango_fino_um, motor.microsteps))
                 f = self._ajuste_fino(camera_num, motor, eje, rango,
@@ -560,6 +737,7 @@ class Autofocus:
                     "en_borde": f["en_borde"],
                     "paso_micropasos": f["paso_micropasos"],
                     "curva": f["curva"],
+                    "nitidez_curva": f["nitidez_curva"],
                 }
                 resultado["nitidez"] = f["nitidez"]
 
@@ -588,6 +766,12 @@ class Autofocus:
               repeticiones=1):
         """Nitidez en la posicion actual, por el metodo pedido.
 
+        metrica="corrimiento" (la de por defecto): no es una nitidez,
+          es el corrimiento L/R con signo, y devuelve (delta_px,
+          respuesta). El barrido busca donde cruza el cero (ver
+          _cruce_cero). Es la unica de las tres que vale igual para
+          muestras de fase y para muestras que absorben, y no necesita
+          calibracion.
         metrica="dpc": Tenengrad sobre (L-R)/(L+R). Es la que hay que
           usar con objetos de FASE (celulas vivas sin tenir), donde la
           metrica cruda tiene un valle en el foco.
@@ -600,9 +784,15 @@ class Autofocus:
         contrario que con uno de fase -- en el foco las dos medias
         aperturas dan la misma imagen, el DPC se anula y su Tenengrad
         tiene un valle justo donde deberia tener el pico. Para ese tipo
-        de muestra hay que pasar metrica="bruta". El default es "dpc"
-        porque este microscopio es para celulas vivas sin tenir.
+        de muestra hay que pasar metrica="bruta". Ademas, aun con objetos
+        de fase, el Tenengrad del DPC es muy plano cerca del foco: con el
+        ruido real del sensor el maximo cae en cualquier lado. Por las
+        dos cosas el default paso a ser "corrimiento".
         """
+        if metrica == "corrimiento":
+            m = self.medir_par(camera_num, eje=eje, settle=settle, roi=roi,
+                               repeticiones=repeticiones)
+            return m["delta_px"], m["respuesta"]
         if metrica == "dpc":
             return self.medir_par(camera_num, eje=eje, settle=settle,
                                   roi=roi, repeticiones=repeticiones)["nitidez"]
@@ -615,7 +805,8 @@ class Autofocus:
     def _barrido(self, camera_num, motor, centro, rango, puntos, metrica,
                  eje, delay, settle, roi, backlash, patron, repeticiones=1):
         """Mide `puntos` posiciones equiespaciadas cubriendo `rango`
-        micropasos centrados en `centro`. Devuelve [(posicion, nitidez)].
+        micropasos centrados en `centro`. Devuelve [(posicion, nitidez)],
+        o [(posicion, delta_px, respuesta)] con metrica="corrimiento".
 
         Arranca yendo al extremo inferior del rango con compensacion de
         backlash y de ahi avanza siempre en el mismo sentido.
@@ -640,22 +831,30 @@ class Autofocus:
         for i in range(puntos):
             if i:
                 motor.mover(paso, direction=1, delay=delay, mantener=True)
-            curva.append((motor.position, self._medir(
-                camera_num, metrica, eje, settle, roi, patron,
-                repeticiones=repeticiones)))
+            valor = self._medir(camera_num, metrica, eje, settle, roi, patron,
+                                repeticiones=repeticiones)
+            if isinstance(valor, tuple):
+                curva.append((motor.position, *valor))
+            else:
+                curva.append((motor.position, valor))
         return curva, paso
 
     def enfocar(self, camera_num, rango=3200, puntos=13, refinamientos=2,
                 delay=0.003, settle=0.15, roi=0.6, backlash=64,
-                metrica="dpc", eje="lr", corriente_ma=None, usar_luz=True,
-                patron="on", repeticiones=1, apagar_luz=True):
-        """Barrido grueso-a-fino de la nitidez. Es el RESPALDO: se usa
-        mientras una camara no tenga calibracion DPC, o cuando la
-        correlacion de fase no engancha.
+                metrica="corrimiento", eje="lr", corriente_ma=None,
+                usar_luz=True, patron="on", repeticiones=1, apagar_luz=True):
+        """Barrido grueso-a-fino. Es el RESPALDO: se usa mientras una
+        camara no tenga calibracion DPC, o cuando la etapa 1 del DPC no
+        engancha o no converge.
 
-        No sabe hacia donde esta el foco, por eso tiene que barrer; pero
-        con metrica="dpc" al menos mide algo que tiene el maximo donde
-        corresponde.
+        Con metrica="corrimiento" (default) busca donde el corrimiento
+        L/R cruza el cero: el mismo criterio de foco que el metodo DPC,
+        asi que los dos terminan en el mismo plano. Antes el respaldo
+        maximizaba el Tenengrad del DPC, que con muestras que absorben
+        tiene un valle en el foco y con objetos de fase es tan plano que
+        el maximo cae en cualquier lado: por eso cada metodo dejaba la
+        plataforma en un lugar distinto. "dpc" y "bruta" siguen
+        disponibles para comparar.
         """
         motor = self.motores.get(camera_num)
         if motor is None:
@@ -669,10 +868,10 @@ class Autofocus:
             motor.set_current(irun_ma=corriente_ma)
 
         try:
-            # Con metrica dpc la luz la maneja medir_par() en cada punto
-            # (necesita las dos medias aperturas); con metrica bruta se
-            # enciende una vez el patron pedido y se deja.
-            if luz is not None and metrica != "dpc":
+            # Con metrica dpc/corrimiento la luz la maneja medir_par() en
+            # cada punto (necesita las dos medias aperturas); con metrica
+            # bruta se enciende una vez el patron pedido y se deja.
+            if luz is not None and metrica not in ("dpc", "corrimiento"):
                 getattr(luz, patron)()
                 time.sleep(0.3)
 
@@ -680,17 +879,31 @@ class Autofocus:
             centro, amplitud, n = inicial, rango, puntos
             mejor_pos, mejor_val, en_borde = inicial, None, False
 
-            for _ in range(1 + max(0, int(refinamientos))):
+            for etapa in range(1 + max(0, int(refinamientos))):
                 curva, paso = self._barrido(
                     camera_num, motor, centro, amplitud, n, metrica, eje,
                     delay, settle, roi, backlash, patron,
                     repeticiones=repeticiones)
                 curvas.append(curva)
 
-                i_max = max(range(len(curva)), key=lambda i: curva[i][1])
-                en_borde = i_max in (0, len(curva) - 1)
-                mejor_val = curva[i_max][1]
-                mejor_pos = _pico_parabolico(curva, i_max)
+                if metrica == "corrimiento":
+                    # Los refinamientos son chicos y estan en el regimen
+                    # lineal: ahi la recta por todos los puntos promedia
+                    # el ruido. El barrido grueso puede tocar la zona
+                    # saturada, asi que alli solo se interpola.
+                    pos, en_borde = _cruce_cero(curva, lineal=etapa > 0)
+                    if pos is None:
+                        # Ninguna lectura engancho (campo vacio o muy
+                        # lejos del foco): no hay base para moverse.
+                        mejor_pos = inicial if etapa == 0 else mejor_pos
+                        break
+                    mejor_pos = pos
+                    mejor_val = min(curva, key=lambda c: abs(c[0] - pos))[1]
+                else:
+                    i_max = max(range(len(curva)), key=lambda i: curva[i][1])
+                    en_borde = i_max in (0, len(curva) - 1)
+                    mejor_val = curva[i_max][1]
+                    mejor_pos = _pico_parabolico(curva, i_max)
 
                 if en_borde:
                     # El maximo esta fuera de lo barrido: refinar
@@ -714,14 +927,20 @@ class Autofocus:
                 "desplazamiento": mejor_pos - inicial,
                 "desplazamiento_um": round(
                     (mejor_pos - inicial) * um_por_micropaso(motor.microsteps), 2),
-                "nitidez": mejor_val,
                 "fuera_de_rango": en_borde,
                 "etapas": len(curvas),
-                "curva": [[p, v] for p, v in curvas[0]],
-                "curva_fina": [[p, v] for p, v in curvas[-1]] if len(curvas) > 1 else [],
+                "curva": [[c[0], c[1]] for c in curvas[0]],
+                "curva_fina": ([[c[0], c[1]] for c in curvas[-1]]
+                               if len(curvas) > 1 else []),
                 "segundos": round(time.monotonic() - t0, 1),
                 "microsteps": motor.microsteps,
             }
+            # Con "corrimiento" la curva es delta (px), no nitidez.
+            if metrica == "corrimiento":
+                resultado["corrimiento_px"] = (
+                    None if mejor_val is None else round(float(mejor_val), 3))
+            else:
+                resultado["nitidez"] = mejor_val
             self.ultimo[camera_num] = resultado
             return resultado
 
@@ -740,13 +959,20 @@ class Autofocus:
 
     def enfocar_auto(self, camera_num, metodo="auto", rango=3200, puntos=13,
                      refinamientos=2, iteraciones=2, usar_luz=True,
-                     patron="on", metrica="dpc", **kw):
+                     patron="on", metrica="corrimiento", **kw):
         """Punto de entrada unico: usa las dos etapas si hay calibracion
         y cae al barrido si no, o si la correlacion no engancha.
 
         Es lo que llaman la interfaz web y el timelapse, para que el
         comportamiento por defecto sea el rapido sin dejar de funcionar
         en una camara todavia sin calibrar.
+
+        Si un metodo falla a mitad de camino, la plataforma VUELVE a la
+        posicion inicial antes de probar el siguiente (antes el barrido
+        arrancaba desde donde el otro la habia dejado), y el resultado
+        trae "aviso" con el motivo, para que la interfaz lo muestre en
+        vez de que parezca que el autofoco hace cosas distintas sin
+        razon.
         """
         if metodo not in ("auto", "dpc", "barrido", "ia"):
             raise ValueError(f"metodo invalido: {metodo}")
@@ -755,6 +981,29 @@ class Autofocus:
         # curva completa (saturacion incluida), asi que arranca bien
         # desde mas lejos que la recta calibrada. Si falla, se cae al
         # metodo analitico, que no depende de ningun archivo.
+        motor = self.motores.get(camera_num)
+        inicial = motor.position if motor is not None else None
+        avisos = []
+
+        def volver():
+            if motor is None or motor.position == inicial:
+                return
+            try:
+                motor.mover_a(inicial, delay=kw.get("delay", 0.003),
+                              backlash=kw.get("backlash", 64))
+            except Exception as e:
+                print(f"[autofoco] cam{camera_num}: no se pudo volver a "
+                      f"la posicion inicial ({e})")
+
+        def con_aviso(r):
+            if avisos:
+                r["aviso"] = "; ".join(avisos)
+                r["posicion_inicial"] = inicial
+                r["desplazamiento"] = r["posicion"] - inicial
+                r["desplazamiento_um"] = round(
+                    r["desplazamiento"] * um_por_micropaso(motor.microsteps), 2)
+            return r
+
         tiene_ia = self.ia is not None and self.ia.disponible()
         if metodo == "ia" and not tiene_ia:
             raise RuntimeError(
@@ -769,20 +1018,26 @@ class Autofocus:
                     raise
                 print(f"[autofoco] cam{camera_num}: IA fallo ({e}); "
                       f"se cae al metodo analitico")
+                avisos.append(f"IA fallo: {e}")
+                volver()
 
         if metodo in ("auto", "dpc") and self.calibrado(camera_num):
             try:
-                return self.enfocar_dpc(camera_num, iteraciones=iteraciones, **kw)
+                return con_aviso(self.enfocar_dpc(
+                    camera_num, iteraciones=iteraciones, rango_max=rango, **kw))
             except Exception as e:
                 if metodo == "dpc":
                     raise
                 print(f"[autofoco] cam{camera_num}: DPC fallo ({e}); "
                       f"se cae al barrido")
+                avisos.append(f"DPC fallo: {e}")
+                volver()
         elif metodo == "dpc":
             raise RuntimeError(f"cam{camera_num} sin calibrar para DPC")
 
         # usar_luz/patron/metrica son del barrido: la etapa 1 necesita
         # forzosamente las medias aperturas, no un patron a eleccion.
-        return self.enfocar(camera_num, rango=rango, puntos=puntos,
-                            refinamientos=refinamientos, usar_luz=usar_luz,
-                            patron=patron, metrica=metrica, **kw)
+        return con_aviso(self.enfocar(
+            camera_num, rango=rango, puntos=puntos,
+            refinamientos=refinamientos, usar_luz=usar_luz,
+            patron=patron, metrica=metrica, **kw))

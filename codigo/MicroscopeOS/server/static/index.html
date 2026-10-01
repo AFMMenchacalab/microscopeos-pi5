@@ -595,17 +595,21 @@ async function autoenfocar(){
     const um=d.desplazamiento_um, signo=um>0?'+':'';
     document.getElementById('s_af').textContent=
       d.metodo+': '+signo+um.toFixed(1)+' µm · '+d.segundos+'s';
+    // Si un metodo fallo y se uso otro, decirlo: si no, parece que el
+    // autofoco hace cosas distintas cada vez sin razon.
+    const aviso=d.aviso?' · '+d.aviso:'';
     if(d.fuera_de_rango){
-      toast('Máximo en el borde del rango — repetí el autofoco o ampliá el rango');
+      toast('El foco quedó fuera del rango ('+signo+um.toFixed(1)+' µm hasta el borde) — repetí el autofoco o ampliá el rango'+aviso);
     }else if(d.fino && d.fino.en_borde){
       toast('Enfocado ('+signo+um.toFixed(1)+' µm) pero el ajuste fino quedó en el borde — repetí');
     }else{
-      // El DPC informa el corrimiento residual entre las dos medias
-      // aperturas; el barrido, la nitidez del máximo.
-      const detalle=d.metodo==='dpc'
+      // DPC y barrido por corrimiento informan el corrimiento residual
+      // entre las dos medias aperturas; el barrido por nitidez
+      // (metrica dpc/bruta), la nitidez del maximo.
+      const detalle=(d.corrimiento_px!=null)
         ? 'resto '+d.corrimiento_px.toFixed(2)+' px'
-        : 'nitidez '+d.nitidez.toFixed(0);
-      toast('Enfocado por '+d.metodo+': '+signo+um.toFixed(1)+' µm ('+detalle+')');
+        : (d.nitidez!=null ? 'nitidez '+d.nitidez.toFixed(0) : '');
+      toast('Enfocado por '+d.metodo+': '+signo+um.toFixed(1)+' µm ('+detalle+')'+aviso);
     }
     refrescarFoco();
   }catch(e){toast('Error de autofoco');}
@@ -626,7 +630,7 @@ async function calibrarDpc(){
     if(d.error){toast(d.error);return;}
     toast(d.confiable
       ? 'Calibrado: '+d.calibracion.um_por_pixel.toFixed(2)+' µm/px (r²='+d.r2.toFixed(3)+')'
-      : 'Ajuste pobre (r²='+d.r2.toFixed(3)+') — campo vacío, o rango de calibración fuera del régimen lineal');
+      : 'Ajuste pobre (r²='+d.r2.toFixed(3)+'), NO se guardó — campo vacío, o rango de calibración fuera del régimen lineal');
     refrescarFoco();
   }catch(e){toast('Error de calibración');}
   finally{btn.disabled=false;btn.textContent='⊹ Calibrar autofoco DPC';}

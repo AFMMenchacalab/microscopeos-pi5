@@ -13,8 +13,8 @@ limites conocidos:
 
 Una red entrenada sobre pilas de foco reales aprende la curva completa,
 saturacion incluida, y puede arrancar desde mucho mas lejos de una sola
-vez. La etapa 2 (parabola sobre Tenengrad del DPC) se conserva igual:
-cerca del foco sigue siendo mas precisa que cualquier regresion, porque
+vez. La etapa 2 (cero del corrimiento L/R medido en varios planos
+cercanos, ver core/autofocus.py) se conserva igual: cerca del foco
 mide en vez de estimar.
 
 ESTADO
@@ -163,8 +163,9 @@ class AutofocoIA:
         """Etapa 1 con la red + etapa 2 analitica (la de siempre).
 
         No reemplaza al autofoco existente: reemplaza SOLO la estimacion
-        gruesa. El ajuste fino sigue siendo la parabola sobre Tenengrad
-        del DPC, que cerca del foco mide en vez de predecir y no puede
+        gruesa. El ajuste fino sigue siendo el analitico (cero del
+        corrimiento L/R en varios planos), que cerca del foco mide en vez
+        de predecir y no puede
         equivocarse por una muestra distinta a las del entrenamiento.
         """
         import time

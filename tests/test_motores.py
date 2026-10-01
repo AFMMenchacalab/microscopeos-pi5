@@ -550,10 +550,13 @@ _ir(foco_fase + 10)
 fino = af._ajuste_fino(0, motores[0], "lr", rango=48, puntos=7,
                        delay=0, settle=0, roi=0.8, backlash=64)
 err_fino = abs(fino["posicion"] - foco_fase)
-check("la parabola sobre el Tenengrad del DPC clava el foco", err_fino <= 8,
+check("el cruce por cero del corrimiento en 7 planos clava el foco",
+      err_fino <= 8,
       f"error {err_fino} micropasos ({err_fino * um_por_micropaso(16):.1f} um), "
       f"con paso de barrido de {fino['paso_micropasos']}")
 check("no reporta el maximo pegado a un borde", not fino["en_borde"])
+check("el ajuste fino devuelve el corrimiento medido en cada plano",
+      len(fino["curva"]) == 7 and len(fino["nitidez_curva"]) == 7)
 check("interpola por debajo del paso del barrido",
       err_fino < fino["paso_micropasos"],
       f"{err_fino} < {fino['paso_micropasos']}")
@@ -601,6 +604,70 @@ try:
 except RuntimeError:
     exigio = True
 check("metodo dpc explicito falla claro si no hay calibracion", exigio)
+
+print("\n=== AUTOFOCO: los dos metodos coinciden y respetan el rango ===")
+# Lo que motivo el cambio: con la muestra en la mano, cada autofoco
+# "hacia algo distinto" (uno se movia mucho, otro poco) y ninguno dejaba
+# la muestra en foco. Causas: el DPC ignoraba el rango, el barrido de
+# respaldo y la etapa fina maximizaban un Tenengrad que es plano (fase)
+# o tiene un valle (absorbente) en el foco, y el respaldo arrancaba
+# desde donde el DPC habia dejado la plataforma.
+cam_abs_ruido = CamaraDesenfocable(motores, {0: foco_fase, 1: 0}, luces_f,
+                                   absorcion=60.0, fase=6.0, ruido=3.0)
+af_abs2 = Autofocus(cam_abs_ruido, motores, luces_f)
+check("(la calibracion de la otra muestra sirve: es geometria, no muestra)",
+      af_abs2.calibrado(0))
+for inicio in (+60, -60):
+    _ir(foco_fase + inicio)
+    r_d = af_abs2.enfocar_auto(0, metodo="dpc", rango=192, delay=0, settle=0)
+    _ir(foco_fase + inicio)
+    r_b = af_abs2.enfocar_auto(0, metodo="barrido", rango=192, puntos=13,
+                               refinamientos=2, delay=0, settle=0)
+    e_d = abs(r_d["posicion"] - foco_fase)
+    e_b = abs(r_b["posicion"] - foco_fase)
+    check(f"muestra ABSORBENTE desde {inicio:+d}: el DPC (con etapa fina) "
+          f"enfoca", e_d <= 8, f"error {e_d} micropasos")
+    check(f"muestra ABSORBENTE desde {inicio:+d}: el barrido por defecto "
+          f"enfoca", e_b <= 8, f"error {e_b} micropasos")
+    check(f"desde {inicio:+d}: DPC y barrido terminan en el mismo plano",
+          abs(r_d["posicion"] - r_b["posicion"]) <= 10,
+          f"dpc {r_d['posicion']} vs barrido {r_b['posicion']}")
+
+_ir(foco_fase + 600)
+r = af.enfocar_auto(0, metodo="dpc", rango=192, delay=0, settle=0)
+check("el DPC no se aleja mas de rango/2 de donde arranco",
+      abs(r["posicion"] - (foco_fase + 600)) <= 96 + 4,
+      f"se movio {r['desplazamiento']} micropasos con rango 192")
+check("y avisa que el foco quedo fuera del rango", r["fuera_de_rango"])
+
+# Calibracion con el signo al reves (p.ej. se cambio la orientacion de
+# la matriz): la etapa 1 se aleja del foco. Tiene que darse cuenta,
+# volver a donde estaba y dejar que el barrido decida desde ahi.
+cal_ok = dict(af.calibracion[0])
+af.calibracion[0] = dict(cal_ok, micropasos_por_pixel=-cal_ok["micropasos_por_pixel"])
+_ir(foco_fase + 60)
+r = af.enfocar_auto(0, metodo="auto", rango=400, delay=0, settle=0)
+check("con calibracion invertida detecta que la correccion empeora",
+      "aviso" in r and "DPC" in r["aviso"], r.get("aviso", "sin aviso"))
+check("cae al barrido y aun asi enfoca", r["metodo"] == "barrido" and
+      abs(r["posicion"] - foco_fase) <= 8,
+      f"{r['metodo']}, error {abs(r['posicion'] - foco_fase)} micropasos")
+check("el desplazamiento se informa desde la posicion ORIGINAL",
+      r["posicion_inicial"] == foco_fase + 60)
+af.calibracion[0] = cal_ok
+
+# Una calibracion mala no pisa a la buena.
+cam_vacia = CamaraDesenfocable(motores, {0: foco_fase, 1: 0}, luces_f,
+                               absorcion=0.0, fase=0.0, ruido=6.0)
+af_vacia = Autofocus(cam_vacia, motores, luces_f)
+_ir(foco_fase + 30)
+c = af_vacia.calibrar_dpc(0, amplitud=800, puntos=5, delay=0, settle=0)
+check("calibrar sobre campo vacio no se marca confiable", not c["confiable"],
+      f"r2={c['r2']:.2f}")
+check("y no se guarda", not c["guardada"] and
+      Autofocus(cam_fase, motores, luces_f).calibracion[0]["r2"] > 0.9)
+check("y vuelve a donde estaba en vez de ir a un 'foco' sin sentido",
+      motores[0].position == foco_fase + 30)
 
 print("\n=== TIMELAPSE CON AUTOFOCO ===")
 emuladores.SerialFake._tmc.clear()
