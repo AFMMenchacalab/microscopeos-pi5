@@ -6,12 +6,21 @@ await p.addInitScript(() => { try { localStorage.setItem('microscopeos_tema', 'c
 await p.goto(demo); await p.addStyleTag({ content: '.demo{display:none!important}' });
 await p.waitForTimeout(900);
 const shot = async (sel, name, pad=0) => { const el = p.locator(sel).first(); await el.scrollIntoViewIfNeeded(); await p.waitForTimeout(150); await el.screenshot({ path: 'manual/img/' + name + '.png' }); };
+await p.waitForTimeout(1500);
 await p.screenshot({ path: 'manual/img/pagina.png' });
+console.log(JSON.stringify(await p.evaluate(() => Object.fromEntries(
+  ['.guia', '#sec-luz', '#sec-ver', '#sec-foco', '.badge', '#incuChip', '#ajustesBtn'].map(q => {
+    const r = document.querySelector(q).getBoundingClientRect();
+    return [q, [+(r.left / innerWidth * 100).toFixed(1), +(r.top / innerHeight * 100).toFixed(1),
+                +(r.right / innerWidth * 100).toFixed(1), +(r.bottom / innerHeight * 100).toFixed(1)]];
+  })))));
 await shot('.guia', 'guia');
 await shot('.head', 'encabezado');
 await shot('#sec-luz', 'luz');
 await p.locator('#luzCtl [data-acc=on]').click(); await p.waitForTimeout(400);
 await shot('#sec-luz', 'luz_encendida'); await p.waitForTimeout(2700);
+await p.evaluate(() => window.scrollTo(0, 0)); await p.waitForTimeout(300);
+await p.screenshot({ path: 'manual/img/pagina.png' });
 // desenfocar un poco cam0 para que se note
 await p.evaluate(() => { __sim.pos[0] = 14; __sim.pos[1] = -9.3; __simPintar(0); __simPintar(1); });
 await p.waitForTimeout(400);
@@ -47,14 +56,14 @@ await shot('#sec-foto', 'foto');
 await p.locator('#snap').click(); await p.waitForTimeout(3000);
 await shot('#galeriaDetails', 'galeria');
 await p.locator('.expcard').filter({ hasText: 'Células' }).click(); await p.waitForTimeout(900);
-await p.locator('.exp-hoja').screenshot({ path: 'manual/img/experimento.png' });
+await p.locator('#expVista .exp-hoja').screenshot({ path: 'manual/img/experimento.png' });
 await p.locator('.expmini').nth(2).click(); await p.waitForTimeout(900);
-await p.locator('.exp-hoja').screenshot({ path: 'manual/img/visor.png' });
+await p.locator('#expVista .exp-hoja').screenshot({ path: 'manual/img/visor.png' });
 await p.keyboard.press('Escape'); await p.keyboard.press('Escape'); await p.waitForTimeout(300);
-await p.locator('#marcaDetails > summary').click(); await p.waitForTimeout(500);
+await p.evaluate(() => abrirAjustes('marcaDetails')); await p.waitForTimeout(800);
 await p.locator('#marcaPresets [data-p=cientifica]').click(); await p.waitForTimeout(900);
 await shot('#marcaDetails', 'marca');
-await p.locator('#opticaDetails > summary').click(); await p.waitForTimeout(400);
+await p.evaluate(() => abrirAjustes('opticaDetails')); await p.waitForTimeout(800);
 await shot('#opticaDetails', 'optica');
 await b.close();
 console.log('ok');
