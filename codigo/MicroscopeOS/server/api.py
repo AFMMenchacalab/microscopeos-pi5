@@ -26,7 +26,7 @@ if str(BASE_DIR) not in sys.path:
 STATIC_DIR = BASE_DIR / "server" / "static"
 
 from temperature_controller import temperature_controller
-from core.timelapse import MODOS
+from core.timelapse import MODOS, vista_previa
 from core.profile_manager import ProfileManager
 from core.config import SystemConfig, CameraSettings, TimelapseSettings
 from core.experimentos import Experimentos, ID_RE, LEGADO_RE, BYTES_POR_FOTO
@@ -813,6 +813,10 @@ def create_app(camera, illuminations, timelapse, motores=None,
     def start_timelapse(req: TimelapseReq):
         if timelapse.is_running():
             return {"error": "Ya hay un timelapse corriendo"}
+        if getattr(timelapse, "reanudando", None):
+            return {"error": "Se está reanudando el timelapse que cortó la luz; "
+                    "espera a que arranque (tarda hasta 3 minutos) y, si no lo "
+                    "quieres, detenlo antes de iniciar otro"}
         carpeta_raiz = ""
         if req.destino == "usb":
             d = usb.punto_valido(req.usb_punto) if usb is not None else None
@@ -877,12 +881,44 @@ def create_app(camera, illuminations, timelapse, motores=None,
 
     @app.get("/status")
     def status():
+        corriendo = timelapse.is_running()
         return {
-            "running": timelapse.is_running(),
+            "running": corriendo,
             "camara_activa": estado["camara_activa"],
             "ciclo": getattr(timelapse, "ciclo_actual", 0),
             "carpeta": getattr(timelapse, "base_folder", None),
+            # Para la tarjeta "Timelapse en curso" de la pagina.
+            "timelapse": timelapse.resumen() if corriendo and hasattr(timelapse, "resumen") else None,
+            "reanudando": getattr(timelapse, "reanudando", None),
         }
+
+    # Vista previa del ultimo ciclo: quien entra a la pagina ve que hay un
+    # timelapse corriendo y como viene. En relieve DPC, el relieve ya
+    # calculado; si no, la foto. Se arma una sola vez por ciclo.
+    _vistas = {}
+    _vistas_lock = threading.Lock()
+
+    @app.get("/timelapse/vista/{cam}")
+    def timelapse_vista(cam: int, size: int = 800):
+        u = getattr(timelapse, "ultimas", {}).get(cam)
+        if not u or not timelapse.is_running():
+            return Response(status_code=404)
+        size = max(160, min(int(size), 1600))
+        modo = (timelapse.config or {}).get("modo")
+        clave = (cam, u["ciclo"], tuple(sorted(u["rutas"].items())), size)
+        with _vistas_lock:
+            datos = _vistas.get(clave)
+        if datos is None:
+            try:
+                datos = vista_previa(u["rutas"], modo, size)
+            except Exception as e:
+                return Response(content=f"no se pudo armar la vista: {e}", status_code=500)
+            with _vistas_lock:
+                if len(_vistas) > 8:
+                    _vistas.clear()
+                _vistas[clave] = datos
+        return Response(content=datos, media_type="image/jpeg",
+                        headers={"Cache-Control": "max-age=3600"})
 
     # ===============================
     # Temperatura (Arduino PID)

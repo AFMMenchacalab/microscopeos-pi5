@@ -371,6 +371,24 @@
   .guia{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;max-width:1400px;
     margin:0 auto var(--sp-4);font-size:13.5px}
   .guia-t{color:var(--dim)}
+
+  /* ---------- timelapse en curso (arriba de todo) ---------- */
+  .tlvivo{max-width:1400px;margin:0 auto var(--sp-4);border-color:var(--green)}
+  .tlvivo[hidden]{display:none}
+  .tlvivo-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .tlvivo-cab .panel-t{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim)}
+  .tlvivo-nombre{font-weight:600;font-size:16px}
+  .tlvivo-det{margin-left:auto;font-size:13px;color:var(--green)}
+  .tlvivo-info{font-size:13px;color:var(--dim);margin-top:6px}
+  .tlvivo-aviso{font-size:12.5px;color:var(--amber);margin-top:6px}
+  .tlvivo-aviso[hidden]{display:none}
+  .tlvivo-fotos{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:var(--sp-3)}
+  .tlvivo-fotos figure{margin:0}
+  .tlvivo-fotos img,.tlvivo-fotos .vacio{width:100%;aspect-ratio:4/3;object-fit:contain;display:flex;
+    align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--line);
+    border-radius:var(--radius-sm);color:var(--dim);font-size:13px;text-align:center;padding:0}
+  .tlvivo-fotos img{cursor:zoom-in}
+  .tlvivo-fotos figcaption{font-size:12px;color:var(--dim);margin-top:6px}
   .guia a{display:inline-flex;align-items:center;gap:7px;text-decoration:none;color:var(--text);
     padding:4px 10px 4px 4px;border-radius:20px;border:1px solid var(--line)}
   .guia a:hover{border-color:var(--green)}
@@ -427,11 +445,14 @@
   .lbfoco .zpasos{grid-template-columns:repeat(2,1fr)}
   .lbfoco h3{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim);
     margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .lbluz{flex-basis:250px;max-height:86vh;overflow:auto}
+  .lbluz .field{margin-bottom:var(--sp-3)}
   @media(max-width:860px){
     .lightbox{padding:76px var(--sp-3) var(--sp-3);align-items:flex-start;overflow:auto}
     .lightbox-wrap{flex-direction:column;align-items:stretch}
     .lbfoco{flex:none}
     .lbfoco .zpasos{grid-template-columns:repeat(4,1fr)}
+    .lbluz{order:3;max-height:none}
   }
   .lightbox-close{position:absolute;top:20px;right:20px;z-index:2;width:44px;height:44px;padding:0;
     border-radius:10px;background:var(--panel-solid);color:var(--text)}
@@ -562,6 +583,18 @@
   <a href="#sec-foco"><span class="paso">3</span>Enfoca</a>
   <a href="#sec-foto"><span class="paso">4</span>Toma una foto o un timelapse</a>
 </nav>
+
+<section class="panel tlvivo" id="tlVivo" hidden aria-live="polite">
+  <div class="tlvivo-cab">
+    <span class="dot run" aria-hidden="true"></span>
+    <span class="panel-t">Timelapse en curso</span>
+    <span class="tlvivo-nombre" id="tlvNombre"></span>
+    <a class="tlvivo-det" href="#sec-tl">Ver o detener</a>
+  </div>
+  <p class="tlvivo-info" id="tlvInfo"></p>
+  <p class="tlvivo-aviso" id="tlvAviso" hidden></p>
+  <div class="tlvivo-fotos" id="tlvFotos"></div>
+</section>
 
 <div class="grid">
   <div class="col">
@@ -756,6 +789,10 @@
 <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista de cámara ampliada" onclick="if(event.target===this||event.target.classList.contains('lightbox-wrap'))closeLightbox()">
   <button class="lightbox-close" onclick="closeLightbox()" aria-label="Cerrar vista ampliada"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg></button>
   <div class="lightbox-wrap">
+    <div class="lbfoco lbluz" id="lbLuz" hidden>
+      <h3><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg>Luz · <span id="lbLuzCam">las dos cámaras</span></h3>
+      <div id="lbLuzCtl"></div>
+    </div>
     <div class="lightbox-stage" id="lightboxStage"></div>
     <div class="lbfoco" id="lbFoco" hidden>
       <h3><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg>Foco · <span id="lbCam">Cámara 0</span></h3>
@@ -1052,9 +1089,12 @@ function toggleExpand(n){
   view.classList.add('expanded');
   expandedCam=n;
   // Con la cámara ampliada aparecen al lado los controles de foco de
-  // SU eje, para enfocar sin tener que salir del zoom.
+  // SU eje, para enfocar sin tener que salir del zoom; del otro lado,
+  // los de luz de esa cámara.
   document.getElementById('lbFoco').hidden=false;
+  document.getElementById('lbLuz').hidden=false;
   if(motorSel!==n)selMotor(n);
+  renderLuzZoom();
   document.getElementById('lightbox').hidden=false;
   document.body.style.overflow='hidden';
 }
@@ -1071,6 +1111,8 @@ function closeLightbox(){
   else restoreView(expandedCam);
   expandedCam=null;
   document.getElementById('lbFoco').hidden=true;
+  document.getElementById('lbLuz').hidden=true;
+  document.getElementById('lbLuzCtl').innerHTML='';
   document.getElementById('lightbox').hidden=true;
   document.body.style.overflow='';
 }
@@ -1087,6 +1129,7 @@ function openImagePreview(url){
   img.onclick=closeLightbox;
   stage.appendChild(img);
   document.getElementById('lbFoco').hidden=true;
+  document.getElementById('lbLuz').hidden=true;
   expandedCam='img';
   document.getElementById('lightbox').hidden=false;
   document.body.style.overflow='hidden';
@@ -1204,8 +1247,8 @@ try{if(localStorage.getItem('microscopeos_luz_sync')==='0')luz.sync=false;}catch
 let ultimaEdicionLuz=0;
 const envioLuz={};
 
-function bloqueLuz(clave,titulo){
-  const id='luz_'+clave;
+function bloqueLuz(clave,titulo,pref){
+  const id=(pref||'luz_')+clave;
   return '<div class="luzbloque" data-luz="'+clave+'">'
     +(titulo?'<div class="luztit"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>'+titulo+'</div>':'')
     +'<button class="luzon" data-acc="on"><span class="fila"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg><span class="lbl"></span></span><span class="sub"></span></button>'
@@ -1221,32 +1264,46 @@ function renderLuz(){
   const el=document.getElementById('luzCtl');
   el.innerHTML=luz.sync?bloqueLuz('ambas','')
     :'<div class="luzdos">'+bloqueLuz(0,'Cámara 0')+bloqueLuz(1,'Cámara 1')+'</div>';
-  el.querySelectorAll('.luzbloque').forEach(b=>{
-    const cams=camsDe(b);
-    b.querySelector('[data-acc=on]').onclick=()=>{
-      const on=!luz.cams[cams[0]].on;
-      cams.forEach(c=>luz.cams[c].on=on);
-      pintarLuz();enviarLuz(cams);
-      toast((on?'Luz encendida':'Luz apagada')+(cams.length===1?' en la cámara '+cams[0]:''));
-    };
-    b.querySelector('[data-acc=modo]').onchange=e=>{
-      cams.forEach(c=>luz.cams[c].modo=e.target.value);
-      pintarLuz();if(luz.cams[cams[0]].on)enviarLuz(cams);
-    };
-    b.querySelector('[data-acc=brillo]').oninput=e=>{
-      cams.forEach(c=>luz.cams[c].percent=+e.target.value);
-      pintarLuz();if(luz.cams[cams[0]].on)enviarLuz(cams);
-    };
-  });
+  el.querySelectorAll('.luzbloque').forEach(conectarBloqueLuz);
   const sb=document.getElementById('luzSync');
   sb.innerHTML=luz.sync
     ?'<svg class="ic" aria-hidden="true"><use href="#i-unlink"/></svg>Separar: una luz distinta en cada cámara'
     :'<svg class="ic" aria-hidden="true"><use href="#i-link"/></svg>Volver a poner la misma luz en las dos';
+  renderLuzZoom();
+  pintarLuz();
+  if(running)deshabilitarLuz(true);
+}
+function conectarBloqueLuz(b){
+  const cams=camsDe(b);
+  b.querySelector('[data-acc=on]').onclick=()=>{
+    const on=!luz.cams[cams[0]].on;
+    cams.forEach(c=>luz.cams[c].on=on);
+    pintarLuz();enviarLuz(cams);
+    toast((on?'Luz encendida':'Luz apagada')+(cams.length===1?' en la cámara '+cams[0]:''));
+  };
+  b.querySelector('[data-acc=modo]').onchange=e=>{
+    cams.forEach(c=>luz.cams[c].modo=e.target.value);
+    pintarLuz();if(luz.cams[cams[0]].on)enviarLuz(cams);
+  };
+  b.querySelector('[data-acc=brillo]').oninput=e=>{
+    cams.forEach(c=>luz.cams[c].percent=+e.target.value);
+    pintarLuz();if(luz.cams[cams[0]].on)enviarLuz(cams);
+  };
+}
+// En la vista ampliada, el mismo bloque de luz que en el panel: si las
+// luces van juntas maneja las dos; si están separadas, solo la de la
+// cámara ampliada.
+function renderLuzZoom(){
+  const el=document.getElementById('lbLuzCtl');
+  if(expandedCam!==0&&expandedCam!==1){el.innerHTML='';return;}
+  document.getElementById('lbLuzCam').textContent=luz.sync?'las dos cámaras':'Cámara '+expandedCam;
+  el.innerHTML=bloqueLuz(luz.sync?'ambas':expandedCam,'','lbluz_');
+  conectarBloqueLuz(el.querySelector('.luzbloque'));
   pintarLuz();
   if(running)deshabilitarLuz(true);
 }
 function pintarLuz(){
-  document.querySelectorAll('#luzCtl .luzbloque').forEach(b=>{
+  document.querySelectorAll('#luzCtl .luzbloque,#lbLuzCtl .luzbloque').forEach(b=>{
     const st=luz.cams[camsDe(b)[0]];
     const bt=b.querySelector('[data-acc=on]');
     bt.classList.toggle('lit',st.on);
@@ -1301,7 +1358,8 @@ async function cambiarColorLuz(cams,tipo,hex){
   }catch(e){toast('Sin conexión con la luz');}
 }
 function deshabilitarLuz(on){
-  document.querySelectorAll('#luzCtl button,#luzCtl select,#luzCtl input,#luzSync').forEach(e=>e.disabled=on);
+  document.querySelectorAll('#luzCtl button,#luzCtl select,#luzCtl input,#luzSync,'
+    +'#lbLuzCtl button,#lbLuzCtl select,#lbLuzCtl input').forEach(e=>e.disabled=on);
 }
 function enviarLuz(cams){
   ultimaEdicionLuz=Date.now();
@@ -1956,7 +2014,67 @@ async function poll(){
     document.getElementById('s_ciclo').className='v'+(s.running?' hot':'');
     document.getElementById('s_cam').textContent='CAM '+s.camara_activa;
     document.getElementById('s_folder').textContent=s.carpeta||'—';
+    pintarTlVivo(s);
   }catch(e){marcarConexion(false);}
+}
+// ===== Timelapse en curso: tarjeta arriba de todo con la última foto =====
+// Quien entra a la página ve enseguida que hay un timelapse corriendo y
+// cómo viene. En relieve DPC la foto es el relieve ya calculado.
+const NOMBRE_MODO_TL={blanco:'campo claro',dpc:'relieve (DPC)',oscuro:'fondo negro',rheinberg:'de colores'};
+let tlvClave='';
+function horaTl(iso){
+  if(!iso)return '';
+  const d=new Date(iso), man=new Date(Date.now()+864e5);
+  if(d.toDateString()===man.toDateString())
+    return 'mañana, '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  return fechaAmigable(iso);
+}
+function cadaTl(s){
+  if(!s)return '';
+  if(s<60)return s+' s';
+  if(s<3600)return (+(s/60).toFixed(1))+' min';
+  return (+(s/3600).toFixed(1))+' h';
+}
+function proximaTl(iso){
+  if(!iso)return '';
+  const s=Math.round((new Date(iso)-Date.now())/1000);
+  if(s<=5)return 'en unos segundos';
+  if(s<90)return 'en '+s+' s';
+  if(s<5400)return 'en '+Math.round(s/60)+' min';
+  return horaTl(iso);
+}
+function pintarTlVivo(s){
+  const card=document.getElementById('tlVivo'), t=s.timelapse;
+  if(!t&&!s.reanudando){card.hidden=true;tlvClave='';return;}
+  card.hidden=false;
+  const aviso=document.getElementById('tlvAviso'), fotos=document.getElementById('tlvFotos');
+  if(!t){
+    document.getElementById('tlvNombre').textContent='';
+    document.getElementById('tlvInfo').textContent=s.reanudando;
+    aviso.hidden=true;fotos.innerHTML='';tlvClave='';
+    return;
+  }
+  document.getElementById('tlvNombre').textContent=t.nombre||'';
+  const partes=['Foto '+(s.ciclo||0), NOMBRE_MODO_TL[t.modo]||t.modo, 'una cada '+cadaTl(t.intervalo_s)];
+  if(t.proxima)partes.push('la próxima '+proximaTl(t.proxima));
+  if(t.fin_previsto)partes.push('termina '+horaTl(t.fin_previsto));
+  document.getElementById('tlvInfo').textContent=partes.join(' · ');
+  const re=t.reanudaciones||[];
+  aviso.hidden=!re.length;
+  if(re.length)aviso.textContent='Se cortó la luz y siguió solo al volver ('+horaTl(re[re.length-1])+')'
+    +(re.length>1?' — pasó '+re.length+' veces':'')+'.';
+  const cams=(t.camaras||[]).map(String), ult=t.ultimas||{};
+  const clave=JSON.stringify([cams,ult]);
+  if(clave===tlvClave)return;      // sin foto nueva: no recargar (evita parpadeo)
+  tlvClave=clave;
+  fotos.innerHTML=cams.map(c=>{
+    const u=ult[c];
+    const pie='Cámara '+c+(u?' · foto '+u.ciclo+', '+horaTl(u.hora):'');
+    if(!u)return '<figure><div class="vacio">Todavía no hay fotos de esta cámara</div><figcaption>'+esc(pie)+'</figcaption></figure>';
+    const url='/timelapse/vista/'+c+'?v='+u.ciclo;
+    return '<figure><img src="'+url+'&size=800" alt="Última foto del timelapse, cámara '+c+'" loading="lazy"'
+      +' onclick="openImagePreview(\''+url+'&size=1600\')"><figcaption>'+esc(pie)+'</figcaption></figure>';
+  }).join('');
 }
 // ===== Galeria =====
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}

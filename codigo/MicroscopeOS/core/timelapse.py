@@ -1,6 +1,7 @@
 import json
 import time
 import os
+import subprocess
 import threading
 from datetime import datetime
 from enum import Enum
@@ -35,11 +36,70 @@ MODOS = {
 # error acumulado puede llevar el objetivo contra la muestra.
 DERIVA_MAXIMA_UM = 250.0
 
+# Reanudar despues de un corte de luz. Mientras corre un timelapse, este
+# archivo (en datos/) dice donde y como seguirlo; se borra solo cuando el
+# timelapse termina o se detiene desde la pagina. Si al arrancar el
+# servidor todavia esta, es que la Pi se apago a mitad de camino.
+ARCHIVO_REANUDAR = ".timelapse_en_curso.json"
+# Cuanto esperar al arrancar a que la hora este bien (la Pi no tiene pila
+# de reloj: despues de un corte arranca con la hora del ultimo apagado
+# hasta que la red la corrige) y a que aparezca la carpeta (una memoria
+# USB tarda en montarse).
+ESPERA_REANUDAR_S = 180
+
+
+def reloj_sincronizado():
+    """True si systemd dice que la hora ya vino de la red. Sin timedatectl
+    (fuera de la Pi) no hay forma de saberlo y se da por buena."""
+    try:
+        r = subprocess.run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
+                           capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() == "yes"
+    except Exception:
+        return True
+
+
+def vista_previa(rutas, modo, size=800):
+    """JPEG de un ciclo para mirar el timelapse desde la pagina.
+
+    rutas: {sufijo: archivo} de una camara. En relieve DPC muestra
+    (L-R)/(L+R), que es lo que se ve como relieve; con las cuatro fotos
+    sueltas no se distingue nada. En los demas modos, la foto tal cual.
+    """
+    import cv2
+    import numpy as np
+    import tifffile
+    from core.autofocus import imagen_dpc
+
+    def leer(ruta):
+        img = tifffile.imread(str(ruta))
+        if img.ndim == 3:
+            img = img[..., 0] if img.shape[-1] == 1 else cv2.cvtColor(img[..., :3], cv2.COLOR_RGB2GRAY)
+        h, w = img.shape[:2]
+        escala = size / max(h, w)
+        if escala < 1:   # achicar ANTES de calcular: en la Pi, 16 MP pesan
+            img = cv2.resize(img, (max(1, int(w * escala)), max(1, int(h * escala))),
+                             interpolation=cv2.INTER_AREA)
+        return img.astype(np.float32)
+
+    if modo == "dpc" and "_L" in rutas and "_R" in rutas:
+        dpc = imagen_dpc(leer(rutas["_L"]), leer(rutas["_R"]))
+        tope = float(np.percentile(np.abs(dpc), 99.5)) or 1.0
+        img8 = (127.5 + 127.5 * np.clip(dpc / tope, -1, 1)).astype(np.uint8)
+    else:
+        ruta = rutas.get("") or rutas.get("_L") or next(iter(rutas.values()))
+        img = leer(ruta)
+        lo, hi = np.percentile(img, (0.5, 99.5))
+        img8 = (np.clip((img - lo) / max(hi - lo, 1.0), 0, 1) * 255).astype(np.uint8)
+    ok, buf = cv2.imencode(".jpg", img8, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return buf.tobytes()
+
 
 class TimelapseManager:
 
     def __init__(self, camera, illuminations, autofocus=None, contador=None,
-                 enviador=None, respaldo_nas=None, experimentos=None):
+                 enviador=None, respaldo_nas=None, experimentos=None,
+                 archivo_estado=None):
         self.camera = camera
         # Donde se crean las carpetas (core/experimentos.py). Sin uno
         # explicito, datos/ en el directorio de trabajo.
@@ -65,6 +125,17 @@ class TimelapseManager:
         self.thread = None
         self.base_folder = None
         self.ciclo_actual = 0
+        # Para reanudar despues de un corte de luz (ver ARCHIVO_REANUDAR).
+        self.archivo_estado = Path(archivo_estado or
+                                   Path(self.experimentos.raiz) / ARCHIVO_REANUDAR)
+        self.config = None            # parametros con los que se inicio
+        self.inicio_wall = None       # time.time() del inicio original
+        self.reanudaciones = []       # cuando se reanudo (ISO)
+        self.reanudando = None        # texto mientras espera para reanudar
+        self.proxima_wall = None      # time.time() de la proxima foto
+        # Ultimo ciclo guardado de cada camara: {cam: {ciclo, hora, rutas}}
+        # para la vista previa de la pagina.
+        self.ultimas = {}
 
     def _log(self, mensaje):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -426,31 +497,190 @@ class TimelapseManager:
         self.experimentos.actualizar(self.base_folder, **meta)
         return os.path.join(self.base_folder, "experimento.json")
 
-    def _run(self, modo, interval_seconds, duration_seconds,
-             stabilization_time, camaras, simultaneo,
-             autofocus, autofocus_cada, autofocus_opts,
-             contar, contar_cada, contar_opts,
-             carpeta_raiz="", nombre=""):
+    # ---------- reanudar despues de un corte de luz ----------
+    def _guardar_estado(self, ciclo):
+        """Escribe ARCHIVO_REANUDAR. Se llama al iniciar y despues de cada
+        ciclo; con fsync, porque justo lo que importa es que sobreviva a
+        un corte de luz."""
+        datos = {"carpeta": os.path.abspath(self.base_folder),
+                 "inicio_ts": self.inicio_wall, "ciclo": ciclo,
+                 "ultimo_ts": time.time(), "reanudaciones": self.reanudaciones,
+                 "params": self.config}
+        try:
+            self.archivo_estado.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.archivo_estado.with_name(self.archivo_estado.name + ".tmp")
+            with open(tmp, "w") as f:
+                json.dump(datos, f, indent=1)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.archivo_estado)
+        except Exception as e:
+            self._log(f"No se pudo guardar el estado para reanudar: {e}")
 
-        self.state = TimelapseState.RUNNING
+    def _borrar_estado(self):
+        try:
+            self.archivo_estado.unlink()
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            print(f"[timelapse] no se pudo borrar {self.archivo_estado}: {e}")
+
+    def _ultimas_de_disco(self, camaras):
+        """El ultimo ciclo guardado de cada camara, leido de la carpeta:
+        al reanudar, la pagina muestra la foto de antes del corte hasta
+        que se toma la siguiente."""
+        ultimas = {}
+        for cam in camaras:
+            carpeta = Path(self.base_folder) / f"cam{cam}"
+            fotos = [p for p in carpeta.glob("*.tif") if p.name[:4].isdigit()]
+            if not fotos:
+                continue
+            n = max(int(p.name[:4]) for p in fotos)
+            del_ciclo = [p for p in fotos if int(p.name[:4]) == n]
+            rutas = {}
+            for p in del_ciclo:
+                suf = p.stem[-2:] if p.stem[-2:] in ("_L", "_R", "_T", "_B") else ""
+                rutas[suf] = str(p)
+            hora = datetime.fromtimestamp(max(p.stat().st_mtime for p in del_ciclo))
+            ultimas[cam] = {"ciclo": n, "hora": hora.isoformat(timespec="seconds"),
+                            "rutas": rutas}
+        return ultimas
+
+    def reanudar_pendiente(self, espera_s=ESPERA_REANUDAR_S, sincronizado=None,
+                           en_hilo=True):
+        """Si la Pi se apago con un timelapse a medias, lo sigue.
+
+        Se llama al arrancar el servidor. Espera (en un hilo, sin frenar
+        el arranque) a que la hora venga de la red y a que exista la
+        carpeta; despues sigue en la MISMA carpeta, con la numeracion de
+        fotos donde quedo y respetando la duracion original: si mientras
+        estuvo apagada ya se cumplio, cierra el experimento y no saca
+        nada mas.
+        """
+        if not self.archivo_estado.is_file():
+            return None
+        if en_hilo:
+            t = threading.Thread(target=self.reanudar_pendiente,
+                                 kwargs={"espera_s": espera_s, "sincronizado": sincronizado,
+                                         "en_hilo": False}, daemon=True)
+            t.start()
+            return t
+        try:
+            datos = json.loads(self.archivo_estado.read_text())
+            p = datos["params"]
+            carpeta = datos["carpeta"]
+            inicio = float(datos["inicio_ts"])
+            if p.get("modo") not in MODOS:
+                raise ValueError(f"modo invalido {p.get('modo')!r}")
+        except Exception as e:
+            print(f"[timelapse] estado para reanudar ilegible, se descarta: {e}")
+            self._borrar_estado()
+            return None
+        sincronizado = sincronizado or reloj_sincronizado
+        ultimo = float(datos.get("ultimo_ts") or inicio)
+        self.reanudando = "Reanudando el timelapse después de un corte de luz…"
+        print(f"[timelapse] quedo un timelapse a medias en {carpeta}: reanudando")
+        try:
+            limite = time.monotonic() + espera_s
+            while time.monotonic() < limite and not (sincronizado() and time.time() >= ultimo):
+                time.sleep(1)
+            while time.monotonic() < limite and not os.path.isdir(carpeta):
+                time.sleep(1)
+            if not os.path.isdir(carpeta):
+                print(f"[timelapse] no aparecio {carpeta} (¿memoria USB?): no se reanuda")
+                self._borrar_estado()
+                return None
+            # Con la hora mal (sin red), al menos no retroceder.
+            ahora = max(time.time(), ultimo)
+            if self.is_running():
+                # Alguien inicio otro mientras esperabamos: ese manda (y
+                # ya escribio su propio archivo de estado).
+                self.experimentos.finalizar(
+                    carpeta, estado="interrumpido por un corte de luz",
+                    fin=datetime.fromtimestamp(ultimo).isoformat(timespec="seconds"))
+                return None
+            if ahora - inicio >= p["duration_seconds"]:
+                fin = datetime.fromtimestamp(inicio + p["duration_seconds"])
+                self.experimentos.finalizar(
+                    carpeta, fin=fin.isoformat(timespec="seconds"),
+                    estado="terminó mientras la Raspberry estaba apagada (corte de luz)",
+                    ciclos=int(datos.get("ciclo", 0)))
+                print("[timelapse] la duracion se cumplio durante el corte: se cierra")
+                self._borrar_estado()
+                return None
+            datos["ahora_ts"] = ahora
+            self._lanzar(p, reanudar=datos)
+            return datos
+        finally:
+            self.reanudando = None
+
+    def resumen(self):
+        """Lo que la pagina muestra de un timelapse en curso."""
+        p = self.config or {}
+        iso = (lambda t: datetime.fromtimestamp(t).isoformat(timespec="seconds")
+               if t else None)
+        return {
+            "nombre": getattr(self, "nombre_experimento", None),
+            "modo": p.get("modo"),
+            "intervalo_s": p.get("interval_seconds"),
+            "duracion_s": p.get("duration_seconds"),
+            "camaras": p.get("camaras"),
+            "inicio": iso(self.inicio_wall),
+            "fin_previsto": iso(self.inicio_wall + p["duration_seconds"])
+                            if self.inicio_wall and p else None,
+            "proxima": iso(self.proxima_wall),
+            "reanudaciones": list(self.reanudaciones),
+            "ultimas": {str(c): {"ciclo": u["ciclo"], "hora": u["hora"]}
+                        for c, u in sorted(self.ultimas.items())},
+        }
+
+    # ---------- el timelapse ----------
+    def _run(self, p, reanudar=None):
+        modo = p["modo"]
+        interval_seconds = p["interval_seconds"]
+        duration_seconds = p["duration_seconds"]
+        stabilization_time = p["stabilization_time"]
+        camaras = p["camaras"]
+        simultaneo = p["simultaneo"]
+        autofocus, autofocus_cada = p["autofocus"], p["autofocus_cada"]
+        autofocus_opts = p["autofocus_opts"]
+        contar, contar_cada, contar_opts = p["contar"], p["contar_cada"], p["contar_opts"]
+
+        self.config = p
         patrones = MODOS[modo]
 
-        # Carpeta del experimento: datos/AAAA-MM-DD_HHMM_<nombre>, o en
-        # la memoria USB (carpeta_raiz) bajo MicroscopeOS/.
-        raiz = os.path.join(carpeta_raiz, "MicroscopeOS") if carpeta_raiz else None
-        self.base_folder = str(self.experimentos.crear_timelapse(nombre, raiz=raiz))
+        if reanudar is None:
+            # Carpeta del experimento: datos/AAAA-MM-DD_HHMM_<nombre>, o en
+            # la memoria USB (carpeta_raiz) bajo MicroscopeOS/.
+            raiz = (os.path.join(p["carpeta_raiz"], "MicroscopeOS")
+                    if p["carpeta_raiz"] else None)
+            self.base_folder = str(self.experimentos.crear_timelapse(p["nombre"], raiz=raiz))
+            ciclo = 0
+            self.inicio_wall = time.time()
+            self.reanudaciones = []
+            self.ultimas = {}
+        else:
+            self.base_folder = reanudar["carpeta"]
+            ciclo = int(reanudar.get("ciclo", 0))
+            self.inicio_wall = float(reanudar["inicio_ts"])
+            self.reanudaciones = list(reanudar.get("reanudaciones") or []) + [
+                datetime.now().isoformat(timespec="seconds")]
+            # self.ultimas ya lo cargo _lanzar desde el disco
         self.nombre_experimento = self.experimentos.info(self.base_folder)["nombre"]
-        self.ciclo_actual = 0
-        self._detenido = False
+        self.ciclo_actual = ciclo
         for cam in camaras:
             os.makedirs(os.path.join(self.base_folder, f"cam{cam}"), exist_ok=True)
         self._enviar(self._escribir_metadatos(modo, interval_seconds,
-                                              duration_seconds, camaras, nombre))
+                                              duration_seconds, camaras, p["nombre"]))
+        if reanudar is not None:
+            self.experimentos.actualizar(self.base_folder, estado="en curso",
+                                         reanudaciones=self.reanudaciones)
 
-        # Crear CSV con cabecera
+        # Crear CSV con cabecera (al reanudar, se sigue agregando al mismo)
         csv_path = os.path.join(self.base_folder, "temperatura.csv")
-        with open(csv_path, "w") as f:
-            f.write("timestamp,ciclo,temperatura,setpoint,pwm\n")
+        if reanudar is None or not os.path.exists(csv_path):
+            with open(csv_path, "w") as f:
+                f.write("timestamp,ciclo,temperatura,setpoint,pwm\n")
 
         if autofocus and self.autofocus is None:
             self._log("Autofoco pedido pero no hay motores de enfoque "
@@ -458,13 +688,15 @@ class TimelapseManager:
             autofocus = False
         # Posicion de cada eje al primer autofoco (um): referencia para
         # DERIVA_MAXIMA_UM y para la columna deriva_um de autofoco.csv.
+        # Al reanudar se vuelve a tomar: los motores cuentan desde cero
+        # despues de reiniciar.
         self._ancla_um = {}
         if contar and self.contador is None:
             self._log("Conteo de celulas pedido pero no hay contador "
                       "disponible -- se continua sin conteo.")
             contar = False
 
-        self._log(f"Timelapse iniciado | modo={modo} | camaras={camaras} | "
+        self._log(f"Timelapse {'reanudado' if reanudar else 'iniciado'} | modo={modo} | camaras={camaras} | "
                   f"intervalo={interval_seconds}s | duracion={duration_seconds}s | "
                   f"captura={'simultanea' if simultaneo else 'secuencial'} | "
                   f"autofoco={'cada ' + str(autofocus_cada) + ' ciclo(s)' if autofocus else 'no'} | "
@@ -473,9 +705,31 @@ class TimelapseManager:
                   f"envio_pc={'si' if self.enviar_pc and self.enviador else 'no'} | "
                   f"respaldo_nas={'si' if self.respaldar_nas and self.respaldo_nas else 'no'}")
 
-        start_time = time.monotonic()
-        next_capture_time = start_time
-        ciclo = 0
+        # Los tiempos van contra el inicio ORIGINAL: al reanudar, la
+        # duracion no vuelve a empezar y las fotos siguen en la misma
+        # grilla (inicio + k*intervalo).
+        transcurrido = 0.0
+        if reanudar is not None:
+            transcurrido = max(0.0, float(reanudar.get("ahora_ts") or time.time())
+                               - self.inicio_wall)
+        start_time = time.monotonic() - transcurrido
+        next_capture_time = time.monotonic()
+        tras_reanudar = None
+        forzar_af = False
+        if reanudar is not None:
+            esperadas = int(transcurrido // interval_seconds) + 1
+            self._log(f"Reanudado despues de un corte de luz o reinicio: "
+                      f"{transcurrido / 60:.1f} min desde el inicio, {ciclo} ciclo(s) hechos, "
+                      f"se perdieron ~{max(0, esperadas - ciclo)} foto(s). "
+                      f"Se toma una ahora y se sigue cada {interval_seconds}s.")
+            # Una foto apenas vuelve (con autofoco: la temperatura y el
+            # reinicio pueden haber movido el foco); despues, la grilla.
+            tras_reanudar = start_time + esperadas * interval_seconds
+            if tras_reanudar - time.monotonic() < interval_seconds / 2:
+                tras_reanudar += interval_seconds
+            forzar_af = True
+        self.proxima_wall = time.time() + (next_capture_time - time.monotonic())
+        self._guardar_estado(ciclo)
 
         while self.state == TimelapseState.RUNNING:
             current_time = time.monotonic()
@@ -497,8 +751,9 @@ class TimelapseManager:
                 # despues del log de temperatura: mueve la plataforma y
                 # deja las camaras en modo preview, asi que tiene que
                 # terminar antes de que se dispare la primera foto.
-                if autofocus and (ciclo - 1) % max(1, autofocus_cada) == 0:
+                if autofocus and (forzar_af or (ciclo - 1) % max(1, autofocus_cada) == 0):
                     self._autoenfocar(camaras, ciclo, ts, autofocus_opts)
+                forzar_af = False
 
                 if simultaneo:
                     guardadas = self._capturar_simultaneo(
@@ -506,6 +761,12 @@ class TimelapseManager:
                 else:
                     guardadas = self._capturar_secuencial(
                         patrones, camaras, ahora, stabilization_time)
+
+                for cam, rutas in guardadas.items():
+                    if rutas:
+                        self.ultimas[cam] = {"ciclo": ciclo,
+                                             "hora": ahora.isoformat(timespec="seconds"),
+                                             "rutas": dict(rutas)}
 
                 for cam, rutas in sorted(guardadas.items()):
                     for sufijo, _ in patrones:
@@ -515,7 +776,12 @@ class TimelapseManager:
                 if contar and (ciclo - 1) % max(1, contar_cada) == 0:
                     self._contar_ciclo(guardadas, ciclo, ts, contar_opts)
 
-                next_capture_time += interval_seconds
+                if tras_reanudar is not None:
+                    next_capture_time, tras_reanudar = tras_reanudar, None
+                else:
+                    next_capture_time += interval_seconds
+                self.proxima_wall = time.time() + (next_capture_time - time.monotonic())
+                self._guardar_estado(ciclo)
 
             else:
                 time.sleep(0.05)
@@ -542,7 +808,25 @@ class TimelapseManager:
             ruta = os.path.join(self.base_folder, extra)
             if os.path.exists(ruta):
                 self._enviar(ruta)
+        # Termino (o lo detuvieron): ya no hay nada que reanudar.
+        self._borrar_estado()
+        self.proxima_wall = None
         self.state = TimelapseState.STOPPED
+
+    def _lanzar(self, p, reanudar=None):
+        self.enviar_pc = bool(p.get("enviar_pc"))
+        self.respaldar_nas = bool(p.get("respaldar_nas"))
+        # RUNNING ya desde aca (y no recien dentro del hilo): asi un segundo
+        # start() o el /status de la pagina no ven "parado" en el medio.
+        self._detenido = False
+        if reanudar is not None:
+            # Antes de lanzar el hilo, para que la pagina muestre desde ya
+            # la ultima foto de antes del corte.
+            self.base_folder = reanudar["carpeta"]
+            self.ultimas = self._ultimas_de_disco(p["camaras"])
+        self.state = TimelapseState.RUNNING
+        self.thread = threading.Thread(target=self._run, args=(p, reanudar), daemon=True)
+        self.thread.start()
 
     def start(self, modo="blanco", interval_seconds=300, duration_seconds=3600,
               stabilization_time=0.3, camaras=[0, 1], simultaneo=False,
@@ -560,18 +844,18 @@ class TimelapseManager:
             print(f"Modo invalido: {modo}. Usa uno de: {', '.join(MODOS)}.")
             return
 
-        self.enviar_pc = bool(enviar_pc)
-        self.respaldar_nas = bool(respaldar_nas)
-        self.thread = threading.Thread(
-            target=self._run,
-            args=(modo, interval_seconds, duration_seconds,
-                  stabilization_time, camaras, simultaneo,
-                  autofocus, autofocus_cada, autofocus_opts or {},
-                  contar, contar_cada, contar_opts or {},
-                  carpeta_raiz, nombre),
-            daemon=True
-        )
-        self.thread.start()
+        # Todo lo necesario para reanudarlo tal cual (va al archivo de
+        # estado, asi que tiene que ser JSON).
+        p = {"modo": modo, "interval_seconds": interval_seconds,
+             "duration_seconds": duration_seconds,
+             "stabilization_time": stabilization_time, "camaras": list(camaras),
+             "simultaneo": bool(simultaneo), "autofocus": bool(autofocus),
+             "autofocus_cada": autofocus_cada, "autofocus_opts": autofocus_opts or {},
+             "contar": bool(contar), "contar_cada": contar_cada,
+             "contar_opts": contar_opts or {}, "carpeta_raiz": carpeta_raiz or "",
+             "nombre": nombre or "", "enviar_pc": bool(enviar_pc),
+             "respaldar_nas": bool(respaldar_nas)}
+        self._lanzar(p)
 
     def stop(self):
         if self.state == TimelapseState.RUNNING:

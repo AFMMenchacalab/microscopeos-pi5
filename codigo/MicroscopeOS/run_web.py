@@ -123,6 +123,11 @@ timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus,
                              respaldo_nas=respaldo_nas,
                              experimentos=experimentos)
 
+# Si la Pi se apago (corte de luz) con un timelapse a medias, seguirlo.
+# Corre en un hilo: espera a que la hora venga de la red y a que aparezca
+# la carpeta, sin demorar el arranque de la pagina.
+timelapse.reanudar_pendiente()
+
 app = create_app(camera, illuminations, timelapse,
                  motores=motores, autofocus=autofocus, conteo=conteo,
                  usb=usb, enviador=enviador, respaldo_nas=respaldo_nas,
