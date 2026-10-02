@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Instructivo MicroscopeOS</title>
+<link rel="stylesheet" href="fonts/local.css">
+<style>
+  /* Impresion en carta, blanco y negro o color: todo se entiende sin color. */
+  @page{size:Letter;margin:13mm 15mm 15mm}
+  :root{
+    --tinta:#14202b; --gris:#5b6875; --linea:#cfd6dd; --fondo:#f2f5f7;
+    --verde:#15803d; --verde-claro:#e3f4e8; --ambar:#b45309; --ambar-claro:#fdf0dc;
+    --rojo:#b91c1c;
+    --ui:'Fira Sans','DejaVu Sans',sans-serif; --mono:'Fira Code','DejaVu Sans Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-family:var(--ui);color:var(--tinta);font-size:10.4pt;line-height:1.45}
+  .pagina{break-after:page;position:relative}
+  .pagina:last-child{break-after:auto}
+  h1{font-size:30pt;line-height:1.1;font-weight:700;letter-spacing:-.5px}
+  h2{font-size:17pt;font-weight:700;margin-bottom:4mm;display:flex;align-items:center;gap:3mm;
+    padding-bottom:2.5mm;border-bottom:2px solid var(--tinta)}
+  h3{font-size:12pt;font-weight:700;margin:4mm 0 1.5mm}
+  p{margin-bottom:2.5mm;max-width:165mm}
+  .paso{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
+    width:10mm;height:10mm;border-radius:50%;background:var(--verde);color:#fff;font-size:15pt;font-weight:700}
+  .paso.ch{width:6.5mm;height:6.5mm;font-size:10pt}
+  .mini{font-size:9.5pt;color:var(--gris)}
+  kbd{display:inline-block;min-width:6.5mm;padding:0 1.4mm;border:1px solid #9aa6b1;border-bottom-width:2.5px;
+    border-radius:1.4mm;background:#fff;font-family:var(--mono);font-size:9.5pt;text-align:center;line-height:1.5}
+  .boton{display:inline-block;padding:0 2mm;border:1px solid var(--linea);border-radius:1.6mm;background:var(--fondo);
+    font-weight:600;font-size:10pt;white-space:nowrap}
+  .boton.verde{background:var(--verde);border-color:var(--verde);color:#fff}
+  .captura{border:1px solid var(--linea);border-radius:2.5mm;display:block;max-width:100%}
+  .dos{display:grid;grid-template-columns:1fr 1fr;gap:7mm;align-items:start}
+  .dos.a{grid-template-columns:1.15fr 1fr}
+  .dos.b{grid-template-columns:1fr 1.25fr}
+  ol.pasos{list-style:none;counter-reset:p;display:grid;gap:2mm;margin:2mm 0 4mm}
+  ol.pasos li{counter-increment:p;display:grid;grid-template-columns:7mm 1fr;gap:2.5mm;align-items:start}
+  ol.pasos li::before{content:counter(p);width:6.5mm;height:6.5mm;border-radius:50%;border:2px solid var(--tinta);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10pt;margin-top:.3mm}
+  .nota{border-left:4px solid var(--verde);background:var(--verde-claro);padding:2.5mm 4mm;border-radius:0 2mm 2mm 0;
+    margin:3mm 0;font-size:10.5pt}
+  .cuidado{border-left:4px solid var(--ambar);background:var(--ambar-claro);padding:2.5mm 4mm;border-radius:0 2mm 2mm 0;
+    margin:3mm 0;font-size:10.5pt}
+  .nota b:first-child,.cuidado b:first-child{display:block;margin-bottom:.5mm}
+  table{border-collapse:collapse;width:100%;font-size:9.8pt;margin:2mm 0 4mm}
+  th,td{border:1px solid var(--linea);padding:1.4mm 2.2mm;text-align:left;vertical-align:top}
+  th{background:var(--fondo);font-weight:600}
+  figure{margin:0}
+  figcaption{font-size:9.5pt;color:var(--gris);margin-top:1.5mm}
+  svg{display:block}
+  .silueta{color:var(--tinta)}
+
+  /* portada */
+  .portada{display:flex;flex-direction:column;gap:6mm;padding-top:4mm}
+  .portada .sub{font-size:14pt;color:var(--gris);max-width:150mm}
+  .indice{display:grid;grid-template-columns:auto 1fr auto;gap:2mm 5mm;font-size:11.5pt;max-width:150mm;
+    border-top:1px solid var(--linea);padding-top:5mm}
+  .indice span:nth-child(3n){color:var(--gris)}
+  .linea-llenar{display:inline-block;border-bottom:1px solid var(--tinta);min-width:85mm;height:6mm;vertical-align:bottom}
+
+  /* captura con numeros encima */
+  .anotada{position:relative;display:table;margin:0 auto}
+  .anotada img{display:block}
+  .anotada .m{position:absolute;transform:translate(-50%,-50%);width:9mm;height:9mm;border-radius:50%;
+    background:var(--ambar);color:#fff;font-weight:700;font-size:13pt;display:flex;align-items:center;justify-content:center;
+    border:2.5px solid #fff;box-shadow:0 0 0 1px var(--ambar)}
+  .leyenda{display:grid;grid-template-columns:9mm 1fr;gap:2mm 3mm;align-items:center;font-size:10.5pt;margin-top:4mm}
+  .leyenda .m{position:static;transform:none;width:7.5mm;height:7.5mm;font-size:11pt;border-radius:50%;background:var(--ambar);
+    color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .tira{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm;text-align:center;font-size:10pt}
+  .tira img{width:100%;border-radius:2mm;border:1px solid var(--linea)}
+  .tira b{display:block;margin-top:1mm}
+
+  /* tarjeta para recortar */
+  .tarjeta{border:2px dashed var(--gris);border-radius:4mm;padding:6mm;display:grid;gap:5mm}
+  .tarjeta h2{border:0;padding:0;margin:0;font-size:17pt}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm}
+  .grid4 > div{border:1px solid var(--linea);border-radius:3mm;padding:3mm;font-size:10pt}
+  .grid4 .paso{margin-bottom:1.5mm}
+  .tecla-tabla td{border:0;padding:1.2mm 2mm;font-size:10.5pt}
+  .tecla-tabla td:first-child{white-space:nowrap;text-align:right}
+</style>
+</head>
+<body>
+
+<!-- ========== PORTADA ========== -->
+<section class="pagina portada">
+  <div class="mini">Instructivo de uso · versión octubre 2026</div>
+  <h1>MicroscopeOS<br>Cómo usar el microscopio<br>desde la computadora</h1>
+  <p class="sub">Para cualquier persona, sin conocimientos previos. Explica cómo encender la luz,
+  ver la muestra, enfocarla y tomar fotos, una o muchas.</p>
+
+  <svg class="silueta" viewBox="0 0 600 330" width="100%" style="max-width:125mm" aria-label="Silueta de una pantalla con la página del microscopio">
+    <!-- monitor -->
+    <rect x="70" y="10" width="460" height="270" rx="14" fill="none" stroke="currentColor" stroke-width="6"/>
+    <rect x="270" y="280" width="60" height="28" fill="currentColor"/>
+    <rect x="215" y="306" width="170" height="12" rx="6" fill="currentColor"/>
+    <!-- pagina -->
+    <rect x="92" y="30" width="416" height="18" rx="4" fill="#cfd6dd"/>
+    <g font-family="Fira Sans, sans-serif" font-weight="700" font-size="15" fill="#fff" text-anchor="middle">
+      <rect x="92" y="58" width="270" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="110" cy="80" r="11" fill="#15803d"/><text x="110" y="85">1</text>
+      <rect x="128" y="74" width="120" height="12" rx="3" fill="#cfd6dd"/>
+      <rect x="92" y="110" width="270" height="150" rx="6" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="110" cy="128" r="11" fill="#15803d"/><text x="110" y="133">2</text>
+      <rect x="102" y="146" width="122" height="104" rx="4" fill="#dfe6ec"/>
+      <rect x="230" y="146" width="122" height="104" rx="4" fill="#dfe6ec"/>
+      <g fill="#8a969f"><circle cx="140" cy="180" r="9"/><circle cx="175" cy="210" r="7"/><circle cx="196" cy="168" r="8"/><circle cx="130" cy="228" r="6"/>
+      <circle cx="262" cy="190" r="8"/><circle cx="300" cy="172" r="9"/><circle cx="318" cy="222" r="7"/><circle cx="276" cy="232" r="6"/></g>
+      <rect x="372" y="58" width="136" height="202" rx="6" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="390" cy="80" r="11" fill="#15803d"/><text x="390" y="85">3</text>
+      <rect x="384" y="100" width="112" height="28" rx="5" fill="#dfe6ec"/>
+      <path d="M432 120l8-8 8 8" stroke="currentColor" stroke-width="3" fill="none"/>
+      <rect x="384" y="134" width="25" height="18" rx="3" fill="#dfe6ec"/><rect x="413" y="134" width="25" height="18" rx="3" fill="#15803d"/>
+      <rect x="442" y="134" width="25" height="18" rx="3" fill="#dfe6ec"/><rect x="471" y="134" width="25" height="18" rx="3" fill="#dfe6ec"/>
+      <rect x="384" y="158" width="112" height="28" rx="5" fill="#dfe6ec"/>
+      <path d="M432 168l8 8 8-8" stroke="currentColor" stroke-width="3" fill="none"/>
+      <rect x="384" y="200" width="112" height="26" rx="5" fill="#15803d"/>
+      <circle cx="398" cy="243" r="11" fill="#15803d"/><text x="398" y="248">4</text>
+    </g>
+  </svg>
+
+  <div class="indice">
+    <span class="paso ch">1</span><span>Enciende la luz</span><span>pág. 4</span>
+    <span class="paso ch">2</span><span>Mira la muestra</span><span>pág. 4</span>
+    <span class="paso ch">3</span><span>Enfoca (con botones, con el teclado o automático)</span><span>pág. 5</span>
+    <span class="paso ch">4</span><span>Toma una foto o un timelapse</span><span>pág. 8</span>
+    <span></span><span>Si algo sale mal</span><span>pág. 9</span>
+    <span></span><span>Tarjeta para tener junto al microscopio</span><span>pág. 10</span>
+  </div>
+</section>
+
+<!-- ========== ANTES DE EMPEZAR ========== -->
+<section class="pagina">
+  <h2>Antes de empezar</h2>
+  <div class="dos b">
+    <div>
+      <h3>Qué necesitas</h3>
+      <ol class="pasos">
+        <li><span>El microscopio encendido y con la muestra ya colocada.</span></li>
+        <li><span>Una computadora, tableta o celular <b>conectado a la misma red</b> que el microscopio.</span></li>
+        <li><span>La dirección de la página del microscopio. Pídesela a la persona responsable y anótala aquí:</span></li>
+      </ol>
+      <p style="margin-left:9.5mm;white-space:nowrap">http:// <span class="linea-llenar" style="min-width:50mm"></span> :8000/ui</p>
+      <h3>Cómo abrir la página</h3>
+      <ol class="pasos">
+        <li><span>Abre el navegador (Chrome, Firefox, Edge o Safari).</span></li>
+        <li><span>Escribe la dirección completa en la barra de arriba y presiona <kbd>Enter</kbd>.</span></li>
+        <li><span>Arriba a la derecha debe decir <span class="boton">● Listo</span>. Si dice «Timelapse en curso», alguien
+        está usando el microscopio: no lo interrumpas.</span></li>
+      </ol>
+    </div>
+    <figure>
+      <svg class="silueta" viewBox="0 0 300 250" width="100%" aria-label="Silueta: computadora y microscopio conectados a la misma red">
+        <!-- laptop -->
+        <rect x="14" y="120" width="110" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="5"/>
+        <path d="M0 196h138l-8 12H8z" fill="currentColor"/>
+        <rect x="26" y="132" width="86" height="10" rx="2" fill="#cfd6dd"/>
+        <rect x="26" y="148" width="40" height="32" rx="2" fill="#cfd6dd"/><rect x="72" y="148" width="40" height="32" rx="2" fill="#cfd6dd"/>
+        <!-- microscopio (generico) -->
+        <rect x="196" y="200" width="92" height="14" rx="4" fill="currentColor"/>
+        <rect x="262" y="70" width="14" height="132" fill="currentColor"/>
+        <rect x="206" y="150" width="70" height="10" rx="2" fill="currentColor"/>
+        <path d="M218 74h40v34h-10l-6 18h-8l-6-18h-10z" fill="currentColor"/>
+        <rect x="214" y="138" width="40" height="5" fill="#8a969f"/>
+        <!-- red -->
+        <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round">
+          <path d="M126 58a40 40 0 0 1 48 0"/><path d="M114 44a58 58 0 0 1 72 0"/><path d="M138 72a22 22 0 0 1 24 0"/>
+        </g>
+        <circle cx="150" cy="84" r="5" fill="currentColor"/>
+        <g stroke="currentColor" stroke-width="2.5" stroke-dasharray="5 5" fill="none">
+          <path d="M70 116 Q90 80 140 86"/><path d="M160 86 Q230 80 236 70"/>
+        </g>
+        <text x="150" y="236" text-anchor="middle" font-family="Fira Sans, sans-serif" font-size="13" fill="#5b6875">misma red (WiFi o cable)</text>
+      </svg>
+    </figure>
+  </div>
+
+  <h3>Palabras que vas a ver</h3>
+  <table>
+    <tr><th style="width:30%">Palabra</th><th>Qué significa</th></tr>
+    <tr><td><b>µm</b> (micra)</td><td>Una milésima de milímetro. 1000 µm = 1 mm. El foco se mueve en micras porque una célula
+      mide de 10 a 30 µm.</td></tr>
+    <tr><td><b>Enfocar</b></td><td>Subir o bajar la plataforma hasta que la imagen se vea nítida.</td></tr>
+    <tr><td><b>Altura</b></td><td>Cuánto subiste o bajaste desde que se encendió el microscopio. Sirve para saber dónde
+      estás, no es una medida absoluta.</td></tr>
+    <tr><td><b>Relieve (DPC)</b></td><td>Un tipo de luz que ilumina de lado y hace visibles las células transparentes
+      (sin teñir).</td></tr>
+    <tr><td><b>Timelapse</b></td><td>Fotos automáticas cada cierto tiempo, durante horas o días, sin que tengas que estar ahí.</td></tr>
+    <tr><td><b>Cámara 0 / Cámara 1</b></td><td>El microscopio tiene dos cámaras, cada una con su propio motor de foco.
+      Lo que hagas en una no mueve la otra.</td></tr>
+  </table>
+</section>
+
+<!-- ========== LA PANTALLA ========== -->
+<section class="pagina">
+  <h2>La pantalla de un vistazo</h2>
+  <p>La página está ordenada en el mismo orden en que se usa. Los círculos verdes con números son los pasos;
+  sigue el 1, luego el 2, el 3 y el 4.</p>
+  <figure class="anotada">
+    <img class="captura" src="img/pagina.png" alt="Captura de la página del microscopio" style="max-height:120mm;width:auto">
+    <span class="m" style="left:4.5%;top:7.5%">A</span>
+    <span class="m" style="left:1.5%;top:18.5%">1</span>
+    <span class="m" style="left:1.5%;top:53.6%">2</span>
+    <span class="m" style="left:69.8%;top:18.5%">3</span>
+    <span class="m" style="left:96%;top:9.5%">B</span>
+  </figure>
+  <div class="leyenda">
+    <span class="m">A</span><span><b>Guía «Cómo se usa».</b> Toca un paso para ir directo a esa parte.</span>
+    <span class="m">1</span><span><b>Enciende la luz.</b> Elige el tipo de luz y el brillo.</span>
+    <span class="m">2</span><span><b>Mira la muestra.</b> Las imágenes de las dos cámaras.</span>
+    <span class="m">3</span><span><b>Enfoca.</b> Botones para subir y bajar, y el enfoque automático.</span>
+    <span class="m">B</span><span><b>Estado.</b> «Listo» = puedes usarlo. «Timelapse en curso» = está tomando fotos solo.</span>
+  </div>
+  <p style="margin-top:4mm">Más abajo están el paso <b>4</b> (tomar una foto y el timelapse), las fotos guardadas, la
+  temperatura y el CO<sub>2</sub>. Al final, bajo <b>«Más opciones»</b>, hay ajustes que casi nunca hace falta tocar.</p>
+  <div class="nota"><b>No puedes romper nada desde la página.</b>
+  Si un botón no está disponible, aparece apagado o te sale un mensaje que explica por qué.</div>
+</section>
+
+<!-- ========== PASO 1 y 2 ========== -->
+<section class="pagina">
+  <h2><span class="paso">1</span>Enciende la luz</h2>
+  <div class="dos a">
+    <img class="captura" src="img/luz_encendida.png" alt="Sección Enciende la luz">
+    <div>
+      <ol class="pasos">
+        <li><span>En <b>Tipo de luz</b> deja <b>Normal</b> para empezar.</span></li>
+        <li><span>Toca <span class="boton">Encender luz</span>. El botón se pone amarillo y dice «Luz encendida».</span></li>
+        <li><span>Si la imagen se ve muy oscura o muy clara, mueve <b>Brillo</b>.</span></li>
+      </ol>
+      <div class="nota"><b>¿Células transparentes?</b>Las células sin teñir casi no se ven con luz normal.
+      Cambia a <b>Relieve</b>: se ven como en 3D. Con la luz encendida, el cambio es inmediato.</div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:7mm"><span class="paso">2</span>Mira la muestra</h2>
+  <div class="dos a">
+    <img class="captura" src="img/ver.png" alt="Sección Mira la muestra">
+    <div>
+      <ol class="pasos">
+        <li><span>Toca <span class="boton">En vivo</span> debajo de la cámara que quieres ver. Arriba de la imagen aparece
+        <b style="color:var(--rojo)">● EN VIVO</b>.</span></li>
+        <li><span><b>Toca la imagen</b> para verla en grande. Al lado aparecen los botones para enfocar, así no tienes que
+        salir de la imagen grande.</span></li>
+        <li><span>Para salir de la imagen grande toca la <b>✕</b> de arriba a la derecha, toca fuera de la imagen o
+        presiona <kbd>Esc</kbd>.</span></li>
+      </ol>
+      <p class="mini">«Contar células» cuenta las células que se ven y pone el número debajo de la imagen.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== PASO 3: ENFOCAR ========== -->
+<section class="pagina">
+  <h2><span class="paso">3</span>Enfoca</h2>
+  <p>Enfocar es subir o bajar la plataforma hasta que las células se vean con bordes nítidos. Hay tres maneras:
+  <b>automática</b> (la más fácil), <b>con los botones</b> o <b>con el teclado</b>.</p>
+
+  <div class="dos" style="grid-template-columns:1fr 1.5fr">
+    <svg class="silueta" viewBox="0 0 260 230" width="100%" aria-label="Silueta: la plataforma sube y baja bajo el objetivo">
+      <!-- objetivo -->
+      <path d="M95 8h70v40l-12 30h-46l-12-30z" fill="currentColor"/>
+      <rect x="112" y="78" width="36" height="10" fill="currentColor"/>
+      <!-- luz -->
+      <path d="M118 92 L130 132 L142 92" fill="#fde68a" opacity=".8"/>
+      <!-- portaobjetos y plataforma -->
+      <rect x="60" y="132" width="140" height="7" rx="1" fill="#9fb3c2"/>
+      <ellipse cx="130" cy="135" rx="18" ry="3" fill="#5b6875"/>
+      <rect x="40" y="139" width="180" height="16" rx="3" fill="currentColor"/>
+      <!-- flechas -->
+      <g stroke="#15803d" stroke-width="6" stroke-linecap="round" fill="none">
+        <path d="M232 168v-60"/><path d="M220 120l12-14 12 14"/>
+        <path d="M232 176v36"/><path d="M220 200l12 14 12-14"/>
+      </g>
+      <text x="200" y="104" font-family="Fira Sans, sans-serif" font-size="13" font-weight="700" fill="#15803d">Subir</text>
+      <text x="196" y="226" font-family="Fira Sans, sans-serif" font-size="13" font-weight="700" fill="#15803d">Bajar</text>
+      <text x="14" y="172" font-family="Fira Sans, sans-serif" font-size="11.5" fill="#5b6875">plataforma con la muestra</text>
+      <text x="4" y="40" font-family="Fira Sans, sans-serif" font-size="11.5" fill="#5b6875">objetivo</text>
+    </svg>
+    <div>
+      <div class="tira">
+        <div><img src="img/muestra_borroso.png" alt=""><b>Muy lejos</b>manchas sin forma</div>
+        <div><img src="img/muestra_casi.png" alt=""><b>Cerca</b>se ven, pero borrosas</div>
+        <div><img src="img/muestra_nitido.png" alt=""><b>Enfocado</b>bordes y núcleos nítidos</div>
+      </div>
+      <p class="mini" style="margin-top:2mm">Así cambia la imagen mientras te acercas al foco.</p>
+    </div>
+  </div>
+
+  <h3>Manera 1 · Automática (recomendada)</h3>
+  <div class="dos" style="grid-template-columns:1fr 1.4fr;align-items:center">
+    <img class="captura" src="img/boton_af.png" alt="Botón Enfocar automáticamente" style="border:0">
+    <div>
+      <ol class="pasos">
+        <li><span>Elige la cámara arriba: <span class="boton">Cámara 0</span> o <span class="boton">Cámara 1</span>.</span></li>
+        <li><span>Toca <span class="boton verde">Enfocar automáticamente</span> (o la tecla <kbd>F</kbd>) y espera de 10 segundos a 1 minuto.</span></li>
+        <li><span>Al terminar aparece un mensaje, por ejemplo «Enfocado: subió 6.8 µm».</span></li>
+      </ol>
+    </div>
+  </div>
+  <div class="cuidado"><b>Si dice «No encontré el foco»</b>Buscó hasta 0.1 mm hacia arriba y hacia abajo y no encontró
+  una imagen nítida, así que se quedó donde estaba. Acércate a mano con pasos de 25 µm hasta que veas
+  algo con forma, y vuelve a intentarlo. También revisa que la luz esté encendida y que haya células en la imagen.</div>
+</section>
+
+<!-- ========== PASO 3 (cont): BOTONES ========== -->
+<section class="pagina">
+  <h2><span class="paso">3</span>Enfoca con los botones</h2>
+  <div class="dos b">
+    <img class="captura" src="img/foco.png" alt="Sección Enfoca" style="max-height:125mm;width:auto">
+    <div>
+      <ol class="pasos">
+        <li><span>Elige la <b>cámara</b>.</span></li>
+        <li><span>Elige el <b>tamaño del paso</b> (los cuatro botones entre Subir y Bajar).</span></li>
+        <li><span>Toca <span class="boton">Subir</span> o <span class="boton">Bajar</span> mirando la imagen.</span></li>
+      </ol>
+      <svg class="silueta" viewBox="0 0 350 120" width="100%" style="margin:3mm 0" aria-label="Silueta: tocar una vez o mantener apretado">
+        <!-- toque -->
+        <rect x="10" y="62" width="130" height="40" rx="8" fill="#e8edf1" stroke="currentColor" stroke-width="3"/>
+        <text x="58" y="88" text-anchor="middle" font-family="Fira Sans, sans-serif" font-weight="700" font-size="15" fill="currentColor">Subir</text>
+        <g fill="currentColor"><rect x="104" y="4" width="20" height="54" rx="10"/></g>
+        <circle cx="114" cy="62" r="14" fill="none" stroke="#15803d" stroke-width="3"/>
+        <text x="75" y="118" text-anchor="middle" font-family="Fira Sans, sans-serif" font-size="12" fill="#5b6875">tocar = 1 paso</text>
+        <!-- mantener -->
+        <rect x="190" y="62" width="130" height="40" rx="8" fill="#e3f4e8" stroke="#15803d" stroke-width="3"/>
+        <text x="238" y="88" text-anchor="middle" font-family="Fira Sans, sans-serif" font-weight="700" font-size="15" fill="#15803d">Subir</text>
+        <g fill="currentColor"><rect x="284" y="4" width="20" height="54" rx="10"/></g>
+        <g fill="none" stroke="#15803d" stroke-width="3"><circle cx="294" cy="62" r="14"/><circle cx="294" cy="62" r="22" opacity=".6"/><circle cx="294" cy="62" r="30" opacity=".3"/></g>
+        <text x="255" y="118" text-anchor="middle" font-family="Fira Sans, sans-serif" font-size="12" fill="#5b6875">mantener = sigue hasta soltar</text>
+      </svg>
+      <p><b>Altura</b> te dice dónde estás: al subir el número crece, al bajar disminuye.</p>
+    </div>
+  </div>
+
+  <h3>¿Qué tamaño de paso uso?</h3>
+  <table>
+    <tr><th style="width:17%">Paso</th><th style="width:38%">Cuándo usarlo</th><th>Cuánto es</th></tr>
+    <tr><td><b>100 µm</b> · Rápido</td><td>Para alejarte o acercarte mucho, por ejemplo al cambiar de muestra.</td><td>0.1 mm por toque. Con cuidado.</td></tr>
+    <tr><td><b>25 µm</b> · Grueso</td><td>Cuando no se ve nada con forma.</td><td>Más o menos el tamaño de una célula.</td></tr>
+    <tr><td><b>5 µm</b> · Medio</td><td>Cuando ya se ven las células, pero borrosas.</td><td>Un cuarto de célula.</td></tr>
+    <tr><td><b>1 µm</b> · Fino</td><td>Para el último ajuste, hasta que los bordes se vean nítidos.</td><td>El movimiento más fino.</td></tr>
+  </table>
+  <div class="nota"><b>Receta para enfocar a mano</b>
+  Empieza con <b>25 µm</b> hasta que aparezcan formas → cambia a <b>5 µm</b> hasta que se vean las células →
+  termina con <b>1 µm</b>. Si te pasas (la imagen empeora), ve un paso en la dirección contraria.</div>
+</section>
+
+<!-- ========== PASO 3 (cont): TECLADO Y ZOOM ========== -->
+<section class="pagina">
+  <h2><span class="paso">3</span>Enfoca con el teclado o desde la imagen grande</h2>
+  <p>En una computadora puedes enfocar sin usar el ratón. Las teclas funcionan mientras no estés escribiendo en
+  un campo de texto.</p>
+  <div class="dos" style="grid-template-columns:1.2fr 1fr;align-items:center">
+    <svg class="silueta" viewBox="0 0 420 210" width="100%" aria-label="Silueta del teclado con las teclas que sirven">
+      <g font-family="Fira Sans, sans-serif" font-weight="700" text-anchor="middle">
+        <!-- teclas genericas -->
+        <g fill="#eef1f4" stroke="#9aa6b1" stroke-width="2">
+          <rect x="20" y="20" width="40" height="40" rx="6"/><rect x="66" y="20" width="40" height="40" rx="6"/>
+          <rect x="158" y="66" width="40" height="40" rx="6"/><rect x="204" y="66" width="40" height="40" rx="6"/>
+          <rect x="112" y="112" width="40" height="40" rx="6"/><rect x="158" y="112" width="40" height="40" rx="6"/>
+          <rect x="204" y="112" width="40" height="40" rx="6"/>
+        </g>
+        <!-- teclas utiles -->
+        <g fill="#fff" stroke="currentColor" stroke-width="3">
+          <rect x="20" y="20" width="40" height="40" rx="6"/><rect x="66" y="20" width="40" height="40" rx="6"/>
+          <rect x="66" y="66" width="40" height="40" rx="6" fill="#e3f4e8" stroke="#15803d"/>
+          <rect x="20" y="112" width="40" height="40" rx="6"/><rect x="66" y="112" width="40" height="40" rx="6" fill="#e3f4e8" stroke="#15803d"/>
+          <rect x="112" y="112" width="40" height="40" rx="6"/>
+          <rect x="158" y="112" width="40" height="40" rx="6"/>
+          <rect x="316" y="112" width="40" height="40" rx="6" fill="#e3f4e8" stroke="#15803d"/>
+          <rect x="270" y="158" width="40" height="40" rx="6"/><rect x="316" y="158" width="40" height="40" rx="6" fill="#e3f4e8" stroke="#15803d"/>
+          <rect x="362" y="158" width="40" height="40" rx="6"/>
+        </g>
+        <g font-size="18" fill="currentColor">
+          <text x="40" y="47">1</text><text x="86" y="47">2</text>
+          <text x="86" y="93" fill="#15803d">W</text>
+          <text x="40" y="139">A</text><text x="86" y="139" fill="#15803d">S</text><text x="132" y="139">D</text>
+          <text x="178" y="139">F</text>
+          <text x="336" y="139" fill="#15803d">↑</text>
+          <text x="290" y="185">←</text><text x="336" y="185" fill="#15803d">↓</text><text x="382" y="185">→</text>
+        </g>
+      </g>
+    </svg>
+    <table class="tecla-tabla">
+      <tr><td><kbd>W</kbd> o <kbd>↑</kbd></td><td><b>Subir</b> un paso (mantén para seguir)</td></tr>
+      <tr><td><kbd>S</kbd> o <kbd>↓</kbd></td><td><b>Bajar</b> un paso</td></tr>
+      <tr><td><kbd>A</kbd> o <kbd>←</kbd></td><td>Paso más <b>fino</b></td></tr>
+      <tr><td><kbd>D</kbd> o <kbd>→</kbd></td><td>Paso más <b>grueso</b></td></tr>
+      <tr><td><kbd>F</kbd></td><td><b>Enfocar automáticamente</b></td></tr>
+      <tr><td><kbd>1</kbd> <kbd>2</kbd></td><td>Elegir cámara 0 o 1</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Cerrar la imagen grande</td></tr>
+    </table>
+  </div>
+  <p class="mini">La misma lista aparece en la página, debajo de los botones, y cada tecla se ilumina al presionarla.</p>
+
+  <h3>Desde la imagen grande</h3>
+  <figure>
+    <img class="captura" src="img/zoom.png" alt="Imagen grande con los controles de foco al lado" style="max-height:100mm;width:auto">
+    <figcaption>Al tocar una imagen se ve en grande y aparecen al lado los controles de foco de esa misma cámara.
+    En un celular aparecen debajo de la imagen.</figcaption>
+  </figure>
+</section>
+
+<!-- ========== PASO 4 ========== -->
+<section class="pagina">
+  <h2><span class="paso">4</span>Toma una foto o un timelapse</h2>
+  <div class="dos a">
+    <div>
+      <h3 style="margin-top:0">Una foto</h3>
+      <img class="captura" src="img/foto.png" alt="Sección Toma una foto">
+      <ol class="pasos" style="margin-top:3mm">
+        <li><span>Elige de qué cámara (o «Las dos») y el tipo de foto. «Normal» sirve casi siempre.</span></li>
+        <li><span>Toca <span class="boton verde">Tomar foto</span>.</span></li>
+        <li><span>Las fotos aparecen en <b>«Fotos guardadas»</b>, más abajo en la página. Desde ahí se descargan.</span></li>
+      </ol>
+      <h3>Antes de un timelapse</h3>
+      <ol class="pasos">
+        <li><span>Enciende la luz y <b>enfoca bien</b> las dos cámaras.</span></li>
+        <li><span>Revisa que la temperatura y el CO<sub>2</sub> estén en su valor.</span></li>
+        <li><span>No muevas la muestra ni el microscopio mientras corre.</span></li>
+      </ol>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Un timelapse</h3>
+      <img class="captura" src="img/timelapse.png" alt="Sección Timelapse" style="max-height:118mm;width:auto;margin:0 auto">
+    </div>
+  </div>
+  <svg class="silueta" viewBox="0 0 600 70" width="100%" style="margin:3mm 0" aria-label="Silueta: una foto cada 5 minutos">
+    <line x1="20" y1="35" x2="580" y2="35" stroke="currentColor" stroke-width="3"/>
+    <defs><g id="c"><rect x="-14" y="20" width="28" height="22" rx="4" fill="currentColor"/><circle cx="0" cy="31" r="6" fill="#fff"/></g></defs>
+    <g fill="currentColor" font-family="Fira Sans, sans-serif" font-size="12" text-anchor="middle">
+      <use href="#c" x="40"/><use href="#c" x="170"/><use href="#c" x="300"/><use href="#c" x="430"/><use href="#c" x="560"/>
+      <text x="40" y="64" fill="#5b6875">0 min</text><text x="170" y="64" fill="#5b6875">5 min</text><text x="300" y="64" fill="#5b6875">10 min</text>
+      <text x="430" y="64" fill="#5b6875">15 min</text><text x="560" y="64" fill="#5b6875">…</text>
+      <text x="105" y="20" fill="#15803d">enfoca y toma foto</text><text x="235" y="20" fill="#15803d">enfoca y toma foto</text>
+    </g>
+  </svg>
+  <ol class="pasos">
+    <li><span>Escribe un <b>nombre</b> (por ejemplo, «celulas_dia1»), cada cuántos <b>minutos</b> tomar foto y durante
+    cuántas <b>horas</b>. Abajo te dice cuántas fotos va a tomar.</span></li>
+    <li><span>Deja marcado <b>«Reenfocar automáticamente antes de cada foto»</b>: antes de cada foto vuelve a buscar el foco,
+    porque con las horas el foco se corre un poco.</span></li>
+    <li><span>Toca <span class="boton verde">Iniciar timelapse</span>. Arriba a la derecha cambia a «Timelapse en curso».
+    <b>Puedes cerrar la página</b>: el microscopio sigue solo.</span></li>
+    <li><span>Para terminar antes, toca <span class="boton" style="color:var(--rojo)">Detener timelapse</span>.</span></li>
+  </ol>
+</section>
+
+<!-- ========== PROBLEMAS ========== -->
+<section class="pagina">
+  <h2>Si algo sale mal</h2>
+  <table>
+    <tr><th style="width:36%">Lo que ves</th><th>Qué hacer</th></tr>
+    <tr><td>La imagen está <b>negra</b>.</td><td>Enciende la luz (paso 1). Si ya está encendida, sube el brillo.</td></tr>
+    <tr><td>La imagen está <b>gris y sin nada</b>.</td><td>Estás muy lejos del foco o no hay células en esa parte. Prueba
+      «Enfocar automáticamente»; si no lo encuentra, muévete con pasos de 25 µm.</td></tr>
+    <tr><td>«<b>No encontré el foco</b>»</td><td>Se quedó donde estaba. Acércate a mano hasta que veas formas y vuelve a
+      intentarlo (pág. 5).</td></tr>
+    <tr><td>«<b>Autofoco en curso, espera a que termine</b>»</td><td>El microscopio se está enfocando solo. Espera el mensaje
+      de que terminó; mientras tanto los botones de mover no responden.</td></tr>
+    <tr><td>Los botones están <b>apagados</b> y arriba dice «<b>Timelapse en curso</b>».</td><td>Alguien está tomando fotos
+      automáticas. No se puede mover nada hasta que termine o lo detenga quien lo inició.</td></tr>
+    <tr><td>Franja roja: «<b>Sin conexión con el servidor</b>»</td><td>La computadora perdió la conexión con el microscopio.
+      Revisa que estés en la misma red y recarga la página. Si sigue igual, avisa a la persona responsable.</td></tr>
+    <tr><td>Aviso «<b>motor caliente</b>», «CORTO» o «CORTE TÉRMICO»</td><td>Deja de mover el foco y avisa a la persona
+      responsable.</td></tr>
+    <tr><td>Un cambio parece <b>no hacer nada</b>.</td><td>Mira el mensaje que aparece abajo, en el centro de la pantalla:
+      siempre dice qué pasó.</td></tr>
+  </table>
+  <figure style="max-width:120mm">
+    <img class="captura" src="img/toast_noenc.png" alt="Ejemplo de mensaje" style="border:0">
+    <figcaption>Así se ven los mensajes. Aparecen unos segundos abajo, en el centro.</figcaption>
+  </figure>
+  <h3>Lo que conviene no hacer</h3>
+  <ul style="margin-left:6mm;display:grid;gap:1.5mm">
+    <li>Mover la muestra o golpear la mesa durante un timelapse.</li>
+    <li>Dar muchos toques seguidos con el paso de 100 µm sin mirar la imagen: la plataforma se mueve 0.1 mm en cada toque.</li>
+    <li>Cambiar los ajustes de «Más opciones» si no sabes para qué son: casi nunca hace falta.</li>
+  </ul>
+</section>
+
+<!-- ========== TARJETA ========== -->
+<section class="pagina">
+  <div class="tarjeta">
+    <h2>MicroscopeOS · Guía rápida <span class="mini" style="font-weight:400;margin-left:auto">recorta y pega junto al microscopio ✂</span></h2>
+    <div class="grid4">
+      <div><span class="paso">1</span><br><b>Enciende la luz</b><br>Tipo «Normal» → <span class="boton">Encender luz</span>.
+        Células transparentes: «Relieve».</div>
+      <div><span class="paso">2</span><br><b>Mira la muestra</b><br><span class="boton">En vivo</span>. Toca la imagen para
+        verla en grande.</div>
+      <div><span class="paso">3</span><br><b>Enfoca</b><br><span class="boton verde">Enfocar automáticamente</span> o a mano:
+        25 → 5 → 1 µm.</div>
+      <div><span class="paso">4</span><br><b>Foto o timelapse</b><br><span class="boton verde">Tomar foto</span>. Timelapse:
+        minutos, horas, Iniciar.</div>
+    </div>
+    <div class="dos" style="grid-template-columns:1fr 1fr;gap:6mm">
+      <table class="tecla-tabla">
+        <tr><td><kbd>W</kbd> <kbd>↑</kbd></td><td>Subir</td></tr>
+        <tr><td><kbd>S</kbd> <kbd>↓</kbd></td><td>Bajar</td></tr>
+        <tr><td><kbd>A</kbd> <kbd>←</kbd></td><td>Paso más fino</td></tr>
+        <tr><td><kbd>D</kbd> <kbd>→</kbd></td><td>Paso más grueso</td></tr>
+        <tr><td><kbd>F</kbd></td><td>Enfocar automáticamente</td></tr>
+        <tr><td><kbd>1</kbd> <kbd>2</kbd></td><td>Cámara 0 / 1</td></tr>
+      </table>
+      <div style="font-size:10.3pt;display:grid;gap:2mm">
+        <div><b>Dirección:</b> http:// <span class="linea-llenar" style="min-width:45mm"></span> :8000/ui</div>
+        <div><b>Tocar</b> Subir/Bajar = un paso · <b>mantener</b> = sigue hasta soltar.</div>
+        <div><b>1000 µm = 1 mm.</b> Una célula mide 10–30 µm.</div>
+        <div>Arriba a la derecha: <b>Listo</b> = libre · <b>Timelapse en curso</b> = no tocar.</div>
+        <div><b>Responsable:</b> <span class="linea-llenar" style="min-width:55mm"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

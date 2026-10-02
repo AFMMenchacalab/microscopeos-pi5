@@ -100,7 +100,7 @@
     border-bottom:1px solid var(--line);padding-bottom:var(--sp-4);margin-bottom:var(--sp-4)}
   .brand{display:flex;align-items:center;gap:10px}
   .brand .ic-lg{color:var(--green)}
-  .head h1{font-size:21px;letter-spacing:.5px;color:#fff;font-weight:700}
+  .head h1{font-size:21px;letter-spacing:.5px;color:var(--text);font-weight:700}
   .head h1 span{color:var(--green)}
   .head-actions{display:flex;align-items:center;gap:10px}
   #themeBtn{width:42px}
@@ -164,6 +164,7 @@
     display:inline-flex;align-items:center;justify-content:center;gap:8px;
     transition:background .15s ease,border-color .15s ease,color .15s ease,transform .08s ease}
   button:hover:not(:disabled){border-color:var(--green);color:#fff;background:#182338}
+  :root[data-theme="light"] button:hover:not(:disabled){color:var(--text);background:var(--panel2)}
   button:active:not(:disabled){transform:scale(.98)}
   button:disabled{opacity:.35;cursor:not-allowed}
   button.active{border-color:var(--green);color:var(--green);background:var(--green-soft)}
