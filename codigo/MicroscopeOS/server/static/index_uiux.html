@@ -102,7 +102,12 @@
   .brand .ic-lg{color:var(--green)}
   .head h1{font-size:21px;letter-spacing:.5px;color:var(--text);font-weight:700}
   .head h1 span{color:var(--green)}
-  .head-actions{display:flex;align-items:center;gap:10px}
+  .head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  @media(max-width:560px){
+    .head{flex-direction:column;align-items:stretch}
+    .head-actions{justify-content:space-between}
+    .head-actions .incu{order:-1;flex:1 1 100%;justify-content:center}
+  }
   #themeBtn{width:42px}
 
   .connbanner{display:none;align-items:center;gap:10px;max-width:1400px;margin:0 auto var(--sp-4);
@@ -248,6 +253,13 @@
   .colores input[type=color]{width:34px;height:34px;padding:0;border:2px solid var(--line-strong);border-radius:50%;
     background:none;cursor:pointer}
   .colores input[type=color].active{border-color:var(--green)}
+  .colores input[type=color]{-webkit-appearance:none;appearance:none;overflow:hidden;
+    background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red)}
+  .colores input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+  .colores input[type=color]::-webkit-color-swatch{border:none;border-radius:50%}
+  .colores input[type=color]::-moz-color-swatch{border:none;border-radius:50%}
+  .colores input[type=color]:not(.active)::-webkit-color-swatch{opacity:0}
+  .colores input[type=color]:not(.active)::-moz-color-swatch{opacity:0}
   .colores .nota-c{font-size:11.5px;color:var(--dim)}
   .rhein{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .rhein label{font-size:11.5px;color:var(--dim);display:flex;align-items:center;gap:8px}
@@ -315,6 +327,25 @@
   .opt-cam{border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:10px}
   .opt-cam .res{font-size:12.5px;margin:4px 0 6px}
   .opt-cam .res b{font-family:var(--font-mono)}
+
+  /* ---------- encabezado: incubadora ---------- */
+  .incu{display:inline-flex;align-items:center;gap:14px;padding:6px 14px;min-height:42px;border-radius:21px;
+    font-family:var(--font-mono);font-size:13px;font-weight:500}
+  .incu[hidden]{display:none}
+  .incu .iv{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .incu .iv b{font-weight:600}
+  .incu .iv .ic{width:14px;height:14px;color:var(--dim)}
+  .incu .co2{font-family:var(--font-ui);font-size:11px;color:var(--dim);font-weight:600}
+  .incu .iv.aviso b{color:var(--amber)}
+  .incu .iv.mal b{color:var(--red)}
+  @media(max-width:560px){.incu{gap:9px;padding:6px 10px;font-size:12px}.incu .co2{display:none}}
+  .ajustes-hoja{width:min(760px,100%)}
+  .ajustes-hoja details.panel{margin-bottom:10px;background:var(--panel2)}
+  .ajustes-hoja h3.grupo{margin:18px 2px 10px}
+  .gal-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .gal-cab .espacio{flex:1;min-width:220px}
+  button.enlace{background:transparent;border-color:transparent;color:var(--green);min-height:32px;padding:4px 6px;font-size:12.5px}
+  button.enlace:hover:not(:disabled){background:var(--green-soft);border-color:transparent;color:var(--green)}
 
   /* ---------- pasos numerados (guia y titulos) ---------- */
   .paso{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:22px;height:22px;
@@ -473,6 +504,7 @@
   <symbol id="i-lens" viewBox="0 0 24 24"><path d="M9 3h6v4l-1.5 4h-3L9 7z"/><path d="M10.5 11v3h3v-3"/><path d="M12 14v2.5"/><path d="M8 20h8"/><path d="M10 16.5h4"/></symbol>
   <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
   <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3 5.5 5.5"/><circle cx="12" cy="12" r="6.2"/></symbol>
   <symbol id="i-eject" viewBox="0 0 24 24"><path d="M12 5 5 13h14Z"/><path d="M5 18h14"/></symbol>
 </defs>
 </svg>
@@ -483,6 +515,14 @@
     <h1>MICROSCOPE<span>OS</span></h1>
   </div>
   <div class="head-actions">
+    <button class="incu" id="incuChip" hidden onclick="abrirAjustes('incuTemp')" title="Incubadora: toca para ver y cambiar">
+      <span class="iv" id="incuT"><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg><b>--</b> °C</span>
+      <span class="iv" id="incuH"><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg><b>--</b> %</span>
+      <span class="iv" id="incuC"><b class="co2">CO₂</b><b>--</b> %</span>
+    </button>
+    <button class="icon-only" id="ajustesBtn" onclick="abrirAjustes()" aria-label="Ajustes" title="Ajustes">
+      <svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg>
+    </button>
     <button class="icon-only" id="themeBtn" onclick="cycleTheme()" aria-label="Cambiar tema" title="Cambiar tema">
       <svg class="ic" aria-hidden="true"><use id="themeIconUse" href="#i-moon"/></svg>
     </button>
@@ -583,6 +623,15 @@
       <p class="hint" style="padding-top:8px">Las fotos se guardan solas; las ves en <a href="#galeriaDetails">«Fotos guardadas»</a>.
       Para tomar fotos durante horas sin estar aquí, usa el <a href="#sec-tl">timelapse</a>.</p>
     </section>
+
+    <details class="panel" id="galeriaDetails" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg><span class="stitle">Fotos guardadas</span><span class="mini" id="galMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="gal-cab"><div class="espacio" id="galEspacio"></div>
+        <button class="enlace" onclick="abrirAjustes('marcaDetails')"><svg class="ic" aria-hidden="true"><use href="#i-stamp"/></svg>Marca de agua…</button></div>
+      <div class="explista" id="galLista"><p class="hint">Cargando…</p></div>
+      </div>
+    </details>
   </div>
 
   <div class="col">
@@ -681,15 +730,96 @@
       </div>
       </div>
     </details>
+  </div>
+</div>
 
-    <details class="panel" id="galeriaDetails" open>
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg><span class="stitle">Fotos guardadas</span><span class="mini" id="galMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+<div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista de cámara ampliada" onclick="if(event.target===this||event.target.classList.contains('lightbox-wrap'))closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()" aria-label="Cerrar vista ampliada"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg></button>
+  <div class="lightbox-wrap">
+    <div class="lightbox-stage" id="lightboxStage"></div>
+    <div class="lbfoco" id="lbFoco" hidden>
+      <h3><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg>Foco · <span id="lbCam">Cámara 0</span></h3>
+      <div class="zfoco" data-donde="zoom"></div>
+      <button class="primary afbtn" id="lbAfBtn" onclick="autoenfocar()"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Enfocar automáticamente</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="lightbox" id="usbAviso" hidden role="dialog" aria-modal="true" aria-labelledby="usbAvisoTit">
+  <div class="panel" style="max-width:460px;width:100%;background:var(--panel-solid)">
+    <h2 id="usbAvisoTit"><svg class="ic" aria-hidden="true"><use href="#i-usb"/></svg>Memoria USB conectada</h2>
+    <p id="usbAvisoTxt" style="margin-bottom:14px"></p>
+    <div class="actions">
+      <button class="primary" onclick="usbUsarParaTimelapse()"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span>Guardar el próximo timelapse aquí</span></button>
+      <div class="field" style="margin:0"><select id="usbCopiarSel" aria-label="Timelapse a copiar"></select></div>
+      <button onclick="usbCopiarElegido()"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg><span>Copiar ese timelapse a la memoria</span></button>
+      <button onclick="cerrarUsbAviso()">Nada por ahora</button>
+    </div>
+  </div>
+</div>
+
+<div class="lightbox" id="ajustes" hidden role="dialog" aria-modal="true" aria-labelledby="ajustesTit" onclick="if(event.target===this)cerrarAjustes()">
+  <div class="exp-hoja ajustes-hoja">
+    <div class="exp-cab">
+      <div class="exp-tit"><h2 id="ajustesTit"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-gear"/></svg> Ajustes</h2></div>
+      <button class="icon-only" onclick="cerrarAjustes()" aria-label="Cerrar ajustes"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <p class="hint">Lo que casi nunca hace falta tocar. Se guarda solo.</p>
+    <h3 class="grupo">Incubadora</h3>
+    <details class="panel" id="incuTemp" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg><span class="stitle">Temperatura</span><span class="mini" id="tValMini">--.-°C</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
-      <div class="espacio" id="galEspacio"></div>
-      <div class="explista" id="galLista"><p class="hint">Cargando…</p></div>
+      <div class="gauge-num">
+        <span class="n" id="tVal">--.-</span>
+        <span class="u">°C</span>
+        <span class="gauge-dot" id="tDot"></span>
+      </div>
+      <div class="stat"><span class="k">Temperatura pedida</span><span class="v" id="tSp">-- °C</span></div>
+      <div class="stat"><span class="k">Potencia del calefactor</span><span class="v" id="tPwm">--</span></div>
+      <div class="gauge-bar"><div id="tBar" style="background:var(--amber)"></div></div>
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label for="spSlider">Temperatura que quieres</label>
+        <div class="slider">
+          <input type="range" id="spSlider" min="20" max="80" step="0.5" value="37" oninput="document.getElementById('spPrev').textContent=parseFloat(this.value).toFixed(1)">
+          <span class="val" id="spPrev">37.0</span>
+        </div>
+      </div>
+      <button onclick="aplicarSetpoint()" style="width:100%;margin-top:8px">Guardar temperatura</button>
       </div>
     </details>
-
+    <details class="panel" id="incuCo2" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg><span class="stitle">CO₂</span><span class="mini" id="cValMini">--.- %</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="gauge-num">
+        <span class="n" id="cVal">--.-</span>
+        <span class="u">%</span>
+        <span class="gauge-dot" id="cDot"></span>
+      </div>
+      <div class="stat"><span class="k">CO₂ pedido</span><span class="v" id="cSp">-- ppm</span></div>
+      <div class="stat"><span class="k">Válvula de CO₂</span><span class="v"><span class="valve-pill closed" id="valvePill"><span class="vdot"></span><span id="valveTxt">--</span></span></span></div>
+      <div class="stat"><span class="k">Tiempo abierta (promedio)</span><span class="v" id="cDuty">--</span></div>
+      <div class="gauge-bar"><div id="cBar" style="background:var(--blue)"></div></div>
+      <div class="stat"><span class="k">Temperatura del aire</span><span class="v" id="cAmbient">-- °C</span></div>
+      <div class="stat"><span class="k">Humedad</span><span class="v" id="cHum">-- %</span></div>
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label for="co2Slider">CO₂ que quieres</label>
+        <div class="slider">
+          <input type="range" id="co2Slider" min="400" max="100000" step="500" value="40000" oninput="document.getElementById('co2Prev').textContent=(this.value/10000).toFixed(1)+' %'">
+          <span class="val" id="co2Prev" style="min-width:60px">4.0 %</span>
+        </div>
+      </div>
+      <button onclick="aplicarCo2Setpoint()" style="width:100%;margin-top:8px">Guardar CO₂</button>
+      </div>
+    </details>
+    <h3 class="grupo">Fotos</h3>
+    <details class="panel" id="opticaDetails">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-lens"/></svg><span class="stitle">Objetivo y escala</span><span class="mini" id="opticaMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <p class="hint">Qué objetivo tiene cada cámara. Con eso se calcula cuántas micras mide un píxel:
+      va guardado dentro de cada foto (Fiji la abre con la escala puesta) y es la barra de escala de la marca de agua.</p>
+      <div id="opticaCtl"></div>
+      </div>
+    </details>
     <details class="panel" id="marcaDetails">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-stamp"/></svg><span class="stitle">Marca de agua</span><span class="mini" id="marcaMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
@@ -699,61 +829,14 @@
       <div id="marcaOpciones"></div>
       </div>
     </details>
-
     <details class="panel">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg><span class="stitle">Temperatura</span><span class="mini" id="tValMini">--.-°C</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Ajustes de imagen</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
-      <div class="gauge-num">
-        <span class="n" id="tVal">--.-</span>
-        <span class="u">°C</span>
-        <span class="gauge-dot" id="tDot"></span>
+      <div class="row">
+        <div class="field"><label for="exp">Exposición (<span class="unid">µs</span>)</label><input type="number" id="exp" value="12000"></div>
+        <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
       </div>
-      <div class="stat"><span class="k">Setpoint</span><span class="v" id="tSp">-- °C</span></div>
-      <div class="stat"><span class="k">PWM calefactor</span><span class="v" id="tPwm">--</span></div>
-      <div class="gauge-bar"><div id="tBar" style="background:var(--amber)"></div></div>
-      <div class="field" style="margin-top:10px;margin-bottom:0">
-        <label for="spSlider">Setpoint objetivo</label>
-        <div class="slider">
-          <input type="range" id="spSlider" min="20" max="80" step="0.5" value="37" oninput="document.getElementById('spPrev').textContent=parseFloat(this.value).toFixed(1)">
-          <span class="val" id="spPrev">37.0</span>
-        </div>
-      </div>
-      <button onclick="aplicarSetpoint()" style="width:100%;margin-top:8px">Aplicar setpoint</button>
-      </div>
-    </details>
-
-    <details class="panel">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg><span class="stitle">CO2</span><span class="mini" id="cValMini">--.-ppm</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
-      <div class="body">
-      <div class="gauge-num">
-        <span class="n" id="cVal">--.-</span>
-        <span class="u">ppm</span>
-        <span class="gauge-dot" id="cDot"></span>
-      </div>
-      <div class="stat"><span class="k">Setpoint</span><span class="v" id="cSp">-- ppm</span></div>
-      <div class="stat"><span class="k">Válvula solenoide</span><span class="v"><span class="valve-pill closed" id="valvePill"><span class="vdot"></span><span id="valveTxt">--</span></span></span></div>
-      <div class="stat"><span class="k">Duty cycle válvula</span><span class="v" id="cDuty">--</span></div>
-      <div class="gauge-bar"><div id="cBar" style="background:var(--blue)"></div></div>
-      <div class="stat"><span class="k">Temp. ambiente (SCD30)</span><span class="v" id="cAmbient">-- °C</span></div>
-      <div class="stat"><span class="k">Humedad</span><span class="v" id="cHum">-- %</span></div>
-      <div class="field" style="margin-top:10px;margin-bottom:0">
-        <label for="co2Slider">Setpoint CO2</label>
-        <div class="slider">
-          <input type="range" id="co2Slider" min="400" max="100000" step="500" value="40000" oninput="document.getElementById('co2Prev').textContent=parseInt(this.value)">
-          <span class="val" id="co2Prev">40000</span>
-        </div>
-      </div>
-      <button onclick="aplicarCo2Setpoint()" style="width:100%;margin-top:8px">Aplicar setpoint CO2</button>
-      </div>
-    </details>
-
-    <h3 class="grupo">Más opciones</h3>
-    <details class="panel" id="opticaDetails">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-lens"/></svg><span class="stitle">Objetivo y escala</span><span class="mini" id="opticaMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
-      <div class="body">
-      <p class="hint">Qué objetivo tiene cada cámara. Con eso se calcula cuántas micras mide un píxel:
-      va guardado dentro de cada foto (Fiji la abre con la escala puesta) y es la barra de escala de la marca de agua.</p>
-      <div id="opticaCtl"></div>
+      <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
       </div>
     </details>
     <details class="panel">
@@ -801,40 +884,7 @@
       <div class="stat"><span class="k">Overlay guardado</span><span class="v" id="s_cntov" style="font-size:10px">—</span></div>
       </div>
     </details>
-
-    <details class="panel">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Ajustes de imagen</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
-      <div class="body">
-      <div class="row">
-        <div class="field"><label for="exp">Exposición (<span class="unid">µs</span>)</label><input type="number" id="exp" value="12000"></div>
-        <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
-      </div>
-      <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
-      </div>
-    </details>
-
-    <details class="panel">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span class="stitle">Perfiles</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
-      <div class="body">
-      <p class="hint">Guardá tu exposición/ganancia y los valores por defecto de
-      timelapse para no pisar la config de otra persona si el equipo es compartido.</p>
-      <div class="field">
-        <label for="profileSelect">Perfil guardado</label>
-        <select id="profileSelect"></select>
-      </div>
-      <div class="camsel">
-        <button onclick="cargarPerfil()"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span class="lbl">Cargar</span></button>
-        <button class="danger" onclick="borrarPerfil()"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg><span class="lbl">Eliminar</span></button>
-      </div>
-      <div class="field" style="margin-top:14px">
-        <label for="profileNombre">Guardar como</label>
-        <input type="text" id="profileNombre" placeholder="ej. alex, objetivo 40x">
-      </div>
-      <button onclick="guardarPerfil()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span class="lbl">Guardar perfil actual</span></button>
-      <div class="stat" style="margin-top:10px"><span class="k">Último cargado</span><span class="v" id="s_perfil">—</span></div>
-      </div>
-    </details>
-
+    <h3 class="grupo">Guardar y enviar</h3>
     <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-usb"/></svg><span class="stitle">Memoria USB</span><span class="mini" id="usbMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
@@ -843,7 +893,6 @@
       <div id="usbError" class="hint" style="color:var(--amber);display:none"></div>
       </div>
     </details>
-
     <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><span class="stitle">Envío a computadora</span><span class="mini" id="envMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
@@ -860,7 +909,6 @@
       <div class="stat"><span class="k">Último error</span><span class="v" id="envErr" style="font-size:10px">—</span></div>
       </div>
     </details>
-
     <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-server"/></svg><span class="stitle">Respaldo en NAS</span><span class="mini" id="nasMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
@@ -892,7 +940,28 @@
       <div class="stat"><span class="k">Último error</span><span class="v" id="nasErr" style="font-size:10px">—</span></div>
       </div>
     </details>
-
+    <h3 class="grupo">Otros</h3>
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span class="stitle">Perfiles</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <p class="hint">Guardá tu exposición/ganancia y los valores por defecto de
+      timelapse para no pisar la config de otra persona si el equipo es compartido.</p>
+      <div class="field">
+        <label for="profileSelect">Perfil guardado</label>
+        <select id="profileSelect"></select>
+      </div>
+      <div class="camsel">
+        <button onclick="cargarPerfil()"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span class="lbl">Cargar</span></button>
+        <button class="danger" onclick="borrarPerfil()"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg><span class="lbl">Eliminar</span></button>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label for="profileNombre">Guardar como</label>
+        <input type="text" id="profileNombre" placeholder="ej. alex, objetivo 40x">
+      </div>
+      <button onclick="guardarPerfil()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span class="lbl">Guardar perfil actual</span></button>
+      <div class="stat" style="margin-top:10px"><span class="k">Último cargado</span><span class="v" id="s_perfil">—</span></div>
+      </div>
+    </details>
     <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg><span class="stitle">Estado</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
@@ -902,31 +971,6 @@
       <div class="stat"><span class="k">Carpeta</span><span class="v" id="s_folder" style="font-size:10px">—</span></div>
       </div>
     </details>
-  </div>
-</div>
-
-<div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista de cámara ampliada" onclick="if(event.target===this||event.target.classList.contains('lightbox-wrap'))closeLightbox()">
-  <button class="lightbox-close" onclick="closeLightbox()" aria-label="Cerrar vista ampliada"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg></button>
-  <div class="lightbox-wrap">
-    <div class="lightbox-stage" id="lightboxStage"></div>
-    <div class="lbfoco" id="lbFoco" hidden>
-      <h3><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg>Foco · <span id="lbCam">Cámara 0</span></h3>
-      <div class="zfoco" data-donde="zoom"></div>
-      <button class="primary afbtn" id="lbAfBtn" onclick="autoenfocar()"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Enfocar automáticamente</span></button>
-    </div>
-  </div>
-</div>
-
-<div class="lightbox" id="usbAviso" hidden role="dialog" aria-modal="true" aria-labelledby="usbAvisoTit">
-  <div class="panel" style="max-width:460px;width:100%;background:var(--panel-solid)">
-    <h2 id="usbAvisoTit"><svg class="ic" aria-hidden="true"><use href="#i-usb"/></svg>Memoria USB conectada</h2>
-    <p id="usbAvisoTxt" style="margin-bottom:14px"></p>
-    <div class="actions">
-      <button class="primary" onclick="usbUsarParaTimelapse()"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span>Guardar el próximo timelapse aquí</span></button>
-      <div class="field" style="margin:0"><select id="usbCopiarSel" aria-label="Timelapse a copiar"></select></div>
-      <button onclick="usbCopiarElegido()"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg><span>Copiar ese timelapse a la memoria</span></button>
-      <button onclick="cerrarUsbAviso()">Nada por ahora</button>
-    </div>
   </div>
 </div>
 
@@ -1005,6 +1049,22 @@ function openImagePreview(url){
   document.body.style.overflow='hidden';
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
+
+// ===== Ajustes: todo lo que casi nunca hace falta tocar =====
+function abrirAjustes(seccion){
+  const a=document.getElementById('ajustes');
+  a.hidden=false;document.body.style.overflow='hidden';
+  if(seccion){
+    const d=document.getElementById(seccion);
+    if(d){if(d.tagName==='DETAILS')d.open=true;setTimeout(()=>d.scrollIntoView({block:'start',behavior:'smooth'}),50);}
+  }
+}
+function cerrarAjustes(){
+  document.getElementById('ajustes').hidden=true;document.body.style.overflow='';
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!document.getElementById('ajustes').hidden){e.stopImmediatePropagation();cerrarAjustes();}
+},true);
 
 // ===== Tema: oscuro (default) -> noche (rojo) -> claro -> oscuro =====
 const TEMAS=['oscuro','noche','claro'];
@@ -2343,6 +2403,7 @@ setInterval(refrescarConteo,1000);
     try{
       const d = JSON.parse(e.data);
       document.getElementById('tDot').style.background = d.connected ? 'var(--green)' : 'var(--red)';
+      pintarIncubadora(d);
       if(d.temperature !== null && d.temperature !== undefined){
         const t = parseFloat(d.temperature).toFixed(1);
         const el = document.getElementById('tVal');
@@ -2368,18 +2429,18 @@ setInterval(refrescarConteo,1000);
       document.getElementById('cDot').style.background = (d.connected && hasCo2) ? 'var(--green)' : 'var(--dim)';
       const cVal = document.getElementById('cVal');
       if(hasCo2){
-        cVal.textContent = parseFloat(d.co2).toFixed(0);
+        cVal.textContent = (d.co2/10000).toFixed(2);
         cVal.style.color = 'var(--text)';
-        document.getElementById('cValMini').textContent = parseFloat(d.co2).toFixed(0)+'ppm';
+        document.getElementById('cValMini').textContent = (d.co2/10000).toFixed(1)+' %';
       }else{
         cVal.textContent = '--.-';
-        document.getElementById('cValMini').textContent = '--.-ppm';
+        document.getElementById('cValMini').textContent = '--.- %';
       }
       if(d.co2_setpoint !== undefined && d.co2_setpoint !== null){
-        document.getElementById('cSp').textContent = parseFloat(d.co2_setpoint).toFixed(0) + ' ppm';
+        document.getElementById('cSp').textContent = (d.co2_setpoint/10000).toFixed(1) + ' % (' + parseFloat(d.co2_setpoint).toFixed(0) + ' ppm)';
         if(document.activeElement !== document.getElementById('co2Slider')){
           document.getElementById('co2Slider').value = d.co2_setpoint;
-          document.getElementById('co2Prev').textContent = parseInt(d.co2_setpoint);
+          document.getElementById('co2Prev').textContent = (d.co2_setpoint/10000).toFixed(1)+' %';
         }
       }
       const pill = document.getElementById('valvePill'), vtxt = document.getElementById('valveTxt');
@@ -2404,23 +2465,43 @@ setInterval(refrescarConteo,1000);
     }catch(err){}
   };
   evtSource.onerror = function(){
+    document.getElementById('incuChip').hidden = true;
     document.getElementById('tDot').style.background = 'var(--red)';
     document.getElementById('tVal').textContent = 'ERR';
     document.getElementById('cDot').style.background = 'var(--red)';
     marcarConexion(false);
   };
 })();
+// Lectura de la incubadora en el encabezado, solo si esta conectada:
+// como la barra de estado de un telefono, se ve de un vistazo sin abrir
+// nada. Ambar/rojo si se aleja del valor pedido.
+function pintarIncubadora(d){
+  const chip=document.getElementById('incuChip');
+  const hayT=d.temperature!=null&&!isNaN(d.temperature);
+  chip.hidden=!(d.connected&&hayT);
+  if(chip.hidden)return;
+  const fila=(id,valor,estado)=>{const el=document.getElementById(id);el.style.display=valor==null?'none':'';
+    if(valor!=null){el.querySelector('b:last-of-type').textContent=valor;el.className='iv'+(estado?' '+estado:'');}};
+  const dt=Math.abs(d.temperature-d.setpoint);
+  fila('incuT',(+d.temperature).toFixed(1),dt<0.5?'':dt<2?'aviso':'mal');
+  fila('incuH',d.humidity!=null?Math.round(d.humidity):null,'');
+  const hayC=d.co2!=null&&!isNaN(d.co2);
+  const dc=hayC&&d.co2_setpoint?Math.abs(d.co2-d.co2_setpoint)/d.co2_setpoint:0;
+  fila('incuC',hayC?(d.co2/10000).toFixed(1):null,dc<0.1?'':dc<0.25?'aviso':'mal');
+  chip.title='Incubadora: '+(+d.temperature).toFixed(1)+' °C (pedido '+(+d.setpoint).toFixed(1)+')'
+    +(hayC?' · CO₂ '+(d.co2/10000).toFixed(2)+' %':'')+' · toca para cambiar';
+}
 async function aplicarSetpoint(){
   const val = parseFloat(document.getElementById('spSlider').value);
   const r = await fetch('/api/temperature/setpoint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val})});
   const d = await r.json();
-  toast(d.ok ? 'Setpoint: '+val+'°C' : 'Error: '+d.error);
+  toast(d.ok ? 'Temperatura pedida: '+val+' °C' : 'Error: '+d.error);
 }
 async function aplicarCo2Setpoint(){
   const val = parseFloat(document.getElementById('co2Slider').value);
   const r = await fetch('/api/temperature/co2_setpoint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val})});
   const d = await r.json();
-  toast(d.ok ? 'Setpoint CO2: '+val+' ppm' : 'Error: '+d.error);
+  toast(d.ok ? 'CO₂ pedido: '+(val/10000).toFixed(1)+' %' : 'Error: '+d.error);
 }
 </script>
 </body>
