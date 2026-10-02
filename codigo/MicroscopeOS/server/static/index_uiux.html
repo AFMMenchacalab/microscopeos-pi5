@@ -697,12 +697,32 @@
       <div class="field"><label for="nombre">Nombre del experimento</label><input type="text" id="nombre" placeholder="ej. Células día 1" maxlength="60" oninput="pistaCarpetaTl()"></div>
       <p class="hint" id="tlCarpeta" style="margin-top:-6px"></p>
       <div class="field"><label for="modo">Tipo de foto</label>
-        <select id="modo" onchange="resumenTl()">
+        <select id="modo" onchange="tlDpcChange()">
           <option value="blanco">Normal (1 foto)</option>
           <option value="dpc">Relieve DPC (4 fotos)</option>
           <option value="oscuro">Fondo negro (1 foto)</option>
           <option value="rheinberg">De colores (1 foto)</option>
         </select>
+      </div>
+      <div id="tlDpcOpts" style="display:none">
+        <div class="field check">
+          <input type="checkbox" id="tlDpcProc" checked onchange="tlDpcChange()">
+          <label for="tlDpcProc">Calcular el relieve al terminar cada ciclo</label>
+        </div>
+        <div id="tlDpcSub">
+          <div class="field check">
+            <input type="checkbox" id="tlDpcBorrar" checked onchange="resumenTl()">
+            <label for="tlDpcBorrar">Borrar las 4 fotos originales (ahorra espacio)</label>
+          </div>
+          <div class="field check">
+            <input type="checkbox" id="tlDpcFase" onchange="resumenTl()">
+            <label for="tlDpcFase">Guardar también la fase (en prueba)</label>
+          </div>
+          <div class="field check">
+            <input type="checkbox" id="tlDpcJpg" checked>
+            <label for="tlDpcJpg">Vista previa en color (JPG)</label>
+          </div>
+        </div>
       </div>
       <div class="row">
         <div class="field"><label for="intv">Una foto cada (minutos)</label><input type="number" id="intv" value="5" min="0.5" step="0.5" oninput="resumenTl()"></div>
@@ -1667,7 +1687,7 @@ function resumenTl(){
   const el=document.getElementById('tlResumen');
   if(!(cada>0)||!(horas>0)){el.textContent='Pon cada cuántos minutos y durante cuántas horas.';return;}
   const n=Math.max(1,Math.floor(horas*60/cada));
-  const porCiclo=(document.getElementById('modo').value==='dpc'?4:1)*2;
+  const porCiclo=tlFotosPorCiclo()*2;
   const bytes=n*porCiclo*3280*2464*2;
   let espacio='';
   const dest=document.getElementById('tlDestino').value;
@@ -1677,6 +1697,24 @@ function resumenTl(){
   el.style.color=libre!=null&&bytes>libre*0.95?'var(--amber)':'';
   el.textContent='Se tomarán '+n+' foto'+(n>1?'s':'')+' por cámara, una cada '+cada+' min durante '+horas+' h.'+espacio
     +' Puedes cerrar esta página: el microscopio sigue solo.';
+}
+// Relieve DPC: cuantos TIFF de 16 MB quedan por camara y por ciclo (igual
+// que _fotos_por_ciclo en server/api.py).
+function tlDpcProc(){
+  return document.getElementById('modo').value==='dpc'&&document.getElementById('tlDpcProc').checked;
+}
+function tlFotosPorCiclo(){
+  if(document.getElementById('modo').value!=='dpc')return 1;
+  if(!tlDpcProc())return 4;
+  return 2+(document.getElementById('tlDpcFase').checked?1:0)
+    +(document.getElementById('tlDpcBorrar').checked?0:4);
+}
+function tlDpcChange(){
+  document.getElementById('tlDpcOpts').style.display=
+    document.getElementById('modo').value==='dpc'?'block':'none';
+  document.getElementById('tlDpcSub').style.display=
+    document.getElementById('tlDpcProc').checked?'block':'none';
+  resumenTl();
 }
 resumenTl();
 function tlCntChange(){
@@ -1921,6 +1959,10 @@ async function iniciar(){
   body.usb_punto=dest==='local'?'':dest;
   body.enviar_pc=document.getElementById('tlEnviar').checked;
   body.respaldar_nas=document.getElementById('tlNas').checked;
+  body.dpc_procesar=document.getElementById('tlDpcProc').checked;
+  body.dpc_borrar_crudas=document.getElementById('tlDpcBorrar').checked;
+  body.dpc_fase=document.getElementById('tlDpcFase').checked;
+  body.dpc_jpg=document.getElementById('tlDpcJpg').checked;
   const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   if(d.error){toast(d.error);return;}

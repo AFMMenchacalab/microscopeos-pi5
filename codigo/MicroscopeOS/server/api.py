@@ -184,6 +184,13 @@ class TimelapseReq(BaseModel):
     # Copia de respaldo de cada imagen en el NAS (core/respaldo_nas.py),
     # en paralelo con el envio a la PC.
     respaldar_nas: bool = False
+    # Solo en modo dpc (core/dpc.py): al terminar cada ciclo calcular el
+    # DPC (dos TIFF de 16 bits sin compresion) y borrar las 4 crudas, que
+    # son 64 MB por camara y por ciclo. Opcional: fase y vista JPEG.
+    dpc_procesar: bool = True
+    dpc_borrar_crudas: bool = True
+    dpc_fase: bool = False
+    dpc_jpg: bool = True
 
 
 class UsbAccionReq(BaseModel):
@@ -809,6 +816,22 @@ def create_app(camera, illuminations, timelapse, motores=None,
     # ===============================
     # Timelapse
     # ===============================
+    def _dpc_opts(req):
+        if req.modo != "dpc" or not req.dpc_procesar:
+            return None
+        return {"borrar_crudas": req.dpc_borrar_crudas,
+                "fase": req.dpc_fase, "jpg": req.dpc_jpg}
+
+    def _fotos_por_ciclo(req):
+        """TIFF de 16 MB que quedan en disco por camara y por ciclo."""
+        opts = _dpc_opts(req)
+        if opts is None:
+            return len(MODOS.get(req.modo, [1]))
+        # dpcLR + dpcTB (+ fase); el JPEG (~1 MB) se redondea a uno mas
+        # cada 16 ciclos, despreciable. Si no se borran, suman las 4 crudas.
+        return (2 + int(opts["fase"])
+                + (0 if opts["borrar_crudas"] else len(MODOS["dpc"])))
+
     @app.post("/timelapse/start")
     def start_timelapse(req: TimelapseReq):
         if timelapse.is_running():
@@ -821,7 +844,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
                         "o es de solo lectura"}
             # Estimacion grosera de espacio: ~16 MB por TIFF de 16 bits a
             # 3280x2464. Avisar antes de empezar, no a mitad de la noche.
-            n_fotos = len(MODOS.get(req.modo, [1])) * len(req.camaras)
+            n_fotos = _fotos_por_ciclo(req) * len(req.camaras)
             ciclos = max(1, req.duration // max(1, req.interval))
             necesario = ciclos * n_fotos * 16e6
             if d.get("libre_bytes") is not None and necesario > d["libre_bytes"]:
@@ -832,7 +855,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
         elif req.destino != "local":
             return {"error": f"destino invalido: {req.destino}"}
         else:
-            n_fotos = len(MODOS.get(req.modo, [1])) * len(req.camaras)
+            n_fotos = _fotos_por_ciclo(req) * len(req.camaras)
             ciclos = max(1, req.duration // max(1, req.interval))
             necesario = ciclos * n_fotos * BYTES_POR_FOTO
             libre = experimentos.espacio()["libre_bytes"]
@@ -865,10 +888,12 @@ def create_app(camera, illuminations, timelapse, motores=None,
             enviar_pc=req.enviar_pc,
             nombre=req.nombre,
             respaldar_nas=req.respaldar_nas,
+            dpc_opts=_dpc_opts(req),
         )
         return {"status": "started", "autofocus": req.autofocus,
                 "contar": req.contar, "destino": carpeta_raiz or "local",
-                "enviar_pc": req.enviar_pc, "respaldar_nas": req.respaldar_nas}
+                "enviar_pc": req.enviar_pc, "respaldar_nas": req.respaldar_nas,
+                "dpc": _dpc_opts(req)}
 
     @app.post("/timelapse/stop")
     def stop_timelapse():
