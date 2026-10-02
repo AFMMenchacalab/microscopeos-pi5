@@ -96,7 +96,7 @@
   a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:8px}
 
   /* ---------- header ---------- */
-  .head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
+  .head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;
     border-bottom:1px solid var(--line);padding-bottom:var(--sp-4);margin-bottom:var(--sp-4)}
   .brand{display:flex;align-items:center;gap:10px}
   .brand .ic-lg{color:var(--green)}
@@ -120,7 +120,8 @@
   /* ---------- layout ---------- */
   .grid{display:grid;grid-template-columns:1fr 380px;gap:var(--sp-4);max-width:1400px;margin:0 auto}
   @media(max-width:1024px){.grid{grid-template-columns:1fr}}
-  .col{display:flex;flex-direction:column;gap:var(--sp-4)}
+  .col{display:flex;flex-direction:column;gap:var(--sp-4);min-width:0}
+  .field select{text-overflow:ellipsis}
 
   .panel{background:var(--panel);backdrop-filter:blur(16px) saturate(140%);
     -webkit-backdrop-filter:blur(16px) saturate(140%);
@@ -230,6 +231,22 @@
     *{animation-duration:.001ms !important;animation-iteration-count:1 !important;
       transition-duration:.001ms !important}
   }
+
+  /* ---------- pasos numerados (guia y titulos) ---------- */
+  .paso{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:22px;height:22px;
+    border-radius:50%;background:var(--green);color:#04130a;font-size:12px;font-weight:700;
+    letter-spacing:0;font-family:var(--font-ui)}
+  .guia{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;max-width:1400px;
+    margin:0 auto var(--sp-4);font-size:13.5px}
+  .guia-t{color:var(--dim)}
+  .guia a{display:inline-flex;align-items:center;gap:7px;text-decoration:none;color:var(--text);
+    padding:4px 10px 4px 4px;border-radius:20px;border:1px solid var(--line)}
+  .guia a:hover{border-color:var(--green)}
+  h3.grupo{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);
+    margin:var(--sp-3) 2px -4px;display:flex;align-items:center;gap:10px}
+  h3.grupo::after{content:'';flex:1;height:1px;background:var(--line)}
+  section.panel h2{color:var(--text);font-size:12px}
+  details.panel summary .paso + .stitle{color:var(--text)}
 
   /* ---------- control de foco (panel y vista ampliada) ---------- */
   .zpos{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
@@ -377,7 +394,7 @@
     <button class="icon-only" id="themeBtn" onclick="cycleTheme()" aria-label="Cambiar tema" title="Cambiar tema">
       <svg class="ic" aria-hidden="true"><use id="themeIconUse" href="#i-moon"/></svg>
     </button>
-    <div class="badge"><span class="dot idle" id="dot"></span><span id="state">IDLE</span></div>
+    <div class="badge"><span class="dot idle" id="dot"></span><span id="state">Listo</span></div>
   </div>
 </div>
 
@@ -386,68 +403,30 @@
   <span>Sin conexión con el servidor — reintentando…</span>
 </div>
 
+<nav class="guia" aria-label="Cómo se usa">
+  <span class="guia-t">Cómo se usa:</span>
+  <a href="#sec-luz"><span class="paso">1</span>Enciende la luz</a>
+  <a href="#sec-ver"><span class="paso">2</span>Mira la muestra</a>
+  <a href="#sec-foco"><span class="paso">3</span>Enfoca</a>
+  <a href="#sec-foto"><span class="paso">4</span>Toma una foto o un timelapse</a>
+</nav>
+
 <div class="grid">
   <div class="col">
-    <div class="panel">
-      <h2><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Vista en vivo — 2 cámaras</h2>
-      <div class="row">
-        <div>
-          <div class="view" id="view0" onclick="toggleExpand(0)" title="Click para ampliar">
-            <span class="ph" id="ph0">Cargando...</span>
-            <img id="img0" alt="Vista en vivo cámara 0">
-            <div class="scan"></div>
-            <div class="camtag">CAM 0</div>
-            <div class="live" id="liveTag0">EN VIVO</div>
-            <button class="expand-btn" onclick="event.stopPropagation();toggleExpand(0)" aria-label="Ampliar cámara 0"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
-          </div>
-          <div class="camsel" style="margin-top:8px">
-            <button id="liveBtn0" onclick="toggleLive(0)"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">En vivo</span></button>
-            <button id="cntBtn0" onclick="accionConteo(0)"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="lbl">Medir</span></button>
-            <button id="cntOff0" class="icon-only" onclick="apagarConteo(0)" style="display:none" aria-label="Apagar conteo cámara 0"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
-          </div>
-          <div class="stat"><span class="k">Células (vivo)</span><span class="v" id="s_cnt0">—</span></div>
-        </div>
-        <div>
-          <div class="view" id="view1" onclick="toggleExpand(1)" title="Click para ampliar">
-            <span class="ph" id="ph1">Cargando...</span>
-            <img id="img1" alt="Vista en vivo cámara 1">
-            <div class="scan"></div>
-            <div class="camtag">CAM 1</div>
-            <div class="live" id="liveTag1">EN VIVO</div>
-            <button class="expand-btn" onclick="event.stopPropagation();toggleExpand(1)" aria-label="Ampliar cámara 1"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
-          </div>
-          <div class="camsel" style="margin-top:8px">
-            <button id="liveBtn1" onclick="toggleLive(1)"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">En vivo</span></button>
-            <button id="cntBtn1" onclick="accionConteo(1)"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="lbl">Medir</span></button>
-            <button id="cntOff1" class="icon-only" onclick="apagarConteo(1)" style="display:none" aria-label="Apagar conteo cámara 1"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
-          </div>
-          <div class="stat"><span class="k">Células (vivo)</span><span class="v" id="s_cnt1">—</span></div>
-        </div>
-      </div>
-      <div class="camsel" style="margin-top:10px">
-        <button id="refresh" onclick="refrescarAmbas()"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Refrescar ambas</span></button>
-      </div>
-
-      <h2 style="margin-top:22px"><svg class="ic" aria-hidden="true"><use href="#i-grid"/></svg>Iluminación</h2>
+    <section class="panel" id="sec-luz">
+      <h2><span class="paso">1</span>Enciende la luz</h2>
+      <p class="hint">Sin luz la imagen se ve negra. «Normal» sirve para casi todo; «Relieve» hace
+      visibles las células sin teñir.</p>
       <div class="field">
-        <label for="lightModo">Modo</label>
+        <label for="lightModo">Tipo de luz</label>
         <select id="lightModo" onchange="lightModoChange()">
-          <option value="full">Campo claro</option>
-          <option value="left">DPC — izquierda</option>
-          <option value="right">DPC — derecha</option>
-          <option value="top">DPC — arriba</option>
-          <option value="bottom">DPC — abajo</option>
-          <option value="ring">Campo oscuro</option>
-          <option value="rheinberg">Rheinberg</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="colorDpc">Color de los patrones DPC</label>
-        <select id="colorDpc" onchange="cambiarColorDpc()">
-          <option value="00FF00">Verde (recomendado)</option>
-          <option value="FFFFFF">Blanco</option>
-          <option value="FF0000">Rojo</option>
-          <option value="0000FF">Azul</option>
+          <option value="full">Normal (campo claro)</option>
+          <option value="left">Relieve desde la izquierda (DPC)</option>
+          <option value="right">Relieve desde la derecha (DPC)</option>
+          <option value="top">Relieve desde arriba (DPC)</option>
+          <option value="bottom">Relieve desde abajo (DPC)</option>
+          <option value="ring">Fondo negro (campo oscuro)</option>
+          <option value="rheinberg">De colores (Rheinberg)</option>
         </select>
       </div>
       <div class="row" id="rheinbergColors" style="display:none">
@@ -455,42 +434,90 @@
         <div class="field"><label for="colorAnillo">Color anillo</label><input type="color" id="colorAnillo" value="#ff6a00"></div>
       </div>
       <div class="field">
-        <label for="bright">Intensidad LED</label>
+        <label for="bright">Brillo</label>
         <div class="slider">
           <input type="range" id="bright" min="0" max="100" value="80" oninput="brightLabel()">
           <span class="val" id="brightVal">80%</span>
         </div>
       </div>
       <div class="camsel">
-        <button id="lightBtn" onclick="aplicarLuz()"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg><span class="lbl">Aplicar</span></button>
-        <button id="lightOffBtn" onclick="apagarLuz()"><svg class="ic" aria-hidden="true"><use href="#i-power"/></svg><span class="lbl">Apagar</span></button>
+        <button id="lightBtn" onclick="aplicarLuz()"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg><span class="lbl">Encender luz</span></button>
+        <button id="lightOffBtn" onclick="apagarLuz()"><svg class="ic" aria-hidden="true"><use href="#i-power"/></svg><span class="lbl">Apagar luz</span></button>
+      </div>
+    </section>
+
+    <section class="panel" id="sec-ver">
+      <h2><span class="paso">2</span>Mira la muestra</h2>
+      <p class="hint">Toca «En vivo» para ver la imagen en movimiento. Toca la imagen para agrandarla:
+      ahí mismo aparecen los botones para enfocar.</p>
+      <div class="row">
+        <div>
+          <div class="view" id="view0" onclick="toggleExpand(0)" title="Toca para agrandar">
+            <span class="ph" id="ph0">Cargando...</span>
+            <img id="img0" alt="Vista en vivo cámara 0">
+            <div class="scan"></div>
+            <div class="camtag">CÁMARA 0</div>
+            <div class="live" id="liveTag0">EN VIVO</div>
+            <button class="expand-btn" onclick="event.stopPropagation();toggleExpand(0)" aria-label="Ampliar cámara 0"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
+          </div>
+          <div class="camsel" style="margin-top:8px">
+            <button id="liveBtn0" onclick="toggleLive(0)"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">En vivo</span></button>
+            <button id="cntBtn0" onclick="accionConteo(0)"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="lbl">Contar células</span></button>
+            <button id="cntOff0" class="icon-only" onclick="apagarConteo(0)" style="display:none" aria-label="Apagar conteo cámara 0"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+          </div>
+          <div class="stat"><span class="k">Células contadas</span><span class="v" id="s_cnt0">—</span></div>
+        </div>
+        <div>
+          <div class="view" id="view1" onclick="toggleExpand(1)" title="Toca para agrandar">
+            <span class="ph" id="ph1">Cargando...</span>
+            <img id="img1" alt="Vista en vivo cámara 1">
+            <div class="scan"></div>
+            <div class="camtag">CÁMARA 1</div>
+            <div class="live" id="liveTag1">EN VIVO</div>
+            <button class="expand-btn" onclick="event.stopPropagation();toggleExpand(1)" aria-label="Ampliar cámara 1"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
+          </div>
+          <div class="camsel" style="margin-top:8px">
+            <button id="liveBtn1" onclick="toggleLive(1)"><svg class="ic" aria-hidden="true"><use href="#i-broadcast"/></svg><span class="lbl">En vivo</span></button>
+            <button id="cntBtn1" onclick="accionConteo(1)"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="lbl">Contar células</span></button>
+            <button id="cntOff1" class="icon-only" onclick="apagarConteo(1)" style="display:none" aria-label="Apagar conteo cámara 1"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+          </div>
+          <div class="stat"><span class="k">Células contadas</span><span class="v" id="s_cnt1">—</span></div>
+        </div>
+      </div>
+      <div class="camsel" style="margin-top:10px">
+        <button id="refresh" onclick="refrescarAmbas()"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Actualizar imágenes</span></button>
       </div>
 
-      <h2 style="margin-top:22px"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>Captura única</h2>
+    </section>
+
+    <section class="panel" id="sec-foto">
+      <h2><span class="paso">4</span>Toma una foto</h2>
       <div class="row">
-        <div class="field"><label for="capCam">Cámara</label>
+        <div class="field"><label for="capCam">¿De qué cámara?</label>
           <select id="capCam">
             <option value="0">Cámara 0</option>
             <option value="1">Cámara 1</option>
-            <option value="both">Ambas (paralelo)</option>
+            <option value="both">Las dos</option>
           </select>
         </div>
-        <div class="field"><label for="capModo">Modo de foto</label>
+        <div class="field"><label for="capModo">Tipo de foto</label>
           <select id="capModo">
-            <option value="blanco">Campo claro (1 foto)</option>
-            <option value="dpc">DPC (4 fotos L/R/T/B)</option>
-            <option value="oscuro">Campo oscuro (1 foto)</option>
-            <option value="rheinberg">Rheinberg (1 foto)</option>
+            <option value="blanco">Normal (1 foto)</option>
+            <option value="dpc">Relieve DPC (4 fotos)</option>
+            <option value="oscuro">Fondo negro (1 foto)</option>
+            <option value="rheinberg">De colores (1 foto)</option>
           </select>
         </div>
       </div>
-      <button id="snap" onclick="capturar()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg><span class="lbl">Tomar foto</span></button>
-    </div>
+      <button id="snap" class="primary" onclick="capturar()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg><span class="lbl">Tomar foto</span></button>
+      <p class="hint" style="padding-top:8px">Las fotos se guardan solas; las ves en «Fotos guardadas».
+      Para tomar fotos durante horas sin estar aquí, usa el <a href="#sec-tl">timelapse</a>.</p>
+    </section>
   </div>
 
   <div class="col">
-    <details class="panel" open>
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="stitle">Foco motorizado</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+    <details class="panel" id="sec-foco" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="paso">3</span><span class="stitle">Enfoca</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
       <div class="camsel">
         <button id="mBtn0" class="active" onclick="selMotor(0)"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>Cámara 0</button>
@@ -501,15 +528,14 @@
            mueve sin parar hasta soltar. El mismo bloque se repite en la
            vista ampliada (renderControlFoco). -->
       <div class="zfoco" data-donde="panel"></div>
-      <div class="stat"><span class="k">Driver</span><span class="v" id="s_focus_drv">—</span></div>
 
-      <button id="afBtn" class="primary afbtn" onclick="autoenfocar()" style="margin-top:var(--sp-3)"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Enfocar solo · Cámara 0</span></button>
-      <p class="hint" style="padding-top:6px">Busca el foco cerca de donde estás. Si no lo encuentra,
-      amplía la búsqueda sola (hasta ±100 µm) y, si ni así, no se mueve.</p>
+      <button id="afBtn" class="primary afbtn" onclick="autoenfocar()" style="margin-top:var(--sp-3)"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Enfocar automáticamente</span></button>
+      <p class="hint" style="padding-top:6px">Busca la imagen más nítida cerca de donde estás. Si no la
+      encuentra, busca más lejos (hasta 0.1 mm hacia cada lado) y, si ni así, no se mueve.</p>
       <div class="stat"><span class="k">Último autofoco</span><span class="v" id="s_af">—</span></div>
 
       <details class="sub">
-        <summary>Opciones avanzadas del autofoco</summary>
+        <summary>Opciones avanzadas</summary>
         <div class="row">
           <div class="field"><label for="afRango">Búsqueda inicial, en micras (<span class="unid">µm</span>)</label><input type="number" id="afRango" value="40" min="5" step="5"></div>
           <div class="field"><label for="afRangoMax">Búsqueda máxima, en micras (<span class="unid">µm</span>)</label><input type="number" id="afRangoMax" value="200" min="5" step="10"></div>
@@ -521,11 +547,130 @@
         células: busca el foco y mide cuánto se corre la imagen al desenfocar. Con eso el autofoco
         salta directo al foco en vez de barrer. Si no sale bien, no se guarda y todo sigue igual.</p>
         <div class="stat"><span class="k">Autofoco rápido</span><span class="v" id="s_cal">—</span></div>
+        <div class="stat"><span class="k">Estado del motor</span><span class="v" id="s_focus_drv">—</span></div>
       </details>
       </div>
     </details>
 
-    <details class="panel" open>
+    <details class="panel" id="sec-tl" open>
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="paso">4</span><span class="stitle">Timelapse: fotos automáticas</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="field"><label for="nombre">Nombre del experimento</label><input type="text" id="nombre" placeholder="ej. celulas_dia1"></div>
+      <div class="field"><label for="modo">Tipo de foto</label>
+        <select id="modo">
+          <option value="blanco">Normal (1 foto)</option>
+          <option value="dpc">Relieve DPC (4 fotos)</option>
+          <option value="oscuro">Fondo negro (1 foto)</option>
+          <option value="rheinberg">De colores (1 foto)</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="field"><label for="intv">Una foto cada (minutos)</label><input type="number" id="intv" value="5" min="0.5" step="0.5" oninput="resumenTl()"></div>
+        <div class="field"><label for="dur">Durante (horas)</label><input type="number" id="dur" value="1" min="0.1" step="0.5" oninput="resumenTl()"></div>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="tlAf" checked onchange="tlAfChange()">
+        <label for="tlAf">Reenfocar automáticamente antes de cada foto</label>
+      </div>
+      <div id="tlAfOpts">
+        <p class="hint">Enfoca tú antes de empezar. En cada ciclo busca el foco alrededor de donde quedó el
+        anterior; si no lo encuentra, amplía la búsqueda sola hasta ±100 µm. Cada intento queda en
+        autofoco.csv dentro de la carpeta del experimento.</p>
+        <div class="row">
+          <div class="field"><label for="tlAfCada">Reenfocar cada (fotos)</label><input type="number" id="tlAfCada" value="1" min="1"></div>
+          <div class="field"><label for="tlAfRango">Búsqueda inicial, en micras (<span class="unid">µm</span>)</label><input type="number" id="tlAfRango" value="40" min="5" step="5"></div>
+        </div>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="tlCnt" onchange="tlCntChange()">
+        <label for="tlCnt">Contar células por ciclo</label>
+      </div>
+      <div class="row" id="tlCntOpts" style="display:none">
+        <div class="field"><label for="tlCntCada">Cada N ciclos</label><input type="number" id="tlCntCada" value="1" min="1"></div>
+        <div class="field check" style="padding-top:18px">
+          <input type="checkbox" id="tlCntOverlay" checked>
+          <label for="tlCntOverlay">Guardar PNG marcado</label>
+        </div>
+      </div>
+      <div class="field"><label for="tlDestino">Guardar en</label>
+        <select id="tlDestino"><option value="local">Raspberry (tarjeta interna)</option></select>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="tlEnviar">
+        <label for="tlEnviar">Enviar cada imagen a la computadora (segmentación en vivo)</label>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="tlNas">
+        <label for="tlNas">Respaldar cada imagen en el NAS</label>
+      </div>
+      <p class="hint" id="tlResumen"></p>
+      <div class="actions">
+        <button class="primary" id="start" onclick="iniciar()"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span>Iniciar Timelapse</span></button>
+        <button class="danger" id="stop" onclick="detener()" disabled><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span>Detener timelapse</span></button>
+      </div>
+      </div>
+    </details>
+
+    <details class="panel" id="galeriaDetails">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg><span class="stitle">Fotos guardadas</span><span class="mini" id="galMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="camsel" style="margin-bottom:10px">
+        <button onclick="cargarGaleria()"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Actualizar</span></button>
+      </div>
+      <div id="galCapturas"></div>
+      <div id="galTimelapses"></div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg><span class="stitle">Temperatura</span><span class="mini" id="tValMini">--.-°C</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="gauge-num">
+        <span class="n" id="tVal">--.-</span>
+        <span class="u">°C</span>
+        <span class="gauge-dot" id="tDot"></span>
+      </div>
+      <div class="stat"><span class="k">Setpoint</span><span class="v" id="tSp">-- °C</span></div>
+      <div class="stat"><span class="k">PWM calefactor</span><span class="v" id="tPwm">--</span></div>
+      <div class="gauge-bar"><div id="tBar" style="background:var(--amber)"></div></div>
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label for="spSlider">Setpoint objetivo</label>
+        <div class="slider">
+          <input type="range" id="spSlider" min="20" max="80" step="0.5" value="37" oninput="document.getElementById('spPrev').textContent=parseFloat(this.value).toFixed(1)">
+          <span class="val" id="spPrev">37.0</span>
+        </div>
+      </div>
+      <button onclick="aplicarSetpoint()" style="width:100%;margin-top:8px">Aplicar setpoint</button>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg><span class="stitle">CO2</span><span class="mini" id="cValMini">--.-ppm</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="gauge-num">
+        <span class="n" id="cVal">--.-</span>
+        <span class="u">ppm</span>
+        <span class="gauge-dot" id="cDot"></span>
+      </div>
+      <div class="stat"><span class="k">Setpoint</span><span class="v" id="cSp">-- ppm</span></div>
+      <div class="stat"><span class="k">Válvula solenoide</span><span class="v"><span class="valve-pill closed" id="valvePill"><span class="vdot"></span><span id="valveTxt">--</span></span></span></div>
+      <div class="stat"><span class="k">Duty cycle válvula</span><span class="v" id="cDuty">--</span></div>
+      <div class="gauge-bar"><div id="cBar" style="background:var(--blue)"></div></div>
+      <div class="stat"><span class="k">Temp. ambiente (SCD30)</span><span class="v" id="cAmbient">-- °C</span></div>
+      <div class="stat"><span class="k">Humedad</span><span class="v" id="cHum">-- %</span></div>
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label for="co2Slider">Setpoint CO2</label>
+        <div class="slider">
+          <input type="range" id="co2Slider" min="400" max="100000" step="500" value="40000" oninput="document.getElementById('co2Prev').textContent=parseInt(this.value)">
+          <span class="val" id="co2Prev">40000</span>
+        </div>
+      </div>
+      <button onclick="aplicarCo2Setpoint()" style="width:100%;margin-top:8px">Aplicar setpoint CO2</button>
+      </div>
+    </details>
+
+    <h3 class="grupo">Más opciones</h3>
+    <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="stitle">Conteo de células</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
       <div class="field">
@@ -571,14 +716,23 @@
       </div>
     </details>
 
-    <details class="panel" id="galeriaDetails">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg><span class="stitle">Galería</span><span class="mini" id="galMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+    <details class="panel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Ajustes de imagen</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
-      <div class="camsel" style="margin-bottom:10px">
-        <button onclick="cargarGaleria()"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Actualizar</span></button>
+      <div class="field">
+        <label for="colorDpc">Color de la luz de relieve (DPC)</label>
+        <select id="colorDpc" onchange="cambiarColorDpc()">
+          <option value="00FF00">Verde (recomendado)</option>
+          <option value="FFFFFF">Blanco</option>
+          <option value="FF0000">Rojo</option>
+          <option value="0000FF">Azul</option>
+        </select>
       </div>
-      <div id="galCapturas"></div>
-      <div id="galTimelapses"></div>
+      <div class="row">
+        <div class="field"><label for="exp">Exposición (<span class="unid">µs</span>)</label><input type="number" id="exp" value="12000"></div>
+        <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
+      </div>
+      <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
       </div>
     </details>
 
@@ -601,75 +755,6 @@
       </div>
       <button onclick="guardarPerfil()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span class="lbl">Guardar perfil actual</span></button>
       <div class="stat" style="margin-top:10px"><span class="k">Último cargado</span><span class="v" id="s_perfil">—</span></div>
-      </div>
-    </details>
-
-    <details class="panel">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Cámara</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
-      <div class="body">
-      <div class="row">
-        <div class="field"><label for="exp">Exposición (<span class="unid">µs</span>)</label><input type="number" id="exp" value="12000"></div>
-        <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
-      </div>
-      <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
-      </div>
-    </details>
-
-    <details class="panel">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="stitle">Timelapse</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
-      <div class="body">
-      <div class="field"><label for="nombre">Nombre experimento</label><input type="text" id="nombre" placeholder="ej. celulas_dia1"></div>
-      <div class="field"><label for="modo">Modo iluminación</label>
-        <select id="modo">
-          <option value="blanco">Campo claro (1 foto)</option>
-          <option value="dpc">DPC (4 fotos)</option>
-          <option value="oscuro">Campo oscuro (1 foto)</option>
-          <option value="rheinberg">Rheinberg (1 foto)</option>
-        </select>
-      </div>
-      <div class="row">
-        <div class="field"><label for="intv">Intervalo s</label><input type="number" id="intv" value="300"></div>
-        <div class="field"><label for="dur">Duración s</label><input type="number" id="dur" value="3600"></div>
-      </div>
-      <div class="field check">
-        <input type="checkbox" id="tlAf" checked onchange="tlAfChange()">
-        <label for="tlAf">Reenfocar automáticamente antes de cada foto</label>
-      </div>
-      <div id="tlAfOpts">
-        <p class="hint">Enfoca tú antes de empezar. En cada ciclo busca el foco alrededor de donde quedó el
-        anterior; si no lo encuentra, amplía la búsqueda sola hasta ±100 µm. Cada intento queda en
-        autofoco.csv dentro de la carpeta del experimento.</p>
-        <div class="row">
-          <div class="field"><label for="tlAfCada">Cada cuántos ciclos</label><input type="number" id="tlAfCada" value="1" min="1"></div>
-          <div class="field"><label for="tlAfRango">Búsqueda inicial, en micras (<span class="unid">µm</span>)</label><input type="number" id="tlAfRango" value="40" min="5" step="5"></div>
-        </div>
-      </div>
-      <div class="field check">
-        <input type="checkbox" id="tlCnt" onchange="tlCntChange()">
-        <label for="tlCnt">Contar células por ciclo</label>
-      </div>
-      <div class="row" id="tlCntOpts" style="display:none">
-        <div class="field"><label for="tlCntCada">Cada N ciclos</label><input type="number" id="tlCntCada" value="1" min="1"></div>
-        <div class="field check" style="padding-top:18px">
-          <input type="checkbox" id="tlCntOverlay" checked>
-          <label for="tlCntOverlay">Guardar PNG marcado</label>
-        </div>
-      </div>
-      <div class="field"><label for="tlDestino">Guardar en</label>
-        <select id="tlDestino"><option value="local">Raspberry (tarjeta interna)</option></select>
-      </div>
-      <div class="field check">
-        <input type="checkbox" id="tlEnviar">
-        <label for="tlEnviar">Enviar cada imagen a la computadora (segmentación en vivo)</label>
-      </div>
-      <div class="field check">
-        <input type="checkbox" id="tlNas">
-        <label for="tlNas">Respaldar cada imagen en el NAS</label>
-      </div>
-      <div class="actions">
-        <button class="primary" id="start" onclick="iniciar()"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span>Iniciar Timelapse</span></button>
-        <button class="danger" id="stop" onclick="detener()" disabled><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span>STOP de emergencia</span></button>
-      </div>
       </div>
     </details>
 
@@ -732,56 +817,9 @@
     </details>
 
     <details class="panel">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg><span class="stitle">Temperatura</span><span class="mini" id="tValMini">--.-°C</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
-      <div class="body">
-      <div class="gauge-num">
-        <span class="n" id="tVal">--.-</span>
-        <span class="u">°C</span>
-        <span class="gauge-dot" id="tDot"></span>
-      </div>
-      <div class="stat"><span class="k">Setpoint</span><span class="v" id="tSp">-- °C</span></div>
-      <div class="stat"><span class="k">PWM calefactor</span><span class="v" id="tPwm">--</span></div>
-      <div class="gauge-bar"><div id="tBar" style="background:var(--amber)"></div></div>
-      <div class="field" style="margin-top:10px;margin-bottom:0">
-        <label for="spSlider">Setpoint objetivo</label>
-        <div class="slider">
-          <input type="range" id="spSlider" min="20" max="80" step="0.5" value="37" oninput="document.getElementById('spPrev').textContent=parseFloat(this.value).toFixed(1)">
-          <span class="val" id="spPrev">37.0</span>
-        </div>
-      </div>
-      <button onclick="aplicarSetpoint()" style="width:100%;margin-top:8px">Aplicar setpoint</button>
-      </div>
-    </details>
-
-    <details class="panel">
-      <summary><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg><span class="stitle">CO2</span><span class="mini" id="cValMini">--.-ppm</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
-      <div class="body">
-      <div class="gauge-num">
-        <span class="n" id="cVal">--.-</span>
-        <span class="u">ppm</span>
-        <span class="gauge-dot" id="cDot"></span>
-      </div>
-      <div class="stat"><span class="k">Setpoint</span><span class="v" id="cSp">-- ppm</span></div>
-      <div class="stat"><span class="k">Válvula solenoide</span><span class="v"><span class="valve-pill closed" id="valvePill"><span class="vdot"></span><span id="valveTxt">--</span></span></span></div>
-      <div class="stat"><span class="k">Duty cycle válvula</span><span class="v" id="cDuty">--</span></div>
-      <div class="gauge-bar"><div id="cBar" style="background:var(--blue)"></div></div>
-      <div class="stat"><span class="k">Temp. ambiente (SCD30)</span><span class="v" id="cAmbient">-- °C</span></div>
-      <div class="stat"><span class="k">Humedad</span><span class="v" id="cHum">-- %</span></div>
-      <div class="field" style="margin-top:10px;margin-bottom:0">
-        <label for="co2Slider">Setpoint CO2</label>
-        <div class="slider">
-          <input type="range" id="co2Slider" min="400" max="100000" step="500" value="40000" oninput="document.getElementById('co2Prev').textContent=parseInt(this.value)">
-          <span class="val" id="co2Prev">40000</span>
-        </div>
-      </div>
-      <button onclick="aplicarCo2Setpoint()" style="width:100%;margin-top:8px">Aplicar setpoint CO2</button>
-      </div>
-    </details>
-
-    <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg><span class="stitle">Estado</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
-      <div class="stat"><span class="k">Estado</span><span class="v" id="s_state">IDLE</span></div>
+      <div class="stat"><span class="k">Estado</span><span class="v" id="s_state">Listo</span></div>
       <div class="stat"><span class="k">Ciclo actual</span><span class="v" id="s_ciclo">—</span></div>
       <div class="stat"><span class="k">Cámara activa</span><span class="v" id="s_cam">—</span></div>
       <div class="stat"><span class="k">Carpeta</span><span class="v" id="s_folder" style="font-size:10px">—</span></div>
@@ -797,7 +835,7 @@
     <div class="lbfoco" id="lbFoco" hidden>
       <h3><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg>Foco · <span id="lbCam">Cámara 0</span></h3>
       <div class="zfoco" data-donde="zoom"></div>
-      <button class="primary afbtn" id="lbAfBtn" onclick="autoenfocar()"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Enfocar solo</span></button>
+      <button class="primary afbtn" id="lbAfBtn" onclick="autoenfocar()"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Enfocar automáticamente</span></button>
     </div>
   </div>
 </div>
@@ -952,6 +990,8 @@ async function toggleLive(n){
 function lightModoChange(){
   document.getElementById('rheinbergColors').style.display=
     document.getElementById('lightModo').value==='rheinberg'?'grid':'none';
+  // Si la luz ya esta prendida, cambiar el tipo la cambia al momento.
+  if(document.getElementById('lightBtn').classList.contains('lit'))aplicarLuz();
 }
 async function aplicarLuz(){
   if(running)return;
@@ -965,11 +1005,13 @@ async function aplicarLuz(){
   const d=await r.json();
   if(d.error){toast(d.error);return;}
   document.getElementById('lightBtn').classList.add('lit');
-  toast('Luz: '+modo);
+  document.getElementById('lightBtn').querySelector('.lbl').textContent='Luz encendida';
+  toast('Luz encendida: '+document.getElementById('lightModo').selectedOptions[0].text.toLowerCase());
 }
 async function apagarLuz(){
   await fetch('/light/off',{method:'POST'});
   document.getElementById('lightBtn').classList.remove('lit');
+  document.getElementById('lightBtn').querySelector('.lbl').textContent='Encender luz';
   toast('Luz apagada');
 }
 async function capturar(){
@@ -1013,7 +1055,7 @@ const TECLAS_Z=[
   {ver:['S','↓'], codes:['KeyS','ArrowDown'],  txt:'Bajar un paso'},
   {ver:['A','←'], codes:['KeyA','ArrowLeft'],  txt:'Paso más fino'},
   {ver:['D','→'], codes:['KeyD','ArrowRight'], txt:'Paso más grueso'},
-  {ver:['F'],     codes:['KeyF'],              txt:'Enfocar solo'},
+  {ver:['F'],     codes:['KeyF'],              txt:'Enfocar automáticamente'},
   {ver:['1','2'], codes:['Digit1','Digit2'],   txt:'Elegir cámara'},
 ];
 
@@ -1022,7 +1064,7 @@ const TECLAS_Z=[
 function renderControlFoco(){
   document.querySelectorAll('.zfoco').forEach(el=>{
     el.innerHTML=
-      '<div class="zpos"><span class="k">Posición</span><span><span class="n zposN">—</span><span class="u">µm</span></span></div>'
+      '<div class="zpos" title="Altura relativa: al subir el número crece. 1000 µm = 1 mm"><span class="k">Altura</span><span><span class="n zposN">—</span><span class="u">µm</span></span></div>'
       +'<button class="zbtn" data-dir="-1"><svg class="ic" aria-hidden="true"><use href="#i-chev-up"/></svg>Subir</button>'
       +'<div class="zpasos" role="radiogroup" aria-label="Tamaño del paso">'
       +PASOS_Z.map((p,i)=>'<button role="radio" data-paso="'+i+'"><b>'+p.um+' µm</b><small>'+p.nombre+'</small></button>').join('')
@@ -1043,9 +1085,12 @@ function pintarPaso(){
     b.classList.toggle('active',on);b.setAttribute('aria-checked',on);
   });
 }
+// El motor cuenta positivo hacia ABAJO; en pantalla se muestra la
+// altura (subir = numero mas grande), que es lo que espera cualquiera.
 function pintarPosicion(um){
   if(um==null)return;
-  const t=(um>0?'+':'')+um.toFixed(1);
+  const alt=-um;
+  const t=(alt>0.05?'+':'')+(Math.abs(alt)<0.05?0:alt).toFixed(1);
   document.querySelectorAll('.zposN').forEach(e=>e.textContent=t);
 }
 function elegirPaso(i){
@@ -1069,7 +1114,6 @@ function selMotor(n){
   motorSel=n;
   document.getElementById('mBtn0').classList.toggle('active',n===0);
   document.getElementById('mBtn1').classList.toggle('active',n===1);
-  document.getElementById('afBtn').querySelector('.lbl').textContent='Enfocar solo · Cámara '+n;
   document.getElementById('lbCam').textContent='Cámara '+n;
   pintarPosicion(null);
   aplicarResolucion(false);
@@ -1219,14 +1263,16 @@ async function autoenfocar(){
       body:JSON.stringify({camera:cam,rango_um:rangoUm,rango_max_um:rangoMax,puntos:13,refinamientos:2})});
     const d=await r.json();
     if(d.error){toast(d.error);document.getElementById('s_af').textContent='error';return;}
-    const um=d.desplazamiento_um, signo=um>0?'+':'';
-    const ampliado=d.ampliado?' · buscó ±'+(d.rango_um/2).toFixed(0)+' µm':'';
+    // desplazamiento_um es positivo hacia abajo (convencion del motor)
+    const um=d.desplazamiento_um;
+    const mov=Math.abs(um)<0.05?'no hizo falta moverse'
+      :(um<0?'subió ':'bajó ')+Math.abs(um).toFixed(1)+' µm';
     if(d.encontrado===false){
-      document.getElementById('s_af').textContent='no lo encontró'+ampliado;
-      toast('No encontré el foco (busqué ±'+(d.rango_um/2).toFixed(0)+' µm). Me quedé donde estaba: acércate un poco a mano y vuelve a intentar.');
+      document.getElementById('s_af').textContent='no lo encontró';
+      toast('No encontré el foco (busqué '+(d.rango_um/2).toFixed(0)+' µm hacia cada lado). Me quedé donde estaba: acércate un poco a mano y vuelve a intentar.');
     }else{
-      document.getElementById('s_af').textContent=signo+um.toFixed(1)+' µm · '+d.segundos+' s'+ampliado;
-      toast('Enfocado: '+signo+um.toFixed(1)+' µm'+(d.aviso?' · '+d.aviso:''));
+      document.getElementById('s_af').textContent='enfocado · '+mov+' · '+d.segundos+' s';
+      toast('Enfocado: '+mov+(d.aviso?' · '+d.aviso:''));
     }
     refrescarFoco();
   }catch(e){toast('Error de autofoco');}
@@ -1254,6 +1300,16 @@ function tlAfChange(){
   document.getElementById('tlAfOpts').style.display=
     document.getElementById('tlAf').checked?'block':'none';
 }
+// "Se tomaran N fotos": lo primero que hay que saber antes de iniciar.
+function resumenTl(){
+  const cada=+document.getElementById('intv').value, horas=+document.getElementById('dur').value;
+  const el=document.getElementById('tlResumen');
+  if(!(cada>0)||!(horas>0)){el.textContent='Pon cada cuántos minutos y durante cuántas horas.';return;}
+  const n=Math.max(1,Math.floor(horas*60/cada));
+  el.textContent='Se tomarán '+n+' foto'+(n>1?'s':'')+' por cámara, una cada '+cada+' min durante '+horas+' h. '
+    +'Puedes cerrar esta página: el microscopio sigue solo.';
+}
+resumenTl();
 function tlCntChange(){
   document.getElementById('tlCntOpts').style.display=
     document.getElementById('tlCnt').checked?'grid':'none';
@@ -1280,7 +1336,7 @@ function pintarBotonConteo(n){
   const btn=document.getElementById('cntBtn'+n);
   const off=document.getElementById('cntOff'+n);
   if(conteoModo==='manual'){
-    btn.querySelector('.lbl').textContent=conteoOn[n]?'Medir':'Medir';
+    btn.querySelector('.lbl').textContent='Contar células';
     btn.classList.remove('active');
   }else{
     btn.querySelector('.lbl').textContent=conteoOn[n]?'Contando':'Contar';
@@ -1296,7 +1352,7 @@ async function accionConteo(n){
 
 async function medirConteo(n){
   const btn=document.getElementById('cntBtn'+n);
-  btn.disabled=true;btn.querySelector('.lbl').textContent='Midiendo...';
+  btn.disabled=true;btn.querySelector('.lbl').textContent='Contando...';
   try{
     const oblicua=document.getElementById('cntOblicua').checked;
     const r=await fetch('/api/analisis/medir',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1404,7 +1460,9 @@ async function aplicarCamara(){
 }
 async function iniciar(){
   await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));
-  const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1],
+  const body={modo:document.getElementById('modo').value,
+    interval:Math.max(1,Math.round(+document.getElementById('intv').value*60)),
+    duration:Math.max(1,Math.round(+document.getElementById('dur').value*3600)),nombre:document.getElementById('nombre').value,camaras:[0,1],
     autofocus:document.getElementById('tlAf').checked,
     autofocus_cada:+document.getElementById('tlAfCada').value,
     autofocus_rango_um:+document.getElementById('tlAfRango').value||40,
@@ -1426,8 +1484,8 @@ async function detener(){await fetch('/timelapse/stop',{method:'POST'});toast('D
 function setRunning(on){
   running=on;
   document.getElementById('dot').className='dot '+(on?'run':'idle');
-  document.getElementById('state').textContent=on?'RUNNING':'IDLE';
-  document.getElementById('s_state').textContent=on?'RUNNING':'IDLE';
+  document.getElementById('state').textContent=on?'Timelapse en curso':'Listo';
+  document.getElementById('s_state').textContent=on?'Timelapse en curso':'Listo';
   ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn','afBtn','lbAfBtn','calBtn','cntFotoBtn'].forEach(id=>document.getElementById(id).disabled=on);
   document.querySelectorAll('.zbtn,[data-paso]').forEach(b=>b.disabled=on);
   document.getElementById('stop').disabled=!on;
@@ -1528,8 +1586,9 @@ async function cargarPerfil(){
   if(d.error){toast(d.error);return;}
   document.getElementById('exp').value=d.camera.exposure_us;
   document.getElementById('gain').value=d.camera.gain;
-  document.getElementById('intv').value=d.timelapse.interval_seconds;
-  document.getElementById('dur').value=d.timelapse.duration_seconds;
+  document.getElementById('intv').value=+(d.timelapse.interval_seconds/60).toFixed(2);
+  document.getElementById('dur').value=+(d.timelapse.duration_seconds/3600).toFixed(2);
+  resumenTl();
   document.getElementById('s_perfil').textContent=nombre;
   toast('Perfil "'+nombre+'" cargado y exposición aplicada');
 }
@@ -1537,8 +1596,8 @@ async function guardarPerfil(){
   const nombre=document.getElementById('profileNombre').value.trim();
   if(!nombre){toast('Poné un nombre para el perfil');return;}
   const body={name:nombre,
-    interval_seconds:+document.getElementById('intv').value,
-    duration_seconds:+document.getElementById('dur').value};
+    interval_seconds:Math.round(+document.getElementById('intv').value*60),
+    duration_seconds:Math.round(+document.getElementById('dur').value*3600)};
   const r=await fetch('/profiles/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   if(d.error){toast(d.error);return;}
