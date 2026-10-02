@@ -33,6 +33,7 @@ from core.experimentos import Experimentos, ID_RE, LEGADO_RE, BYTES_POR_FOTO
 from core import experimentos as exp_mod
 from core import marca_agua
 from core import metadatos as metadatos_mod
+from core import dpc
 from core.optica import Optica, OBJETIVOS
 from core.actualizar import Actualizador, ErrorActualizar, reiniciar
 
@@ -184,6 +185,15 @@ class TimelapseReq(BaseModel):
     # Copia de respaldo de cada imagen en el NAS (core/respaldo_nas.py),
     # en paralelo con el envio a la PC.
     respaldar_nas: bool = False
+    # Solo en modo dpc (core/dpc.py): al terminar cada ciclo calcular el
+    # DPC (dos TIFF de 16 bits comprimidos) y borrar las 4 crudas, que
+    # son 64 MB por camara y por ciclo. Opcional: campo claro reducido,
+    # fase y vista JPEG.
+    dpc_procesar: bool = True
+    dpc_borrar_crudas: bool = True
+    dpc_suma: bool = True
+    dpc_fase: bool = False
+    dpc_jpg: bool = True
 
 
 class UsbAccionReq(BaseModel):
@@ -809,6 +819,20 @@ def create_app(camera, illuminations, timelapse, motores=None,
     # ===============================
     # Timelapse
     # ===============================
+    def _dpc_opts(req):
+        if req.modo != "dpc" or not req.dpc_procesar:
+            return None
+        return {"borrar_crudas": req.dpc_borrar_crudas, "suma": req.dpc_suma,
+                "fase": req.dpc_fase, "jpg": req.dpc_jpg}
+
+    def _bytes_por_ciclo(req):
+        """Lo que queda en disco por camara y por ciclo (igual que
+        tlBytesPorCiclo en index_uiux.html)."""
+        opts = _dpc_opts(req)
+        if opts is None:
+            return len(MODOS.get(req.modo, [1])) * BYTES_POR_FOTO
+        return dpc.bytes_por_ciclo(opts)
+
     @app.post("/timelapse/start")
     def start_timelapse(req: TimelapseReq):
         if timelapse.is_running():
@@ -823,11 +847,9 @@ def create_app(camera, illuminations, timelapse, motores=None,
             if d is None:
                 return {"error": "La memoria USB elegida no esta disponible "
                         "o es de solo lectura"}
-            # Estimacion grosera de espacio: ~16 MB por TIFF de 16 bits a
-            # 3280x2464. Avisar antes de empezar, no a mitad de la noche.
-            n_fotos = len(MODOS.get(req.modo, [1])) * len(req.camaras)
+            # Avisar antes de empezar, no a mitad de la noche.
             ciclos = max(1, req.duration // max(1, req.interval))
-            necesario = ciclos * n_fotos * 16e6
+            necesario = ciclos * len(req.camaras) * _bytes_por_ciclo(req)
             if d.get("libre_bytes") is not None and necesario > d["libre_bytes"]:
                 return {"error": f"La memoria no alcanza: el timelapse ocupa "
                         f"~{necesario / 1e9:.1f} GB y hay "
@@ -836,9 +858,8 @@ def create_app(camera, illuminations, timelapse, motores=None,
         elif req.destino != "local":
             return {"error": f"destino invalido: {req.destino}"}
         else:
-            n_fotos = len(MODOS.get(req.modo, [1])) * len(req.camaras)
             ciclos = max(1, req.duration // max(1, req.interval))
-            necesario = ciclos * n_fotos * BYTES_POR_FOTO
+            necesario = ciclos * len(req.camaras) * _bytes_por_ciclo(req)
             libre = experimentos.espacio()["libre_bytes"]
             if necesario > libre * 0.95:
                 return {"error": f"No alcanza el espacio en la Raspberry: el timelapse "
@@ -869,10 +890,12 @@ def create_app(camera, illuminations, timelapse, motores=None,
             enviar_pc=req.enviar_pc,
             nombre=req.nombre,
             respaldar_nas=req.respaldar_nas,
+            dpc_opts=_dpc_opts(req),
         )
         return {"status": "started", "autofocus": req.autofocus,
                 "contar": req.contar, "destino": carpeta_raiz or "local",
-                "enviar_pc": req.enviar_pc, "respaldar_nas": req.respaldar_nas}
+                "enviar_pc": req.enviar_pc, "respaldar_nas": req.respaldar_nas,
+                "dpc": _dpc_opts(req)}
 
     @app.post("/timelapse/stop")
     def stop_timelapse():
@@ -905,12 +928,12 @@ def create_app(camera, illuminations, timelapse, motores=None,
             return Response(status_code=404)
         size = max(160, min(int(size), 1600))
         modo = (timelapse.config or {}).get("modo")
-        clave = (cam, u["ciclo"], tuple(sorted(u["rutas"].items())), size)
+        clave = (cam, u["ciclo"], bool(u.get("dpc")), u.get("base"), size)
         with _vistas_lock:
             datos = _vistas.get(clave)
         if datos is None:
             try:
-                datos = vista_previa(u["rutas"], modo, size)
+                datos = vista_previa(u["rutas"], modo, size, base=u.get("base"))
             except Exception as e:
                 return Response(content=f"no se pudo armar la vista: {e}", status_code=500)
             with _vistas_lock:

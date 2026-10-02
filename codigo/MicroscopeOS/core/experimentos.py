@@ -119,6 +119,27 @@ def escribir_leeme(carpeta, datos):
             "                   Nombre: número de foto _ fecha _ hora. Ej.: 0001_2026-10-02_10-30-00.tif",
             "                   Con luz de relieve (DPC) son 4 por vez: _L _R _T _B (izquierda,",
             "                   derecha, arriba, abajo).",
+        ]
+        dpc = datos.get("dpc_procesado")
+        if dpc:
+            lineas += [
+                "                   El relieve se calculó al terminar cada ciclo:",
+                "                     _dpcLR.tif  izquierda-derecha, (L-R)/(L+R)",
+                "                     _dpcTB.tif  arriba-abajo, (T-B)/(T+B)",
+                "                     valor = " + dpc.get("valor_dpc", "(pixel - 32768) / 32767").replace("pixel", "píxel")
+                + ", de -1 a 1 (gris medio = 0)",
+            ]
+            if dpc.get("suma"):
+                lineas += ["                     _suma.tif   foto normal (campo claro): promedio de las 4,",
+                           "                                 a menor resolución (la escala en micras ya viene corregida)"]
+            if dpc.get("fase"):
+                lineas += ["                     _fase.tif   fase, radianes = (píxel - 32768) * 0.0001",
+                           "                                 (en prueba: sirve para ver, no para medir)"]
+            if dpc.get("jpg"):
+                lineas.append("                     _dpc.jpg    vista previa en color de los dos ejes")
+            if dpc.get("borrar_crudas", True):
+                lineas.append("                   Las 4 fotos originales se borraron después de comprobar el resultado.")
+        lineas += [
             "timelapse.log      Lo que pasó en cada ciclo (foco, errores).",
             "temperatura.csv    Temperatura de la incubadora en cada ciclo.",
             "autofoco.csv       Cuánto se movió el foco en cada ciclo, en micras.",

@@ -215,6 +215,52 @@ tl8.reanudar_pendiente(en_hilo=False, espera_s=2, sincronizado=lambda: True)
 check("hora atrasada y sin red: espera un rato y reanuda igual", tl8.is_running() and time.time() - t0 >= 1.9)
 tl8.stop()
 
+print("\n=== DPC CALCULADO EN LA PI (feature/dpc-al-ciclo) + CORTE ===")
+OPC = {"borrar_crudas": True, "suma": True, "fase": False, "jpg": True}
+tla = manager(tmp)
+tla.start(modo="dpc", interval_seconds=1, duration_seconds=600, stabilization_time=0,
+          camaras=[0], nombre="DPC en la Pi", dpc_opts=OPC)
+esperar(lambda: tla.ultimas.get(0, {}).get("dpc"))
+cam0 = Path(tla.base_folder) / "cam0"
+check("el DPC se calcula y las crudas se borran", list(cam0.glob("0001_*_dpcLR.tif"))
+      and not list(cam0.glob("0001_*_L.tif")), sorted(p.name for p in cam0.iterdir())[:8])
+check("la pagina se entera de que ya esta el relieve", tla.resumen()["ultimas"]["0"]["dpc"])
+u = tla.ultimas[0]
+jpg = T.vista_previa(u["rutas"], "dpc", size=90, base=u["base"])
+img = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
+check("con las crudas borradas, la vista usa el _dpc.jpg a color",
+      img is not None and max(img.shape[:2]) == 90, None if img is None else img.shape)
+os.remove(u["base"] + "_dpc.jpg")
+jpg = T.vista_previa(u["rutas"], "dpc", size=90, base=u["base"])
+check("sin el jpg, usa el _dpcLR.tif", cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_GRAYSCALE) is not None)
+check("las opciones de DPC quedan para reanudar",
+      json.loads(estado.read_text())["params"]["dpc_opts"] == OPC)
+tla.stop()
+# Corte con el DPC atrasado: la Pi se apaga antes de procesar los ultimos
+# ciclos (aca, un hilo de calculo que nunca llega a hacer nada).
+tlc = manager(tmp)
+tlc._procesar_dpc = lambda cola, op: [None for _ in iter(cola.get, None)]
+tlc.start(modo="dpc", interval_seconds=1, duration_seconds=600, stabilization_time=0,
+          camaras=[0], nombre="DPC atrasado", dpc_opts=OPC)
+esperar(lambda: tlc.ciclo_actual >= 2 and json.loads(estado.read_text())["ciclo"] >= 2)
+cam0 = Path(tlc.base_folder) / "cam0"
+cortar_la_luz(tlc)
+crudas = sorted(cam0.glob("*_L.tif"))
+d = json.loads(estado.read_text())
+check("(quedan ciclos sin procesar, con sus 4 crudas)", crudas and d["params"]["dpc_opts"] == OPC, len(crudas))
+tlb = manager(tmp)
+tlb.reanudar_pendiente(en_hilo=False, espera_s=5, sincronizado=lambda: True)
+check("al reanudar, la vista arranca con la ultima de antes del corte",
+      tlb.ultimas.get(0, {}).get("ciclo") == d["ciclo"], tlb.ultimas.get(0))
+esperar(lambda: not list(cam0.glob("*_L.tif")) or tlb.ciclo_actual > d["ciclo"] + 3, tope=30)
+tlb.stop()
+log = (cam0.parent / "timelapse.log").read_text()
+check("procesa lo que quedo pendiente del corte", "DPC pendiente de antes del corte" in log)
+check("y al final no quedan crudas sueltas", not list(cam0.glob("*_[LRTB].tif")),
+      sorted(p.name for p in cam0.glob("*_[LRTB].tif"))[:6])
+nums = sorted({p.name[:4] for p in cam0.glob("*_dpcLR.tif")})
+check("cada ciclo tiene su DPC, sin huecos", nums == [f"{i:04d}" for i in range(1, len(nums) + 1)], nums)
+
 tl9 = manager(tmp)
 hilo = tl9.reanudar_pendiente(en_hilo=True)
 check("sin nada pendiente, en el arranque no lanza hilos", hilo is None)

@@ -1,4 +1,5 @@
 import json
+import queue
 import time
 import os
 import subprocess
@@ -59,12 +60,14 @@ def reloj_sincronizado():
         return True
 
 
-def vista_previa(rutas, modo, size=800):
+def vista_previa(rutas, modo, size=800, base=None):
     """JPEG de un ciclo para mirar el timelapse desde la pagina.
 
-    rutas: {sufijo: archivo} de una camara. En relieve DPC muestra
-    (L-R)/(L+R), que es lo que se ve como relieve; con las cuatro fotos
-    sueltas no se distingue nada. En los demas modos, la foto tal cual.
+    rutas: {sufijo: archivo} de una camara. En relieve DPC muestra el
+    relieve, no una de las cuatro fotos sueltas: si core/dpc.py ya proceso
+    el ciclo, su vista a color (base + "_dpc.jpg") o el _dpcLR.tif (las
+    crudas pueden estar ya borradas); si no, (L-R)/(L+R) de las crudas.
+    En los demas modos, la foto tal cual.
     """
     import cv2
     import numpy as np
@@ -82,6 +85,26 @@ def vista_previa(rutas, modo, size=800):
                              interpolation=cv2.INTER_AREA)
         return img.astype(np.float32)
 
+    def jpeg(img8):
+        ok, buf = cv2.imencode(".jpg", img8, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        return buf.tobytes()
+
+    if modo == "dpc" and base:
+        if os.path.isfile(base + "_dpc.jpg"):
+            img = cv2.imread(base + "_dpc.jpg", cv2.IMREAD_COLOR)
+            if img is not None:
+                h, w = img.shape[:2]
+                if max(h, w) > size:
+                    e = size / max(h, w)
+                    img = cv2.resize(img, (max(1, int(w * e)), max(1, int(h * e))),
+                                     interpolation=cv2.INTER_AREA)
+                return jpeg(img)
+        if os.path.isfile(base + "_dpcLR.tif"):
+            from core import dpc as dpc_mod
+            v = dpc_mod.desde_uint16(leer(base + "_dpcLR.tif"), dpc_mod.ESCALA_DPC)
+            tope = float(np.percentile(np.abs(v), 99.5)) or 1.0
+            return jpeg((127.5 + 127.5 * np.clip(v / tope, -1, 1)).astype(np.uint8))
+
     if modo == "dpc" and "_L" in rutas and "_R" in rutas:
         dpc = imagen_dpc(leer(rutas["_L"]), leer(rutas["_R"]))
         tope = float(np.percentile(np.abs(dpc), 99.5)) or 1.0
@@ -91,8 +114,7 @@ def vista_previa(rutas, modo, size=800):
         img = leer(ruta)
         lo, hi = np.percentile(img, (0.5, 99.5))
         img8 = (np.clip((img - lo) / max(hi - lo, 1.0), 0, 1) * 255).astype(np.uint8)
-    ok, buf = cv2.imencode(".jpg", img8, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    return buf.tobytes()
+    return jpeg(img8)
 
 
 class TimelapseManager:
@@ -466,6 +488,62 @@ class TimelapseManager:
                 except Exception as e:
                     self._log(f"  {nombre}: no se pudo encolar {ruta} -> {e}")
 
+    def _procesar_dpc(self, cola, opciones):
+        """Hilo: calcula el DPC de cada ciclo y borra las 4 crudas.
+
+        Corre aparte para que el calculo (unos segundos por camara en la
+        Pi, mas si se pide la fase) no corra el horario de las capturas.
+        Las crudas solo se borran si core.dpc.procesar_ciclo pudo escribir
+        Y volver a leer los resultados; si algo falla se conservan y, si
+        habia envio a la PC/NAS, se mandan ellas en lugar del DPC.
+        """
+        from core import dpc
+        borrar = opciones.get("borrar_crudas", dpc.OPCIONES["borrar_crudas"])
+        while True:
+            item = cola.get()
+            if item is None:
+                return
+            cam, rutas, ciclo = item
+            try:
+                r = dpc.procesar_ciclo(rutas, opciones)
+            except Exception as e:
+                self._log(f"  dpc cam{cam} ciclo {ciclo}: ERROR -> {e} "
+                          f"(se conservan las crudas)")
+                if borrar:
+                    for sufijo in dpc.SUFIJOS_CRUDAS:
+                        if rutas.get(sufijo):
+                            self._enviar(rutas[sufijo], f"cam{cam}")
+                continue
+            for ruta in r["archivos"]:
+                self._enviar(ruta, f"cam{cam}")
+            # La vista previa de la pagina pasa a la del DPC calculado.
+            u = self.ultimas.get(cam)
+            if u and u["ciclo"] == ciclo:
+                self.ultimas[cam] = dict(u, dpc=True)
+            self._log(f"  dpc cam{cam} ciclo {ciclo}: {len(r['archivos'])} archivo(s), "
+                      f"{len(r['borradas'])} crudas borradas, {r['ms']} ms"
+                      + (f", fase p99={r['fase_p99_rad']} rad" if "fase_p99_rad" in r else ""))
+
+    def _pendientes_dpc(self, camaras, opciones):
+        """Al reanudar: ciclos que quedaron con las 4 crudas sin procesar
+        (la luz se corto con el DPC en la cola o a medio escribir). Las
+        crudas solo se borran al final, asi que si estan las 4, el ciclo
+        hay que (re)hacerlo."""
+        from core import dpc
+        pendientes = []
+        for cam in camaras:
+            carpeta = Path(self.base_folder) / f"cam{cam}"
+            for pl in sorted(carpeta.glob("*_L.tif")):
+                base = str(pl)[:-len("_L.tif")]
+                rutas = {s: f"{base}{s}.tif" for s in dpc.SUFIJOS_CRUDAS}
+                if not all(os.path.isfile(r) for r in rutas.values()):
+                    continue
+                completo = all(os.path.isfile(f"{base}{s}.tif") for s in dpc.salidas(opciones))
+                if opciones.get("borrar_crudas", True) or not completo:
+                    n = int(pl.name[:4]) if pl.name[:4].isdigit() else 0
+                    pendientes.append((cam, rutas, n))
+        return pendientes
+
     def _meta_foto(self, sufijo):
         """Lo que cada foto del timelapse agrega a sus metadatos."""
         canales = {"_L": "izquierda", "_R": "derecha", "_T": "arriba", "_B": "abajo"}
@@ -477,7 +555,7 @@ class TimelapseManager:
         return meta
 
     def _escribir_metadatos(self, modo, interval_seconds, duration_seconds,
-                            camaras, nombre):
+                            camaras, nombre, dpc_opts=None):
         """experimento.json: lo que la PC necesita para agrupar las fotos
         de un mismo ciclo (sufijos del modo) sin adivinar por el nombre."""
         meta = {
@@ -494,6 +572,16 @@ class TimelapseManager:
             "color_campo": {str(n): getattr(l, "color_campo", None) or "FFFFFF"
                             for n, l in self.illuminations.items() if l is not None},
         }
+        if dpc_opts is not None:
+            # Que se calculo de las 4 crudas y si se borraron (core/dpc.py)
+            from core import dpc
+            meta["dpc_procesado"] = dict(dpc.OPCIONES, **dpc_opts)
+            if meta["dpc_procesado"].get("borrar_crudas", True):
+                # "sufijos" sigue diciendo lo que se captura (_L _R _T _B);
+                # esto es lo que queda en disco y le llega a la PC.
+                meta["dpc_procesado"]["sufijos"] = dpc.salidas(dpc_opts)
+            meta["dpc_procesado"]["valor_dpc"] = (
+                f"(pixel - {dpc.CERO}) / {round(1 / dpc.ESCALA_DPC)}")
         self.experimentos.actualizar(self.base_folder, **meta)
         return os.path.join(self.base_folder, "experimento.json")
 
@@ -537,13 +625,21 @@ class TimelapseManager:
                 continue
             n = max(int(p.name[:4]) for p in fotos)
             del_ciclo = [p for p in fotos if int(p.name[:4]) == n]
-            rutas = {}
+            rutas, base, dpc = {}, None, False
             for p in del_ciclo:
-                suf = p.stem[-2:] if p.stem[-2:] in ("_L", "_R", "_T", "_B") else ""
-                rutas[suf] = str(p)
+                for suf in ("_dpcLR", "_dpcTB", "_suma", "_fase", "_L", "_R", "_T", "_B"):
+                    if p.stem.endswith(suf):
+                        base = str(p)[:-len(suf + ".tif")]
+                        if suf.startswith("_dpc"):
+                            dpc = True
+                        elif len(suf) == 2:
+                            rutas[suf] = str(p)
+                        break
+                else:
+                    rutas[""] = str(p)
             hora = datetime.fromtimestamp(max(p.stat().st_mtime for p in del_ciclo))
             ultimas[cam] = {"ciclo": n, "hora": hora.isoformat(timespec="seconds"),
-                            "rutas": rutas}
+                            "rutas": rutas, "base": base, "dpc": dpc}
         return ultimas
 
     def reanudar_pendiente(self, espera_s=ESPERA_REANUDAR_S, sincronizado=None,
@@ -630,7 +726,8 @@ class TimelapseManager:
                             if self.inicio_wall and p else None,
             "proxima": iso(self.proxima_wall),
             "reanudaciones": list(self.reanudaciones),
-            "ultimas": {str(c): {"ciclo": u["ciclo"], "hora": u["hora"]}
+            "ultimas": {str(c): {"ciclo": u["ciclo"], "hora": u["hora"],
+                                 "dpc": bool(u.get("dpc"))}
                         for c, u in sorted(self.ultimas.items())},
         }
 
@@ -645,6 +742,7 @@ class TimelapseManager:
         autofocus, autofocus_cada = p["autofocus"], p["autofocus_cada"]
         autofocus_opts = p["autofocus_opts"]
         contar, contar_cada, contar_opts = p["contar"], p["contar_cada"], p["contar_opts"]
+        dpc_opts = p.get("dpc_opts")
 
         self.config = p
         patrones = MODOS[modo]
@@ -670,8 +768,21 @@ class TimelapseManager:
         self.ciclo_actual = ciclo
         for cam in camaras:
             os.makedirs(os.path.join(self.base_folder, f"cam{cam}"), exist_ok=True)
+        # Procesar el DPC al terminar cada ciclo (solo tiene sentido en
+        # modo dpc): un hilo aparte con su cola.
+        if modo != "dpc":
+            dpc_opts = None
+        cola_dpc = hilo_dpc = None
+        if dpc_opts is not None:
+            cola_dpc = queue.Queue()
+            hilo_dpc = threading.Thread(target=self._procesar_dpc,
+                                        args=(cola_dpc, dpc_opts), daemon=True)
+            hilo_dpc.start()
+        borrar_crudas = bool(dpc_opts is not None
+                             and dpc_opts.get("borrar_crudas", True))
         self._enviar(self._escribir_metadatos(modo, interval_seconds,
-                                              duration_seconds, camaras, p["nombre"]))
+                                              duration_seconds, camaras, p["nombre"],
+                                              dpc_opts))
         if reanudar is not None:
             self.experimentos.actualizar(self.base_folder, estado="en curso",
                                          reanudaciones=self.reanudaciones)
@@ -703,7 +814,17 @@ class TimelapseManager:
                   f"conteo={'cada ' + str(contar_cada) + ' ciclo(s)' if contar else 'no'} | "
                   f"destino={os.path.abspath(self.base_folder)} | "
                   f"envio_pc={'si' if self.enviar_pc and self.enviador else 'no'} | "
-                  f"respaldo_nas={'si' if self.respaldar_nas and self.respaldo_nas else 'no'}")
+                  f"respaldo_nas={'si' if self.respaldar_nas and self.respaldo_nas else 'no'} | "
+                  f"dpc={'no' if dpc_opts is None else ('calcular y borrar crudas' if borrar_crudas else 'calcular')}"
+                  + (" + fase" if dpc_opts and dpc_opts.get("fase") else ""))
+
+        if reanudar is not None and cola_dpc is not None:
+            pendientes = self._pendientes_dpc(camaras, dpc_opts)
+            if pendientes:
+                self._log(f"DPC pendiente de antes del corte: {len(pendientes)} captura(s), "
+                          f"se procesan ahora")
+            for item in pendientes:
+                cola_dpc.put(item)
 
         # Los tiempos van contra el inicio ORIGINAL: al reanudar, la
         # duracion no vuelve a empezar y las fotos siguen en la misma
@@ -764,17 +885,33 @@ class TimelapseManager:
 
                 for cam, rutas in guardadas.items():
                     if rutas:
+                        una = next(iter(rutas.items()))
                         self.ultimas[cam] = {"ciclo": ciclo,
                                              "hora": ahora.isoformat(timespec="seconds"),
-                                             "rutas": dict(rutas)}
+                                             "rutas": dict(rutas),
+                                             "base": una[1][:-len(una[0] + ".tif")],
+                                             "dpc": False}
 
-                for cam, rutas in sorted(guardadas.items()):
-                    for sufijo, _ in patrones:
-                        if sufijo in rutas:
-                            self._enviar(rutas[sufijo], f"cam{cam}")
+                # Si las crudas se van a borrar no se mandan: la cola de
+                # envio lee el archivo mas tarde y ya no estaria. Se manda
+                # el DPC que sale de ellas (ver _procesar_dpc).
+                if not borrar_crudas:
+                    for cam, rutas in sorted(guardadas.items()):
+                        for sufijo, _ in patrones:
+                            if sufijo in rutas:
+                                self._enviar(rutas[sufijo], f"cam{cam}")
 
+                # El conteo va antes del DPC: analiza las crudas, que
+                # despues se borran.
                 if contar and (ciclo - 1) % max(1, contar_cada) == 0:
                     self._contar_ciclo(guardadas, ciclo, ts, contar_opts)
+
+                if cola_dpc is not None:
+                    for cam, rutas in sorted(guardadas.items()):
+                        cola_dpc.put((cam, dict(rutas), ciclo))
+                    if cola_dpc.qsize() > 2 * len(camaras):
+                        self._log(f"  dpc: {cola_dpc.qsize()} ciclos esperando -- "
+                                  f"el calculo no alcanza a seguir el intervalo")
 
                 if tras_reanudar is not None:
                     next_capture_time, tras_reanudar = tras_reanudar, None
@@ -791,6 +928,12 @@ class TimelapseManager:
                 luz.off()
             except Exception:
                 pass
+
+        if hilo_dpc is not None:
+            if not cola_dpc.empty():
+                self._log(f"Terminando el DPC de {cola_dpc.qsize()} captura(s) pendientes...")
+            cola_dpc.put(None)
+            hilo_dpc.join()
 
         self._log(f"Timelapse finalizado. Ciclos completados: {ciclo}")
         self._graficar_temperatura()
@@ -832,11 +975,15 @@ class TimelapseManager:
               stabilization_time=0.3, camaras=[0, 1], simultaneo=False,
               autofocus=False, autofocus_cada=1, autofocus_opts=None,
               contar=False, contar_cada=1, contar_opts=None,
-              carpeta_raiz="", enviar_pc=False, nombre="", respaldar_nas=False):
+              carpeta_raiz="", enviar_pc=False, nombre="", respaldar_nas=False,
+              dpc_opts=None):
         """carpeta_raiz: donde crear timelapse_<fecha> ("" = directorio
         de trabajo, o el punto de montaje de una memoria USB).
         enviar_pc: mandar cada imagen a la PC de segmentacion mientras
-        corre (requiere un EnviadorPC configurado)."""
+        corre (requiere un EnviadorPC configurado).
+        dpc_opts: en modo dpc, calcular el DPC de cada ciclo y (por
+        defecto) borrar las 4 crudas; None = guardar solo las crudas.
+        Claves en core.dpc.OPCIONES."""
         if self.state == TimelapseState.RUNNING:
             print("Timelapse ya esta corriendo.")
             return
@@ -854,7 +1001,8 @@ class TimelapseManager:
              "contar": bool(contar), "contar_cada": contar_cada,
              "contar_opts": contar_opts or {}, "carpeta_raiz": carpeta_raiz or "",
              "nombre": nombre or "", "enviar_pc": bool(enviar_pc),
-             "respaldar_nas": bool(respaldar_nas)}
+             "respaldar_nas": bool(respaldar_nas),
+             "dpc_opts": dict(dpc_opts) if dpc_opts is not None else None}
         self._lanzar(p)
 
     def stop(self):

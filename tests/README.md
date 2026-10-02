@@ -9,8 +9,11 @@ protocolo del firmware ESP32-S3 tal como lo describe
     SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 test_migracion.py
     SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 test_motores.py
     SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 test_analisis.py
+    SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 test_dpc.py
 
 Requiere `numpy`, `opencv`, `matplotlib` y `pyserial`.
+`test_dpc.py` usa además el `tifffile` real (no el emulador): lo que prueba es
+que los TIFF del DPC se leen bien antes de borrar las 4 crudas.
 48 + 98 + 96 comprobaciones.
 
 **Qué validan:** que el protocolo serial nuevo se habla bien (incluido el

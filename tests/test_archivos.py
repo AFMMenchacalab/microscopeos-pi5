@@ -4,6 +4,7 @@ Corre sin hardware: camara con el Picamera2 emulado y matrices falsas.
 La API se prueba de punta a punta con el TestClient de FastAPI.
 """
 import io
+import re
 import json
 import os
 import sys
@@ -299,6 +300,35 @@ check("y al cerrar anota estado y fotos", ej["estado"] == "detenido antes de tie
 check("LEEME.txt dentro", "Células día 1" in (carpeta / "LEEME.txt").read_text())
 lst = cl.get("/api/experimentos").json()["experimentos"]
 check("aparece en la galeria como timelapse", any(e["id"] == carpeta.name and e["tipo"] == "timelapse" for e in lst))
+
+print("\n=== TIMELAPSE DPC: opciones de la API y espacio ===")
+# Un timelapse imposible de largo: la API lo rechaza y dice cuanto ocuparia.
+largo = {"modo": "dpc", "interval": 1, "duration": 10 ** 8, "camaras": [0, 1]}
+def gb(cuerpo):
+    m = re.search(r"~([0-9.]+) GB", cl.post("/timelapse/start", json=cuerpo).json().get("error", ""))
+    return float(m.group(1)) if m else None
+crudas, por_defecto = gb(dict(largo, dpc_procesar=False)), gb(largo)
+con_fase = gb(dict(largo, dpc_fase=True))
+from core import dpc as dpc_mod
+foto = 3280 * 2464 * 2
+check("por defecto (DPC + suma, borrando) ocupa menos de la mitad que las 4 crudas",
+      crudas and por_defecto and por_defecto / crudas < 0.5
+      and abs(por_defecto / crudas - dpc_mod.bytes_por_ciclo() / (4 * foto)) < 0.01,
+      f"{por_defecto} vs {crudas} GB")
+check("con fase, una foto de 16 MB mas", con_fase and abs((con_fase - por_defecto) / crudas - 0.25) < 0.01,
+      f"{con_fase} GB")
+check("sin borrar, suma las crudas",
+      abs((gb(dict(largo, dpc_borrar_crudas=False)) - por_defecto) / crudas - 1) < 0.01)
+check("sin la suma ocupa menos", gb(dict(largo, dpc_suma=False)) < por_defecto)
+r = cl.post("/timelapse/start", json={"modo": "dpc", "interval": 600, "duration": 1,
+                                      "camaras": [0], "dpc_fase": True}).json()
+tl.stop()
+check("la API pasa las opciones al timelapse",
+      r.get("dpc") == {"borrar_crudas": True, "suma": True, "fase": True, "jpg": True}, r)
+r = cl.post("/timelapse/start", json={"modo": "blanco", "interval": 600, "duration": 1,
+                                      "camaras": [0]}).json()
+tl.stop()
+check("en modo blanco no hay DPC que calcular", r.get("dpc") is None, r)
 
 print("\n=== CAMARA: tuning sin ALSC y calibracion de imagen ===")
 ruta_t = emuladores.Picamera2Fake.tuning_recibido
