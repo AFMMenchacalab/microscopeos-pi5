@@ -214,9 +214,18 @@ class Experimentos:
         return p
 
     def imagenes(self, carpeta):
+        """Rutas relativas de las fotos, por camara y en orden de toma; las
+        cuatro de un relieve DPC en orden L, R, T, B (no alfabetico)."""
         carpeta = Path(carpeta)
-        return sorted(str(p.relative_to(carpeta)).replace(os.sep, "/")
-                      for p in carpeta.rglob("*.tif") if p.is_file())
+        orden = {"_L": 0, "_R": 1, "_T": 2, "_B": 3}
+
+        def clave(rel):
+            carpeta_rel, _, nombre = rel.rpartition("/")
+            raiz = nombre[:-4]
+            suf = raiz[-2:] if raiz[-2:] in orden else ""
+            return (carpeta_rel, raiz[:len(raiz) - len(suf)], orden.get(suf, -1))
+        return sorted((str(p.relative_to(carpeta)).replace(os.sep, "/")
+                       for p in carpeta.rglob("*.tif") if p.is_file()), key=clave)
 
     def ruta_imagen(self, ident, rel):
         carpeta = self.resolver(ident)
@@ -257,9 +266,25 @@ class Experimentos:
             "camaras": camaras,
             "n_fotos": len(imgs),
             "bytes": tam,
-            "portada": imgs[-1] if imgs else None,
+            "portada": self._portada(imgs),
             "anterior": bool(LEGADO_RE.match(carpeta.name)),
         }
+
+    @staticmethod
+    def _portada(imgs):
+        """La ultima foto de la primera camara (y de un relieve DPC, la
+        primera de las cuatro)."""
+        if not imgs:
+            return None
+        primera = imgs[0].split("/")[0] if "/" in imgs[0] else ""
+        de_esa = [r for r in imgs if r.startswith(primera + "/")] if primera else imgs
+        ultima = de_esa[-1]
+        for suf in ("_B", "_T", "_R"):
+            if ultima.endswith(suf + ".tif"):
+                cand = ultima[:-len(suf) - 4] + "_L.tif"
+                if cand in de_esa:
+                    return cand
+        return ultima
 
     def listar(self):
         carpetas = []

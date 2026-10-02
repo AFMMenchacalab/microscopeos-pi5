@@ -245,6 +245,68 @@
   .luz-sync{width:100%;min-height:38px;font-size:12.5px;color:var(--dim);background:transparent;
     border-style:dashed}
 
+  /* ---------- fotos guardadas ---------- */
+  .espacio{font-size:12.5px;color:var(--dim);margin-bottom:var(--sp-3)}
+  .espacio .barra{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;margin:4px 0}
+  .espacio .barra > div{height:100%;background:var(--green)}
+  .espacio.poco .barra > div{background:var(--amber)}
+  .explista{display:flex;flex-direction:column;gap:8px}
+  .expcard{display:grid;grid-template-columns:72px 1fr auto;gap:12px;align-items:center;text-align:left;
+    padding:8px;min-height:0;justify-content:stretch}
+  .expcard img,.expcard .sinimg{width:72px;height:54px;object-fit:cover;border-radius:6px;background:var(--panel2);display:block}
+  .expcard .sinimg{display:flex;align-items:center;justify-content:center;color:var(--dim)}
+  .expcard .t{font-weight:600;font-size:13.5px;line-height:1.3;overflow:hidden;text-overflow:ellipsis}
+  .expcard .s{font-size:12px;color:var(--dim);line-height:1.4}
+  .expcard > div{min-width:0}
+  .chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;border:1px solid var(--line-strong);
+    color:var(--dim);white-space:nowrap}
+  .chip.vivo{color:var(--red);border-color:var(--red)}
+  .exp-hoja{background:var(--panel-solid);border:1px solid var(--line);border-radius:var(--radius);
+    width:min(1100px,100%);max-height:calc(100dvh - 48px);overflow:auto;padding:var(--sp-4)}
+  .exp-cab{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .exp-tit{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+  .exp-tit h2{font-size:18px;line-height:1.25;overflow-wrap:anywhere}
+  .exp-tit input{flex:1;min-width:0;font-size:16px;padding:8px 10px;border-radius:8px;border:1px solid var(--green);
+    background:var(--panel2);color:var(--text);font-family:var(--font-ui)}
+  .exp-acc{display:flex;flex-wrap:wrap;gap:8px;margin:var(--sp-3) 0}
+  .exp-acc a,.exp-acc button{flex:0 0 auto}
+  a.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 13px;min-height:40px;border-radius:10px;
+    border:1px solid var(--line-strong);background:var(--panel2);color:var(--text);text-decoration:none;
+    font-size:13px;font-weight:500}
+  a.btn:hover{border-color:var(--green)}
+  a.btn.primary{background:var(--green);border-color:var(--green);color:#04130a;font-weight:700}
+  button.borrar.confirmar{background:var(--red);color:#fff;border-color:var(--red)}
+  .seg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:var(--sp-3)}
+  .seg button{flex:1 1 auto;min-height:36px;padding:6px 10px;font-size:12.5px}
+  .expgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+  .expmini{padding:0;min-height:0;flex-direction:column;align-items:stretch;gap:0;overflow:hidden}
+  .expmini img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:var(--panel2)}
+  .expmini span{font-size:11.5px;padding:4px 6px;color:var(--dim);text-align:left}
+  .visor{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:var(--sp-4);align-items:start}
+  @media(max-width:820px){.visor{grid-template-columns:1fr}}
+  .visor-img{position:relative}
+  .visor-img img{width:100%;border-radius:10px;display:block;background:#000}
+  .visor-img .nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;padding:0;
+    border-radius:50%;background:rgba(8,12,20,.65);color:#fff;border-color:transparent}
+  .visor-img .nav.ant{left:8px}.visor-img .nav.sig{right:8px}
+  .visor-info .stat{font-size:12px}
+  .snack{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:300;display:flex;align-items:center;
+    gap:14px;background:var(--panel-solid);border:1px solid var(--line-strong);border-radius:10px;
+    padding:8px 8px 8px 16px;font-size:13px;box-shadow:0 12px 30px -12px rgba(0,0,0,.7)}
+  .snack[hidden]{display:none}
+  .snack button{min-height:34px;padding:4px 12px;color:var(--green)}
+  .marca-vista{border-radius:10px;overflow:hidden;background:var(--panel2);margin-bottom:var(--sp-3);
+    aspect-ratio:4/3;display:flex;align-items:center;justify-content:center}
+  .marca-vista img{width:100%;display:block;transition:opacity .2s}
+  .marca-vista img.cargando{opacity:.45}
+  .subcampos{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin:2px 0 var(--sp-3) 27px}
+  .subcampos .check label{font-size:12.5px}
+  .esquinas{display:grid;grid-template-columns:repeat(2,44px);gap:6px}
+  .esquinas button{min-height:36px;padding:0}
+  .opt-cam{border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:10px}
+  .opt-cam .res{font-size:12.5px;margin:4px 0 6px}
+  .opt-cam .res b{font-family:var(--font-mono)}
+
   /* ---------- pasos numerados (guia y titulos) ---------- */
   .paso{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:22px;height:22px;
     border-radius:50%;background:var(--green);color:#04130a;font-size:12px;font-weight:700;
@@ -396,6 +458,12 @@
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.2"/><path d="M15.2 15.2 20 20"/></symbol>
   <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
   <symbol id="i-unlink" viewBox="0 0 24 24"><path d="M15.5 12.5l3.2-3.2a4 4 0 0 0-5.7-5.7L10 6.6"/><path d="M8.5 11.5l-3.2 3.2a4 4 0 0 0 5.7 5.7l3-3"/><path d="M4 4l3 3"/><path d="M20 20l-3-3"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20l1-4.2L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.2 19 4 20Z"/><path d="M13.5 7.3l3.2 3.2"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3.5"/><path d="M7.5 8 12 3.5 16.5 8"/><path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12"/></symbol>
+  <symbol id="i-stamp" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="13" rx="2"/><path d="M14 18v-3.2h4.6"/><circle cx="8.6" cy="9.6" r="1.6"/><path d="M3.5 15.5l4-3.5 3 2.5"/></symbol>
+  <symbol id="i-lens" viewBox="0 0 24 24"><path d="M9 3h6v4l-1.5 4h-3L9 7z"/><path d="M10.5 11v3h3v-3"/><path d="M12 14v2.5"/><path d="M8 20h8"/><path d="M10 16.5h4"/></symbol>
+  <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="i-eject" viewBox="0 0 24 24"><path d="M12 5 5 13h14Z"/><path d="M5 18h14"/></symbol>
 </defs>
 </svg>
@@ -486,6 +554,9 @@
 
     <section class="panel" id="sec-foto">
       <h2><span class="paso">4</span>Toma una foto</h2>
+      <div class="field"><label for="capNombre">¿Qué es? (opcional)</label>
+        <input type="text" id="capNombre" placeholder="ej. Muestra B" maxlength="60" oninput="pistaCarpetaFoto()"></div>
+      <p class="hint" id="capCarpeta" style="margin-top:-6px">Sin nombre, la foto va a «Fotos sueltas» de hoy.</p>
       <div class="row">
         <div class="field"><label for="capCam">¿De qué cámara?</label>
           <select id="capCam">
@@ -504,7 +575,7 @@
         </div>
       </div>
       <button id="snap" class="primary" onclick="capturar()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg><span class="lbl">Tomar foto</span></button>
-      <p class="hint" style="padding-top:8px">Las fotos se guardan solas; las ves en «Fotos guardadas».
+      <p class="hint" style="padding-top:8px">Las fotos se guardan solas; las ves en <a href="#galeriaDetails">«Fotos guardadas»</a>.
       Para tomar fotos durante horas sin estar aquí, usa el <a href="#sec-tl">timelapse</a>.</p>
     </section>
   </div>
@@ -549,9 +620,10 @@
     <details class="panel" id="sec-tl" open>
       <summary><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="paso">4</span><span class="stitle">Timelapse: fotos automáticas</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
-      <div class="field"><label for="nombre">Nombre del experimento</label><input type="text" id="nombre" placeholder="ej. celulas_dia1"></div>
+      <div class="field"><label for="nombre">Nombre del experimento</label><input type="text" id="nombre" placeholder="ej. Células día 1" maxlength="60" oninput="pistaCarpetaTl()"></div>
+      <p class="hint" id="tlCarpeta" style="margin-top:-6px"></p>
       <div class="field"><label for="modo">Tipo de foto</label>
-        <select id="modo">
+        <select id="modo" onchange="resumenTl()">
           <option value="blanco">Normal (1 foto)</option>
           <option value="dpc">Relieve DPC (4 fotos)</option>
           <option value="oscuro">Fondo negro (1 foto)</option>
@@ -587,7 +659,7 @@
         </div>
       </div>
       <div class="field"><label for="tlDestino">Guardar en</label>
-        <select id="tlDestino"><option value="local">Raspberry (tarjeta interna)</option></select>
+        <select id="tlDestino" onchange="resumenTl()"><option value="local">Raspberry (tarjeta interna)</option></select>
       </div>
       <div class="field check">
         <input type="checkbox" id="tlEnviar">
@@ -605,14 +677,21 @@
       </div>
     </details>
 
-    <details class="panel" id="galeriaDetails">
+    <details class="panel" id="galeriaDetails" open>
       <summary><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg><span class="stitle">Fotos guardadas</span><span class="mini" id="galMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
-      <div class="camsel" style="margin-bottom:10px">
-        <button onclick="cargarGaleria()"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Actualizar</span></button>
+      <div class="espacio" id="galEspacio"></div>
+      <div class="explista" id="galLista"><p class="hint">Cargando…</p></div>
       </div>
-      <div id="galCapturas"></div>
-      <div id="galTimelapses"></div>
+    </details>
+
+    <details class="panel" id="marcaDetails">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-stamp"/></svg><span class="stitle">Marca de agua</span><span class="mini" id="marcaMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <p class="hint">Va solo en las copias que descargas «para compartir». Las fotos originales nunca se modifican.</p>
+      <div class="seg" id="marcaPresets" role="radiogroup" aria-label="Tipo de marca de agua"></div>
+      <div class="marca-vista"><img id="marcaVista" alt="Vista previa de la marca de agua"></div>
+      <div id="marcaOpciones"></div>
       </div>
     </details>
 
@@ -664,6 +743,14 @@
     </details>
 
     <h3 class="grupo">Más opciones</h3>
+    <details class="panel" id="opticaDetails">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-lens"/></svg><span class="stitle">Objetivo y escala</span><span class="mini" id="opticaMini">—</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <p class="hint">Qué objetivo tiene cada cámara. Con eso se calcula cuántas micras mide un píxel:
+      va guardado dentro de cada foto (Fiji la abre con la escala puesta) y es la barra de escala de la marca de agua.</p>
+      <div id="opticaCtl"></div>
+      </div>
+    </details>
     <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="stitle">Conteo de células</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
@@ -846,6 +933,20 @@
     </div>
   </div>
 </div>
+
+<div class="lightbox" id="expVista" hidden role="dialog" aria-modal="true" aria-labelledby="expTitulo" onclick="if(event.target===this)cerrarExp()">
+  <div class="exp-hoja">
+    <div class="exp-cab">
+      <div class="exp-tit" id="expTitBox"><h2 id="expTitulo"></h2></div>
+      <button class="icon-only" onclick="cerrarExp()" aria-label="Cerrar"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <p class="hint" id="expSub"></p>
+    <div class="exp-acc" id="expAcc"></div>
+    <div id="expCuerpo"></div>
+  </div>
+</div>
+
+<div class="snack" id="snack" hidden role="status" aria-live="polite"><span id="snackTxt"></span><button id="snackBtn">Deshacer</button></div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -1129,12 +1230,14 @@ async function capturar(){
   const cam=document.getElementById('capCam').value;
   const modo=document.getElementById('capModo').value;
   toast('Capturando ('+modo+')...');
-  const url=cam==='both'?'/capture/both/'+modo:'/capture/'+cam+'/'+modo;
+  const nombre=document.getElementById('capNombre').value.trim();
+  const url=(cam==='both'?'/capture/both/'+modo:'/capture/'+cam+'/'+modo)+'?nombre='+encodeURIComponent(nombre);
   const r=await fetch(url,{method:'POST'});
   const d=await r.json();
   if(d.error){toast(d.error);return;}
-  toast('Guardado: '+(Array.isArray(d.saved)?d.saved.length+' fotos':d.saved));
-  cargarLuz(true);
+  const n=d.saved.length;
+  toast((n>1?n+' fotos guardadas':'Foto guardada')+' en «'+d.nombre+'»');
+  cargarLuz(true);cargarGaleria();
 }
 // ============================================================
 // Foco motorizado: un eje Z por camara, seleccionable.
@@ -1411,12 +1514,21 @@ function tlAfChange(){
 }
 // "Se tomaran N fotos": lo primero que hay que saber antes de iniciar.
 function resumenTl(){
+  try{galeria;}catch(e){return;}      // todavia no se definio (arranque)
   const cada=+document.getElementById('intv').value, horas=+document.getElementById('dur').value;
   const el=document.getElementById('tlResumen');
   if(!(cada>0)||!(horas>0)){el.textContent='Pon cada cuántos minutos y durante cuántas horas.';return;}
   const n=Math.max(1,Math.floor(horas*60/cada));
-  el.textContent='Se tomarán '+n+' foto'+(n>1?'s':'')+' por cámara, una cada '+cada+' min durante '+horas+' h. '
-    +'Puedes cerrar esta página: el microscopio sigue solo.';
+  const porCiclo=(document.getElementById('modo').value==='dpc'?4:1)*2;
+  const bytes=n*porCiclo*3280*2464*2;
+  let espacio='';
+  const dest=document.getElementById('tlDestino').value;
+  const libre=dest==='local'?(galeria.espacio||{}).libre_bytes
+    :((galeria.usb||[]).find(u=>u.punto===dest)||{}).libre_bytes;
+  if(libre!=null)espacio=' Ocupará unos '+fmtBytes(bytes)+(bytes>libre*0.95?' y NO ALCANZA el espacio ('+fmtBytes(libre)+' libres).':' de '+fmtBytes(libre)+' libres.');
+  el.style.color=libre!=null&&bytes>libre*0.95?'var(--amber)':'';
+  el.textContent='Se tomarán '+n+' foto'+(n>1?'s':'')+' por cámara, una cada '+cada+' min durante '+horas+' h.'+espacio
+    +' Puedes cerrar esta página: el microscopio sigue solo.';
 }
 resumenTl();
 function tlCntChange(){
@@ -1630,55 +1742,356 @@ function fmtBytes(n){
   if(n>1e3)return (n/1e3).toFixed(0)+' KB';
   return n+' B';
 }
-function thumbCard(thumbUrl,bigUrl,dlUrl,alt){
-  return '<div class="thumb-card">'
-    +'<img class="thumb" src="'+thumbUrl+'" loading="lazy" alt="'+esc(alt)+'" onclick="openImagePreview(\''+bigUrl+'\')">'
-    +'<a class="thumb-dl" href="'+dlUrl+'" aria-label="Descargar '+esc(alt)+'" title="Descargar original .tif"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg></a>'
-    +'</div>';
+// ===== Fotos guardadas: experimentos =====
+const $e=id=>document.getElementById(id);
+// Cada experimento es una carpeta (timelapse o fotos sueltas de un dia).
+// La lista muestra portada, nombre, fecha y tamaño; al tocar uno se abre
+// con sus fotos, que se pueden ver en grande y descargar originales o
+// "para compartir" (con la marca de agua).
+const MESES_C=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const galeria={lista:[],espacio:null,usb:[]};
+let expActual=null;
+
+function fechaAmigable(iso){
+  if(!iso)return '';
+  const d=new Date(iso), hoy=new Date(), ayer=new Date(Date.now()-864e5);
+  const hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  if(d.toDateString()===hoy.toDateString())return 'hoy, '+hm;
+  if(d.toDateString()===ayer.toDateString())return 'ayer, '+hm;
+  return d.getDate()+' '+MESES_C[d.getMonth()]+' '+d.getFullYear()+', '+hm;
 }
-function confirmZip(bytes){
-  if(bytes>400*1024*1024){
-    return confirm('Esta carpeta pesa '+fmtBytes(bytes)+'. Comprimirla en el servidor puede '
-      +'tardar y usar bastante memoria de la Pi. ¿Descargar igual?');
-  }
-  return true;
+function urlExp(id,que,rel,extra){
+  return '/api/exp/'+encodeURIComponent(id)+'/'+que+(rel?'/'+rel.split('/').map(encodeURIComponent).join('/'):'')+(extra||'');
 }
 async function cargarGaleria(){
   try{
-    const r=await fetch('/files/list');const d=await r.json();
+    const d=await (await fetch('/api/experimentos')).json();
     marcarConexion(true);
-    const cd=d.capturas||[], tl=d.timelapses||[];
-    document.getElementById('galMini').textContent=
-      cd.length+' sueltas · '+tl.length+' timelapse';
-
-    document.getElementById('galCapturas').innerHTML = cd.length
-      ? '<div class="gal-section-head"><span>Capturas sueltas ('+cd.length+(cd.length>=60?'+':'')+')</span>'
-        +'<a class="gal-zip" href="/files/zip/capturas"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Descargar todas (.zip)</a></div>'
-        +'<div class="thumb-grid">'+cd.map(f=>thumbCard(
-            '/files/thumb/capturas/'+encodeURIComponent(f.filename)+'?size=160',
-            '/files/thumb/capturas/'+encodeURIComponent(f.filename)+'?size=1600',
-            '/files/raw/capturas/'+encodeURIComponent(f.filename), f.filename)).join('')+'</div>'
-      : '<p class="hint">Todavía no hay capturas sueltas.</p>';
-
-    document.getElementById('galTimelapses').innerHTML = tl.length
-      ? tl.map(exp=>{
-          const cams=Object.keys(exp.cams||{}).sort();
-          const camsHtml=cams.map(c=>'<p class="hint" style="margin-top:8px">CAM '+c+'</p>'
-            +'<div class="thumb-grid">'+(exp.cams[c]||[]).map(fn=>thumbCard(
-                '/files/thumb/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn)+'?size=160',
-                '/files/thumb/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn)+'?size=1600',
-                '/files/raw/timelapse/'+exp.folder+'/'+c+'/'+encodeURIComponent(fn), fn)).join('')+'</div>'
-          ).join('');
-          return '<details class="gal-exp"><summary>'+esc(exp.folder)+' · '+exp.n_files+' fotos · '+fmtBytes(exp.size_bytes)+'</summary>'
-            +'<div style="padding:8px 0 4px">'
-            +'<a class="gal-zip" href="/files/zip/timelapse/'+encodeURIComponent(exp.folder)+'" onclick="return confirmZip('+exp.size_bytes+')">'
-            +'<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Descargar carpeta completa (.zip, '+fmtBytes(exp.size_bytes)+')</a>'
-            +camsHtml+'</div></details>';
-        }).join('')
-      : '<p class="hint">Todavía no corriste ningún timelapse.</p>';
+    galeria.lista=d.experimentos||[];galeria.espacio=d.espacio;galeria.usb=d.usb||[];
+    pintarGaleria();resumenTl();
   }catch(e){marcarConexion(false);}
 }
-document.getElementById('galeriaDetails').addEventListener('toggle',function(){if(this.open)cargarGaleria();});
+function pintarGaleria(){
+  const L=galeria.lista, e=galeria.espacio;
+  $e('galMini').textContent=L.length?L.length+' experimento'+(L.length>1?'s':''):'vacío';
+  if(e){
+    const usado=1-e.libre_bytes/e.total_bytes, poco=e.libre_bytes<5e9;
+    $e('galEspacio').className='espacio'+(poco?' poco':'');
+    $e('galEspacio').innerHTML='<div class="barra"><div style="width:'+(usado*100).toFixed(1)+'%"></div></div>'
+      +'Raspberry: <b>'+fmtBytes(e.libre_bytes)+'</b> libres de '+fmtBytes(e.total_bytes)
+      +' · caben unas '+e.fotos_que_caben.toLocaleString('es')+' fotos más'
+      +(poco?' · <b>queda poco espacio</b>: borra experimentos viejos o pásalos a una memoria USB':'');
+  }
+  $e('galLista').innerHTML=L.length?L.map(x=>
+    '<button class="expcard" data-id="'+esc(x.id)+'">'
+    +(x.portada?'<img src="'+urlExp(x.id,'mini',x.portada,'?size=160')+'" loading="lazy" alt="">'
+      :'<span class="sinimg"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg></span>')
+    +'<div><div class="t">'+esc(x.nombre)+'</div>'
+    +'<div class="s">'+(x.tipo==='timelapse'?'Timelapse':'Fotos')+' · '+fechaAmigable(x.inicio)+'</div>'
+    +'<div class="s">'+x.n_fotos+' foto'+(x.n_fotos===1?'':'s')+' · '+fmtBytes(x.bytes)+'</div></div>'
+    +(x.en_curso?'<span class="chip vivo">● En curso</span>':'')
+    +'</button>').join('')
+    :'<p class="hint">Todavía no hay fotos. Las que tomes con «Tomar foto» o con un timelapse aparecen aquí.</p>';
+  $e('galLista').querySelectorAll('.expcard').forEach(b=>b.onclick=()=>abrirExp(b.dataset.id));
+}
+async function abrirExp(id){
+  try{
+    const d=await (await fetch('/api/exp/'+encodeURIComponent(id))).json();
+    if(d.error){toast(d.error);cargarGaleria();return;}
+    expActual={info:d,filtro:'todas',idx:null,limite:120,renombrando:false,confirmar:false};
+    $e('expVista').hidden=false;document.body.style.overflow='hidden';
+    pintarExp();
+  }catch(e){toast('No se pudo abrir');}
+}
+function cerrarExp(){
+  $e('expVista').hidden=true;document.body.style.overflow='';expActual=null;
+}
+function fotosFiltradas(){
+  const f=expActual.filtro, imgs=expActual.info.imagenes;
+  return f==='todas'?imgs:imgs.filter(r=>r.startsWith('cam'+f+'/'));
+}
+// "0007_2026-10-02_10-35-00_L.tif" -> "Foto 7 · 10:35 · izq."
+function nombreFoto(rel){
+  const base=rel.split('/').pop().replace(/\.tif$/,'');
+  const lado={_L:'izq.',_R:'der.',_T:'arriba',_B:'abajo'};
+  let m=base.match(/^(\d{4})_(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d)(_[LRTB])?$/);
+  if(m)return 'Foto '+(+m[1])+' · '+m[5]+':'+m[6]+(m[8]?' · '+lado[m[8]]:'');
+  m=base.match(/^(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d)(_[LRTB])?$/);
+  if(m)return m[4]+':'+m[5]+':'+m[6]+(m[7]?' · '+lado[m[7]]:'');
+  return base;
+}
+function pintarExp(){
+  const x=expActual.info, id=x.id;
+  const tit=$e('expTitBox');
+  if(expActual.renombrando){
+    tit.innerHTML='<input id="expNombreIn" value="'+esc(x.nombre)+'" maxlength="60" aria-label="Nuevo nombre">'
+      +'<button class="primary" id="expRenOk">Guardar</button><button id="expRenNo">Cancelar</button>';
+    const inp=$e('expNombreIn');inp.focus();inp.select();
+    inp.onkeydown=e=>{if(e.key==='Enter')guardarNombreExp();if(e.key==='Escape'){e.stopPropagation();expActual.renombrando=false;pintarExp();}};
+    $e('expRenOk').onclick=guardarNombreExp;
+    $e('expRenNo').onclick=()=>{expActual.renombrando=false;pintarExp();};
+  }else{
+    tit.innerHTML='<h2 id="expTitulo">'+esc(x.nombre)+'</h2>'
+      +(x.en_curso?'':'<button class="icon-only" id="expRen" aria-label="Cambiar el nombre" title="Cambiar el nombre"><svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg></button>');
+    if($e('expRen'))$e('expRen').onclick=()=>{expActual.renombrando=true;pintarExp();};
+  }
+  const partes=[x.tipo==='timelapse'?'Timelapse':'Fotos', x.inicio_legible||fechaAmigable(x.inicio),
+    x.n_fotos+' fotos', fmtBytes(x.bytes)];
+  if(x.intervalo_s)partes.push('una cada '+(x.intervalo_s<60?x.intervalo_s+' s':(x.intervalo_s/60).toLocaleString('es')+' min'));
+  if(x.estado&&x.estado!=='completo')partes.push(x.estado);
+  $e('expSub').textContent=partes.join(' · ')+(x.en_curso?' · en curso ahora':'');
+  let acc='<a class="btn primary" href="'+urlExp(id,'zip')+'" download><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Descargar originales (.tif)</a>'
+    +'<a class="btn" href="'+urlExp(id,'zip','','?tipo=compartir')+'" download title="JPG con la marca de agua"><svg class="ic" aria-hidden="true"><use href="#i-share"/></svg>Descargar para compartir (.jpg)</a>';
+  galeria.usb.forEach((u,i)=>{acc+='<button data-usb="'+i+'"'+(x.en_curso?' disabled':'')+'><svg class="ic" aria-hidden="true"><use href="#i-usb"/></svg>Copiar a la USB «'+esc(u.etiqueta||'')+'»</button>';});
+  if(!x.en_curso)acc+='<button class="danger borrar'+(expActual.confirmar?' confirmar':'')+'" id="expBorrar"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg>'
+    +(expActual.confirmar?'¿Seguro? Toca otra vez':'Borrar')+'</button>';
+  $e('expAcc').innerHTML=acc;
+  $e('expAcc').querySelectorAll('[data-usb]').forEach(b=>b.onclick=()=>copiarExpUsb(galeria.usb[+b.dataset.usb]));
+  if($e('expBorrar'))$e('expBorrar').onclick=borrarExp;
+  if(expActual.idx===null)pintarGrilla(); else pintarVisor();
+}
+function pintarGrilla(){
+  const x=expActual.info, imgs=fotosFiltradas();
+  let h='';
+  if(x.camaras.length>1){
+    h+='<div class="seg">'+['todas',...x.camaras].map(c=>'<button data-f="'+c+'" class="'+(expActual.filtro===c?'active':'')+'">'
+      +(c==='todas'?'Todas':'Cámara '+c)+'</button>').join('')+'</div>';
+  }
+  if(!imgs.length)h+='<p class="hint">Este experimento todavía no tiene fotos.</p>';
+  h+='<div class="expgrid">'+imgs.slice(0,expActual.limite).map((r,i)=>
+    '<button class="expmini" data-i="'+i+'"><img src="'+urlExp(x.id,'mini',r,'?size=280')+'" loading="lazy" alt="'+esc(nombreFoto(r))+'">'
+    +'<span>'+(x.camaras.length>1&&expActual.filtro==='todas'?'Cám. '+r.slice(3,4)+' · ':'')+esc(nombreFoto(r))+'</span></button>').join('')+'</div>';
+  if(imgs.length>expActual.limite)h+='<button id="expMas" style="width:100%;margin-top:10px">Mostrar las '+imgs.length+' fotos</button>';
+  $e('expCuerpo').innerHTML=h;
+  $e('expCuerpo').querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{expActual.filtro=b.dataset.f;pintarExp();});
+  $e('expCuerpo').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{expActual.idx=+b.dataset.i;pintarExp();});
+  if($e('expMas'))$e('expMas').onclick=()=>{expActual.limite=1e9;pintarExp();};
+}
+async function pintarVisor(){
+  const x=expActual.info, imgs=fotosFiltradas(), i=expActual.idx, rel=imgs[i];
+  $e('expCuerpo').innerHTML='<button id="expVolver" style="margin-bottom:10px"><svg class="ic" aria-hidden="true"><use href="#i-grid"/></svg>Todas las fotos</button>'
+    +'<div class="visor"><div class="visor-img"><img src="'+urlExp(x.id,'mini',rel,'?size=1600')+'" alt="'+esc(nombreFoto(rel))+'">'
+    +(i>0?'<button class="nav ant" id="expAnt" aria-label="Foto anterior"><svg class="ic" aria-hidden="true"><use href="#i-chev-left"/></svg></button>':'')
+    +(i<imgs.length-1?'<button class="nav sig" id="expSig" aria-label="Foto siguiente"><svg class="ic" aria-hidden="true"><use href="#i-chev-right"/></svg></button>':'')
+    +'</div><div class="visor-info"><h3 style="font-size:14px;margin-bottom:6px">'+esc(nombreFoto(rel))+'</h3>'
+    +'<p class="hint" style="padding:0 0 8px">'+(i+1)+' de '+imgs.length+' · <kbd>←</kbd> <kbd>→</kbd> para pasar</p>'
+    +'<div id="expMeta"><p class="hint">Leyendo datos…</p></div>'
+    +'<div class="actions" style="margin-top:10px">'
+    +'<a class="btn" href="'+urlExp(x.id,'original',rel)+'" download><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Descargar original (.tif)</a>'
+    +'<a class="btn" href="'+urlExp(x.id,'compartir',rel)+'" download><svg class="ic" aria-hidden="true"><use href="#i-share"/></svg>Para compartir (.jpg)</a>'
+    +'</div></div></div>';
+  $e('expVolver').onclick=()=>{expActual.idx=null;pintarExp();};
+  if($e('expAnt'))$e('expAnt').onclick=()=>moverVisor(-1);
+  if($e('expSig'))$e('expSig').onclick=()=>moverVisor(1);
+  try{
+    const d=await (await fetch(urlExp(x.id,'info',rel))).json();
+    if(!expActual||fotosFiltradas()[expActual.idx]!==rel)return;
+    const m=d.metadatos||{}, o=m.optica||{}, l=m.iluminacion||{}, c=m.camara||{}, inc=m.incubadora||{};
+    const filas=[];
+    if(m.fecha_hora)filas.push(['Tomada',fechaAmigable(m.fecha_hora)]);
+    if(c.numero!=null)filas.push(['Cámara',c.numero]);
+    if(o.objetivo)filas.push(['Objetivo',o.objetivo+(o.na?' · NA '+o.na:'')]);
+    if(o.um_por_pixel)filas.push(['Escala',o.um_por_pixel+' µm/píxel ('+o.origen_escala+')']);
+    if(o.campo_um)filas.push(['Campo',o.campo_um[0]+' × '+o.campo_um[1]+' µm']);
+    if(l.nombre)filas.push(['Luz',l.nombre+(l.brillo_pct!=null?' · '+l.brillo_pct+'%':'')]);
+    if(c.exposicion_us)filas.push(['Exposición',(c.exposicion_us/1000)+' ms · ganancia '+c.ganancia]);
+    if((m.foco||{}).posicion_um!=null)filas.push(['Altura del foco',(-m.foco.posicion_um).toFixed(1)+' µm']);
+    if(inc.temperature!=null)filas.push(['Temperatura',(+inc.temperature).toFixed(1)+' °C']);
+    filas.push(['Archivo',fmtBytes(d.bytes||0)]);
+    $e('expMeta').innerHTML=(Object.keys(m).length?'':'<p class="hint">Foto de una versión anterior: no trae datos guardados.</p>')
+      +filas.map(f=>'<div class="stat"><span class="k">'+f[0]+'</span><span class="v">'+esc(f[1])+'</span></div>').join('');
+  }catch(e){}
+}
+function moverVisor(d){
+  const n=fotosFiltradas().length, i=expActual.idx+d;
+  if(i>=0&&i<n){expActual.idx=i;pintarExp();}
+}
+document.addEventListener('keydown',e=>{
+  if(!expActual||$e('expVista').hidden)return;
+  if(e.target&&e.target.tagName==='INPUT')return;
+  if(e.key==='Escape'){e.stopImmediatePropagation();if(expActual.idx!==null){expActual.idx=null;pintarExp();}else cerrarExp();}
+  else if(expActual.idx!==null&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
+    e.preventDefault();e.stopImmediatePropagation();moverVisor(e.key==='ArrowLeft'?-1:1);}
+},true);
+async function guardarNombreExp(){
+  const nombre=$e('expNombreIn').value.trim();
+  if(!nombre){toast('Escribe un nombre');return;}
+  const d=await (await fetch(urlExp(expActual.info.id,'renombrar'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre})})).json();
+  if(d.error){toast(d.error);return;}
+  toast('Nombre cambiado');
+  await abrirExp(d.id);cargarGaleria();
+}
+let confirmarTimer=null;
+async function borrarExp(){
+  if(!expActual.confirmar){
+    expActual.confirmar=true;pintarExp();
+    clearTimeout(confirmarTimer);
+    confirmarTimer=setTimeout(()=>{if(expActual){expActual.confirmar=false;pintarExp();}},4000);
+    return;
+  }
+  const x=expActual.info;
+  const d=await (await fetch(urlExp(x.id,'borrar'),{method:'POST'})).json();
+  if(d.error){toast(d.error);return;}
+  cerrarExp();cargarGaleria();
+  snack('«'+x.nombre+'» se movió a la papelera',async()=>{
+    const r=await (await fetch('/api/papelera/restaurar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:d.codigo})})).json();
+    toast(r.error||'Recuperado');cargarGaleria();
+  });
+}
+async function copiarExpUsb(u){
+  const d=await (await fetch(urlExp(expActual.info.id,'usb'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({punto:u.punto})})).json();
+  toast(d.error||('Copiando '+d.archivos+' archivos a «'+(u.etiqueta||'USB')+'»… El avance se ve en «Memoria USB».'));
+}
+let snackTimer=null;
+function snack(texto,deshacer){
+  $e('snackTxt').textContent=texto;$e('snack').hidden=false;
+  $e('snackBtn').onclick=()=>{$e('snack').hidden=true;clearTimeout(snackTimer);deshacer();};
+  clearTimeout(snackTimer);snackTimer=setTimeout(()=>{$e('snack').hidden=true;},9000);
+}
+cargarGaleria();
+setInterval(()=>{if(!expActual&&!document.hidden)cargarGaleria();},30000);
+
+// ===== Marca de agua =====
+const PRESET_TXT={ninguna:'Sin marca',escala:'Solo escala',cientifica:'Científica',publicidad:'Publicidad'};
+const CAMPO_TXT={experimento:'Nombre del experimento',fecha:'Fecha y hora',objetivo:'Objetivo',escala:'Micras por píxel',luz:'Tipo de luz',camara:'Cámara'};
+let marca=null, vistaTimer=null;
+async function cargarMarca(){
+  try{marca=await (await fetch('/api/marca')).json();pintarMarca();vistaMarca();}catch(e){}
+}
+function pintarMarca(){
+  if(!marca)return;
+  const c=marca.config;
+  $e('marcaMini').textContent=PRESET_TXT[marca.preset]||'Personalizada';
+  $e('marcaPresets').innerHTML=marca.presets.map(p=>'<button role="radio" aria-checked="'+(marca.preset===p)+'" data-p="'+p+'" class="'+(marca.preset===p?'active':'')+'">'+PRESET_TXT[p]+'</button>').join('')
+    +(marca.preset==='personalizada'?'<button class="active" disabled>Personalizada</button>':'');
+  $e('marcaPresets').querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>enviarMarca({preset:b.dataset.p}));
+  if(!marca.disponible){$e('marcaOpciones').innerHTML='<p class="hint">Falta Pillow en la Raspberry (sudo apt install python3-pil): las copias se descargan sin marca.</p>';return;}
+  if(!c.activa){$e('marcaOpciones').innerHTML='<p class="hint">Las copias para compartir salen sin marca de agua.</p>';return;}
+  const chk=(id,on,txt,dis)=>'<div class="field check" style="margin-bottom:6px"><input type="checkbox" id="'+id+'"'+(on?' checked':'')+(dis?' disabled':'')+'><label for="'+id+'">'+txt+'</label></div>';
+  let h='<h3 style="font-size:12px;color:var(--dim);margin:4px 0 8px">Qué aparece</h3>'
+    +chk('mkLogo',c.logo,'Logo'+(marca.logo_propio?' (el tuyo)':' de MicroscopeOS'))
+    +chk('mkEscala',c.escala,'Barra de escala')
+    +chk('mkDatos',c.datos,'Datos de la foto')
+    +'<div class="subcampos">'+marca.campos.map(k=>chk('mkC_'+k,c.campos[k],CAMPO_TXT[k],!c.datos)).join('')+'</div>'
+    +'<div class="row" style="align-items:start">'
+    +'<div class="field"><label>Dónde van los datos</label><div class="esquinas">'
+    +[['arriba-izquierda','↖'],['arriba-derecha','↗'],['abajo-izquierda','↙'],['abajo-derecha','↘']].map(p=>
+      '<button data-pos="'+p[0]+'" class="'+(c.posicion===p[0]?'active':'')+'" aria-label="'+p[0].replace('-',' ')+'">'+p[1]+'</button>').join('')+'</div></div>'
+    +'<div><div class="field"><label>Tamaño</label><div class="seg" style="margin:0">'
+    +[['pequeno','Chico'],['mediano','Mediano'],['grande','Grande']].map(t=>'<button data-tam="'+t[0]+'" class="'+(c.tamano===t[0]?'active':'')+'">'+t[1]+'</button>').join('')+'</div></div>'
+    +'<div class="field"><label>Fondo</label><div class="seg" style="margin:0">'
+    +[['oscuro','Oscuro'],['claro','Claro']].map(t=>'<button data-est="'+t[0]+'" class="'+(c.estilo===t[0]?'active':'')+'">'+t[1]+'</button>').join('')+'</div></div></div>'
+    +'</div>';
+  if(c.logo){
+    h+='<div class="camsel" style="margin-top:0"><button id="mkLogoSubir"><svg class="ic" aria-hidden="true"><use href="#i-share"/></svg><span class="lbl">'+(marca.logo_propio?'Cambiar mi logo':'Usar mi propio logo')+'</span></button>'
+      +(marca.logo_propio?'<button id="mkLogoQuitar"><span class="lbl">Volver al de MicroscopeOS</span></button>':'')+'</div>'
+      +'<input type="file" id="mkLogoArchivo" accept="image/png,image/jpeg,image/webp" hidden>';
+  }
+  $e('marcaOpciones').innerHTML=h;
+  const on=(id,f)=>{const e=$e(id);if(e)e.onchange=f;};
+  on('mkLogo',e=>enviarMarca({config:{logo:e.target.checked}}));
+  on('mkEscala',e=>enviarMarca({config:{escala:e.target.checked}}));
+  on('mkDatos',e=>enviarMarca({config:{datos:e.target.checked}}));
+  marca.campos.forEach(k=>on('mkC_'+k,e=>enviarMarca({config:{campos:{[k]:e.target.checked}}})));
+  $e('marcaOpciones').querySelectorAll('[data-pos]').forEach(b=>b.onclick=()=>enviarMarca({config:{posicion:b.dataset.pos}}));
+  $e('marcaOpciones').querySelectorAll('[data-tam]').forEach(b=>b.onclick=()=>enviarMarca({config:{tamano:b.dataset.tam}}));
+  $e('marcaOpciones').querySelectorAll('[data-est]').forEach(b=>b.onclick=()=>enviarMarca({config:{estilo:b.dataset.est}}));
+  if($e('mkLogoSubir')){
+    $e('mkLogoSubir').onclick=()=>$e('mkLogoArchivo').click();
+    $e('mkLogoArchivo').onchange=e=>{
+      const f=e.target.files[0];if(!f)return;
+      const r=new FileReader();
+      r.onload=async()=>{
+        const d=await (await fetch('/api/marca/logo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({png_base64:r.result})})).json();
+        if(d.error){toast(d.error);return;}
+        marca=d;pintarMarca();vistaMarca();toast('Logo actualizado');
+      };
+      r.readAsDataURL(f);
+    };
+  }
+  if($e('mkLogoQuitar'))$e('mkLogoQuitar').onclick=async()=>{
+    marca=await (await fetch('/api/marca/logo/quitar',{method:'POST'})).json();pintarMarca();vistaMarca();};
+}
+async function enviarMarca(cambio){
+  try{
+    const d=await (await fetch('/api/marca',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cambio)})).json();
+    if(d.error){toast(d.error);return;}
+    marca=d;pintarMarca();vistaMarca();
+  }catch(e){toast('Sin conexión');}
+}
+function vistaMarca(){
+  clearTimeout(vistaTimer);
+  vistaTimer=setTimeout(()=>{
+    const img=$e('marcaVista');img.classList.add('cargando');
+    img.onload=()=>img.classList.remove('cargando');
+    img.src='/api/marca/vista?ancho=800&t='+Date.now();
+  },250);
+}
+$e('marcaDetails').addEventListener('toggle',function(){if(this.open&&!marca)cargarMarca();});
+
+// ===== Objetivo y escala =====
+let optica=null;
+async function cargarOptica(){
+  try{optica=await (await fetch('/api/optica')).json();pintarOptica();}catch(e){}
+}
+function pintarOptica(){
+  if(!optica)return;
+  const cams=Object.keys(optica.camaras);
+  $e('opticaMini').textContent=cams.map(c=>optica.camaras[c].objetivo).join(' · ');
+  $e('opticaCtl').innerHTML=cams.map(c=>{
+    const o=optica.camaras[c];
+    const ops=optica.objetivos.map(x=>x.nombre);
+    if(!ops.includes(o.objetivo))ops.push(o.objetivo);
+    return '<div class="opt-cam" data-cam="'+c+'"><div class="luztit"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>Cámara '+c+'</div>'
+      +'<div class="row"><div class="field"><label for="opObj'+c+'">Objetivo</label><select id="opObj'+c+'" data-k="objetivo">'
+      +ops.map(n=>'<option'+(n===o.objetivo?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select></div>'
+      +'<div class="field"><label for="opAd'+c+'">Lente adicional (×)</label><input type="number" id="opAd'+c+'" data-k="aumento_adicional" min="0.1" step="0.1" value="'+o.aumento_adicional+'"></div></div>'
+      +'<div class="res">1 píxel = <b>'+o.um_por_pixel+' µm</b> · se ve un campo de <b>'+o.campo_um[0]+' × '+o.campo_um[1]+' µm</b>'
+      +' <span class="hint">('+(o.origen_escala==='medido'?'medido':'calculado con el aumento')+')</span></div>'
+      +'<details class="sub" style="margin-top:6px"><summary>La medí con un portaobjetos micrométrico</summary>'
+      +'<div class="row"><div class="field"><label for="opMed'+c+'">Micras por píxel medidas</label><input type="number" id="opMed'+c+'" step="0.0001" min="0" value="'+(o.um_por_pixel_medido||'')+'" placeholder="ej. 0.0548"></div>'
+      +'<div class="field" style="display:flex;align-items:flex-end;gap:6px"><button data-med="1">Usar esta medida</button>'
+      +(o.um_por_pixel_medido?'<button data-med="0">Volver al cálculo</button>':'')+'</div></div></details></div>';
+  }).join('');
+  $e('opticaCtl').querySelectorAll('.opt-cam').forEach(box=>{
+    const cam=+box.dataset.cam;
+    box.querySelectorAll('[data-k]').forEach(e=>e.onchange=()=>guardarOptica({camara:cam,[e.dataset.k]:e.dataset.k==='objetivo'?e.value:+e.value}));
+    box.querySelectorAll('[data-med]').forEach(b=>b.onclick=()=>{
+      if(b.dataset.med==='0')return guardarOptica({camara:cam,borrar_medido:true});
+      const v=+box.querySelector('#opMed'+cam).value;
+      if(!(v>0)){toast('Escribe cuántas micras mide un píxel');return;}
+      guardarOptica({camara:cam,um_por_pixel_medido:v});
+    });
+  });
+}
+async function guardarOptica(cambio){
+  const d=await (await fetch('/api/optica',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cambio)})).json();
+  if(d.error){toast(d.error);return;}
+  optica.camaras[cambio.camara]=d.camara;pintarOptica();
+  toast('Cámara '+cambio.camara+': 1 píxel = '+d.camara.um_por_pixel+' µm');
+  if(marca)vistaMarca();
+}
+cargarOptica();
+
+// ===== Nombre de la carpeta, antes de guardar =====
+function slugJs(t){
+  return (t||'').normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9 _-]+/g,'')
+    .trim().replace(/[\s_]+/g,'_').replace(/^[_-]+|[_-]+$/g,'').slice(0,50);
+}
+function hoyIso(conHora){
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+(conHora?'_'+p(d.getHours())+p(d.getMinutes()):'');
+}
+function pistaCarpetaFoto(){
+  const n=$e('capNombre').value.trim();
+  $e('capCarpeta').textContent=n?'Se guarda en «'+n+'» de hoy (carpeta '+hoyIso(false)+'_'+(slugJs(n)||'Fotos_sueltas')+').'
+    :'Sin nombre, la foto va a «Fotos sueltas» de hoy.';
+}
+function pistaCarpetaTl(){
+  const n=$e('nombre').value.trim();
+  $e('tlCarpeta').textContent='Se guardará en la carpeta '+hoyIso(true)+'_'+(slugJs(n)||'Timelapse')+(n?'':' (ponle un nombre para encontrarlo después)');
+}
+pistaCarpetaTl();
 
 // ===== Perfiles =====
 async function cargarListaPerfiles(){

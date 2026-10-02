@@ -1600,11 +1600,14 @@ def create_app(camera, illuminations, timelapse, motores=None,
             pass
         return _marca_estado()
 
-    @app.get("/", response_class=HTMLResponse)
-    def index():
+    # La pagina nueva es la principal: la anterior ya no muestra las
+    # fotos guardadas en datos/. Queda en /clasica por si hace falta.
+    @app.get("/clasica", response_class=HTMLResponse)
+    def index_clasica():
         with open(STATIC_DIR / "index.html", "r") as f:
             return f.read()
 
+    @app.get("/", response_class=HTMLResponse)
     @app.get("/ui", response_class=HTMLResponse)
     def index_uiux():
         with open(STATIC_DIR / "index_uiux.html", "r") as f:
