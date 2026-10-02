@@ -74,7 +74,10 @@ En resumen: la iluminacion oblicua da direccion y magnitud, y medir el
 mismo corrimiento en varios planos cercanos da resolucion.
 """
 
+import contextlib
+import functools
 import json
+import math
 import time
 from datetime import datetime
 from pathlib import Path
@@ -127,6 +130,25 @@ FRACCION_RESPUESTA_BARRIDO = 0.3
 # encontrar uno falso.
 RESPUESTA_MINIMA_BARRIDO = 0.15
 RESPUESTA_MINIMA_CALIBRACION = 0.1
+
+# Separacion maxima entre puntos del barrido grueso. La medicion solo
+# vale a menos de ~15 um del foco (ver FRACCION_RESPUESTA_BARRIDO): con
+# puntos mas separados que esto, en un barrido grande quedan uno o dos
+# dentro de esa ventana y no hay cruce que encontrar. Antes el timelapse
+# barria 1600 micropasos con 11 puntos: a 1/16 eran 50 um entre puntos.
+PASO_MAX_BARRIDO_UM = 5.0
+
+# Rangos por defecto, en micras de amplitud TOTAL (centrada en la
+# posicion actual). Si en el rango inicial no aparece el foco, se
+# reintenta con el doble, y otra vez, hasta RANGO_MAXIMO_UM. El tope
+# existe porque no hay finales de carrera (TODO_HW 1.5).
+RANGO_INICIAL_UM = 40.0
+RANGO_MAXIMO_UM = 200.0
+
+# Calibracion DPC: amplitud total en micras. Tiene que quedar dentro de
+# la zona donde la medicion vale (+-15 um); antes eran 1200 micropasos
+# fijos, que a 1/16 son +-187 um y dejaban 4 de 5 puntos en el ruido.
+AMPLITUD_CALIBRACION_UM = 24.0
 
 
 def um_por_micropaso(microsteps):
@@ -270,6 +292,19 @@ def _cruce_cero(curva, respuesta_minima=RESPUESTA_MINIMA, lineal=False):
             if x[0] <= cero_recta <= x[-1]:
                 cero = cero_recta
     return int(round(cero)), False
+
+
+def _a_resolucion_fija(metodo):
+    """Corre el metodo con el motor de esa camara en la resolucion
+    interna fija (FocusMotorController.resolucion), sin importar en cual
+    lo dejo el usuario, y al terminar le devuelve la suya."""
+    @functools.wraps(metodo)
+    def envuelto(self, camera_num, *args, **kwargs):
+        motor = self.motores.get(camera_num)
+        fija = getattr(motor, "resolucion", None)
+        with (fija() if fija else contextlib.nullcontext()):
+            return metodo(self, camera_num, *args, **kwargs)
+    return envuelto
 
 
 class Autofocus:
@@ -444,10 +479,22 @@ class Autofocus:
     # =============================
     # CALIBRACION: la pendiente de delta contra Z
     # =============================
-    def calibrar_dpc(self, camera_num, amplitud=1200, puntos=5, eje="lr",
+    @_a_resolucion_fija
+    def calibrar_dpc(self, camera_num, amplitud=None, puntos=9, eje="lr",
                      delay=0.003, settle=0.25, roi=0.8, backlash=64,
-                     repeticiones=2, apagar_luz=True):
+                     repeticiones=2, apagar_luz=True,
+                     amplitud_um=AMPLITUD_CALIBRACION_UM,
+                     enfocar_antes=True, rango_busqueda_um=60.0):
         """Barre Z una vez, mide delta en cada plano y ajusta la recta.
+
+        enfocar_antes: primero busca el foco con el barrido y calibra
+        alrededor de ESE punto. La recta solo existe cerca del foco, y
+        antes habia que acertarle a ojo; si no, el ajuste salia malo y no
+        se guardaba.
+
+        amplitud_um: recorrido total en micras (amplitud, en micropasos,
+        la pisa si se pasa). Se descartan los puntos con respuesta baja,
+        igual que en el barrido.
 
         La pendiente lleva adentro la geometria real del cono de
         iluminacion (no es un rayo, es el promedio sobre media matriz de
@@ -465,12 +512,24 @@ class Autofocus:
         if motor is None:
             raise RuntimeError(f"cam{camera_num} no tiene motor de enfoque")
         luz = self.illuminations.get(camera_num)
+        t0 = time.monotonic()
 
+        previo = None
+        if enfocar_antes:
+            try:
+                previo = self.enfocar(
+                    camera_num, rango=micropasos_por_um(
+                        rango_busqueda_um, motor.microsteps),
+                    delay=delay, backlash=backlash, apagar_luz=False)
+            except Exception as e:
+                previo = {"error": str(e)}
+
+        if amplitud is None:
+            amplitud = micropasos_por_um(amplitud_um, motor.microsteps)
         puntos = max(3, int(puntos))
         paso = max(1, int(round(amplitud / (puntos - 1))))
         inicial = motor.position
         inicio = int(round(inicial - paso * (puntos - 1) / 2))
-        t0 = time.monotonic()
 
         posiciones, corrimientos, respuestas = [], [], []
         try:
@@ -486,30 +545,42 @@ class Autofocus:
                 corrimientos.append(m["delta_px"])
                 respuestas.append(m["respuesta"])
 
-            x = np.array(posiciones, dtype=float)
-            y = np.array(corrimientos, dtype=float)
-            pendiente, ordenada = np.polyfit(x, y, 1)   # pixeles por micropaso
-            residuos = y - (pendiente * x + ordenada)
-            varianza = ((y - y.mean()) ** 2).sum()
-            r2 = 1.0 - (residuos ** 2).sum() / varianza if varianza > 0 else 0.0
+            # Fuera de la zona util la correlacion mide ruido: esos
+            # puntos no entran en la recta (mismo criterio que el barrido).
+            umbral = max(RESPUESTA_MINIMA_CALIBRACION,
+                         FRACCION_RESPUESTA_BARRIDO * max(respuestas))
+            usados = [i for i, r in enumerate(respuestas) if r >= umbral]
+            x = np.array([posiciones[i] for i in usados], dtype=float)
+            y = np.array([corrimientos[i] for i in usados], dtype=float)
+            if len(usados) >= 3:
+                pendiente, ordenada = np.polyfit(x, y, 1)   # px por micropaso
+                residuos = y - (pendiente * x + ordenada)
+                varianza = ((y - y.mean()) ** 2).sum()
+                r2 = 1.0 - (residuos ** 2).sum() / varianza if varianza > 0 else 0.0
+            else:
+                pendiente, ordenada, r2 = 0.0, 0.0, 0.0
 
-            if abs(pendiente) < 1e-9:
+            if len(usados) >= 3 and abs(pendiente) < 1e-9:
                 raise RuntimeError(
                     "el corrimiento no cambia con la posicion -- revisar que "
                     "la matriz este haciendo LEFT/RIGHT de verdad y que el "
                     "campo no este vacio")
 
-            foco = int(round(-ordenada / pendiente))
-            confiable = bool(r2 >= R2_MINIMO and
-                             np.mean(respuestas) >= RESPUESTA_MINIMA_CALIBRACION)
+            confiable = bool(
+                len(usados) >= 3 and r2 >= R2_MINIMO and
+                np.mean([respuestas[i] for i in usados]) >= RESPUESTA_MINIMA_CALIBRACION)
+            foco = int(round(-ordenada / pendiente)) if confiable else inicial
             um = um_por_micropaso(motor.microsteps)
             cal = {
-                "micropasos_por_pixel": float(1.0 / pendiente),
+                # Sin puntos suficientes no hay pendiente (None): igual
+                # se devuelve el resto para poder ver que paso.
+                "micropasos_por_pixel": float(1.0 / pendiente) if pendiente else None,
                 "pendiente_px_por_micropaso": float(pendiente),
-                "um_por_pixel": float(abs(1.0 / pendiente) * um),
+                "um_por_pixel": float(abs(1.0 / pendiente) * um) if pendiente else None,
                 "eje": eje,
                 "microsteps": motor.microsteps,
                 "r2": float(r2),
+                "puntos_usados": len(usados),
                 "respuesta_media": float(np.mean(respuestas)),
                 "fecha": datetime.now().isoformat(timespec="seconds"),
             }
@@ -531,6 +602,12 @@ class Autofocus:
                 "posicion": motor.position,
                 "r2": float(r2),
                 "confiable": confiable,
+                "puntos_usados": len(usados),
+                "puntos": puntos,
+                "amplitud_um": round(amplitud * um_por_micropaso(motor.microsteps), 1),
+                "enfoque_previo": (None if previo is None else
+                                   {k: previo.get(k) for k in
+                                    ("error", "desplazamiento_um", "fuera_de_rango")}),
                 "curva": [[int(p), float(c)] for p, c in
                           zip(posiciones, corrimientos)],
                 "segundos": round(time.monotonic() - t0, 1),
@@ -616,6 +693,7 @@ class Autofocus:
     # =============================
     # ENFOQUE COMPLETO: etapa 1 + etapa 2
     # =============================
+    @_a_resolucion_fija
     def enfocar_dpc(self, camera_num, iteraciones=2, settle=0.25, roi=0.8,
                     delay=0.003, backlash=64, tolerancia_px=0.3,
                     max_micropasos=4000, respuesta_minima=RESPUESTA_MINIMA,
@@ -861,6 +939,7 @@ class Autofocus:
                 curva.append((motor.position, valor))
         return curva, paso
 
+    @_a_resolucion_fija
     def enfocar(self, camera_num, rango=3200, puntos=13, refinamientos=2,
                 delay=0.003, settle=0.15, roi=0.6, backlash=64,
                 metrica="corrimiento", eje="lr", corriente_ma=None,
@@ -882,9 +961,15 @@ class Autofocus:
         if motor is None:
             raise RuntimeError(f"cam{camera_num} no tiene motor de enfoque")
 
+        # Nunca mas de PASO_MAX_BARRIDO_UM entre puntos del barrido grueso:
+        # si el rango crece, crecen los puntos.
+        paso_max = max(1, micropasos_por_um(PASO_MAX_BARRIDO_UM, motor.microsteps))
+        puntos = max(int(puntos), int(math.ceil(abs(rango) / paso_max)) + 1)
+
         luz = self.illuminations.get(camera_num) if usar_luz else None
         inicial = motor.position
         t0 = time.monotonic()
+        sin_cruce = False
 
         if corriente_ma is not None:
             motor.set_current(irun_ma=corriente_ma)
@@ -920,6 +1005,7 @@ class Autofocus:
                         # Ninguna lectura engancho (campo vacio o muy
                         # lejos del foco): no hay base para moverse.
                         mejor_pos = inicial if etapa == 0 else mejor_pos
+                        sin_cruce = etapa == 0
                         break
                     mejor_pos = pos
                     mejor_val = min(curva, key=lambda c: abs(c[0] - pos))[1]
@@ -952,6 +1038,8 @@ class Autofocus:
                 "desplazamiento_um": round(
                     (mejor_pos - inicial) * um_por_micropaso(motor.microsteps), 2),
                 "fuera_de_rango": en_borde,
+                "sin_cruce": sin_cruce,
+                "puntos": puntos,
                 "etapas": len(curvas),
                 "curva": [[c[0], c[1]] for c in curvas[0]],
                 "curva_fina": ([[c[0], c[1]] for c in curvas[-1]]
@@ -981,10 +1069,75 @@ class Autofocus:
                 except Exception:
                     pass
 
+    @_a_resolucion_fija
     def enfocar_auto(self, camera_num, metodo="auto", rango=3200, puntos=13,
                      refinamientos=2, iteraciones=2, usar_luz=True,
-                     patron="on", metrica="corrimiento", **kw):
-        """Punto de entrada unico: usa las dos etapas si hay calibracion
+                     patron="on", metrica="corrimiento", rango_um=None,
+                     rango_max_um=None, **kw):
+        """Punto de entrada unico de la interfaz y del timelapse.
+
+        rango_um: amplitud total en micras (pisa a `rango`, que esta en
+        micropasos de la resolucion interna).
+
+        rango_max_um: si se pasa y en el rango pedido no aparece el foco
+        (fuera_de_rango), vuelve a la posicion de partida y lo intenta
+        de nuevo con el doble de rango, hasta rango_max_um. Si ni asi lo
+        encuentra, deja la plataforma donde estaba y lo dice
+        (encontrado=False). Es lo que evita que un timelapse se pierda
+        para siempre: un ciclo que no encuentra el foco ya no deja el
+        siguiente arrancando cada vez mas lejos.
+        """
+        motor = self.motores.get(camera_num)
+        if motor is None:
+            raise RuntimeError(f"cam{camera_num} no tiene motor de enfoque")
+        if rango_um is None:
+            rango_um = abs(rango) * um_por_micropaso(motor.microsteps)
+        opciones = dict(metodo=metodo, puntos=puntos,
+                        refinamientos=refinamientos, iteraciones=iteraciones,
+                        usar_luz=usar_luz, patron=patron, metrica=metrica, **kw)
+
+        inicial = motor.position
+        t0 = time.monotonic()
+        intentos = []
+        actual_um = rango_um
+        while True:
+            r = self._enfocar_auto_una(
+                camera_num,
+                rango=micropasos_por_um(actual_um, motor.microsteps),
+                **opciones)
+            intentos.append({"rango_um": round(actual_um, 1),
+                             "metodo": r.get("metodo"),
+                             "encontrado": not r.get("fuera_de_rango")})
+            if (not r.get("fuera_de_rango") or rango_max_um is None
+                    or actual_um >= rango_max_um):
+                break
+            actual_um = min(actual_um * 2, rango_max_um)
+            motor.mover_a(inicial, delay=kw.get("delay", 0.003),
+                          backlash=kw.get("backlash", 64))
+
+        encontrado = not r.get("fuera_de_rango")
+        if not encontrado and rango_max_um is not None and motor.position != inicial:
+            # Agoto los reintentos: no se sabe donde esta el foco, y lo
+            # menos malo es quedarse donde estaba el ultimo bueno.
+            motor.mover_a(inicial, delay=kw.get("delay", 0.003),
+                          backlash=kw.get("backlash", 64))
+        r["encontrado"] = encontrado
+        r["rango_um"] = round(actual_um, 1)
+        r["ampliado"] = len(intentos) > 1
+        r["intentos"] = intentos
+        r["posicion_inicial"] = inicial
+        r["posicion"] = motor.position
+        r["desplazamiento"] = motor.position - inicial
+        r["desplazamiento_um"] = round(
+            r["desplazamiento"] * um_por_micropaso(motor.microsteps), 2)
+        r["segundos"] = round(time.monotonic() - t0, 1)
+        return r
+
+    def _enfocar_auto_una(self, camera_num, metodo="auto", rango=3200,
+                          puntos=13, refinamientos=2, iteraciones=2,
+                          usar_luz=True, patron="on", metrica="corrimiento",
+                          **kw):
+        """Un intento con un rango: usa las dos etapas si hay calibracion
         y cae al barrido si no, o si la correlacion no engancha.
 
         Es lo que llaman la interfaz web y el timelapse, para que el

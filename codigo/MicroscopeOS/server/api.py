@@ -27,7 +27,6 @@ STATIC_DIR = BASE_DIR / "server" / "static"
 
 from temperature_controller import temperature_controller
 from core.timelapse import MODOS
-from core.autofocus import micropasos_por_um
 from core.profile_manager import ProfileManager
 from core.config import SystemConfig, CameraSettings, TimelapseSettings
 
@@ -116,7 +115,11 @@ class TimelapseReq(BaseModel):
     # 30 s no entra, pero en uno de 5 min es despreciable.
     autofocus: bool = False
     autofocus_cada: int = 1
-    autofocus_rango: int = 1600
+    # Rango en MICRAS (amplitud total, centrada donde quedo el ciclo
+    # anterior). Si no encuentra el foco, reintenta con el doble hasta
+    # autofocus_rango_max_um. Ver Autofocus.enfocar_auto.
+    autofocus_rango_um: float = 40.0
+    autofocus_rango_max_um: float = 200.0
     autofocus_puntos: int = 11
     # Contar celulas en las capturas de cada ciclo -> conteo.csv,
     # poblacion.png y eventos.csv al terminar.
@@ -170,6 +173,8 @@ class FocusMoveReq(BaseModel):
     motor: int = 0
     direction: int = 1        # 1 = abajo, -1 = arriba (ver core/motor_focus.py)
     pasos: int = 200          # en la resolucion de microstepping actual
+    # Alternativa en micras (la usa la interfaz): si viene, pisa a pasos.
+    um: float | None = None
     velocidad: float = 0.003  # delay entre flancos STEP -- mas chico = mas rapido
 
 class FocusJogReq(BaseModel):
@@ -204,6 +209,9 @@ class AutofocusReq(BaseModel):
     # mano puede llegar a estar el foco real) es mucho mas intuitivo que
     # en micropasos, que dependen de la resolucion configurada.
     rango_um: float | None = None
+    # Si en rango_um no aparece el foco, reintentar con el doble hasta
+    # este tope (micras). None = un solo intento.
+    rango_max_um: float | None = None
     puntos: int = 13
     refinamientos: int = 2
     iteraciones: int = 2      # correcciones sucesivas del metodo DPC
@@ -269,8 +277,10 @@ class ConteoCarpetaReq(BaseModel):
 
 class CalibrarDpcReq(BaseModel):
     camera: int = 0
-    amplitud: int = 1200      # recorrido barrido para ajustar la recta
-    puntos: int = 5
+    amplitud: int | None = None   # micropasos; si viene, pisa a amplitud_um
+    amplitud_um: float = 24.0     # recorrido total para ajustar la recta
+    enfocar_antes: bool = True    # buscar el foco primero y calibrar ahi
+    puntos: int = 9
     eje: str = "lr"           # lr (izquierda/derecha) o tb (arriba/abajo)
     repeticiones: int = 2     # mediciones por punto de calibracion, por mediana
 
@@ -581,7 +591,8 @@ def create_app(camera, illuminations, timelapse, motores=None,
             simultaneo=req.simultaneo,
             autofocus=req.autofocus,
             autofocus_cada=req.autofocus_cada,
-            autofocus_opts={"rango": req.autofocus_rango,
+            autofocus_opts={"rango_um": req.autofocus_rango_um,
+                            "rango_max_um": req.autofocus_rango_max_um,
                             "puntos": req.autofocus_puntos},
             contar=req.contar,
             contar_cada=req.contar_cada,
@@ -641,24 +652,43 @@ def create_app(camera, illuminations, timelapse, motores=None,
     def _motor(num):
         return motores.get(num)
 
+    def _ocupado():
+        """Mientras el software mueve el eje por su cuenta (autofoco,
+        calibracion, pila, timelapse), los controles manuales no pueden
+        tocarlo: un paso a mano o un cambio de resolucion a mitad de un
+        barrido lo arruina."""
+        if timelapse.is_running():
+            return "Timelapse en curso"
+        if autofocus_lock.locked():
+            return "Autofoco en curso, esperá a que termine"
+        return None
+
     @app.post("/api/focus/move")
     def focus_move(req: FocusMoveReq):
-        """Salto puntual de N micropasos (los botones de paso fijo)."""
-        if timelapse.is_running():
-            return {"error": "Timelapse en curso"}
+        """Salto puntual (los botones de paso fijo): `um` micras, o
+        `pasos` micropasos de la resolucion actual."""
+        ocupado = _ocupado()
+        if ocupado:
+            return {"error": ocupado}
         motor_ = _motor(req.motor)
         if motor_ is None:
             return {"error": f"cam{req.motor} no tiene motor de enfoque"}
         motor_.stop_jog()
-        pos = motor_.mover(req.pasos, direction=req.direction,
-                           delay=req.velocidad)
-        return {"status": "ok", "motor": req.motor, "posicion": pos}
+        if req.um is not None:
+            pos = motor_.mover_um(abs(req.um) * (1 if req.direction > 0 else -1),
+                                  delay=req.velocidad)
+        else:
+            pos = motor_.mover(req.pasos, direction=req.direction,
+                               delay=req.velocidad)
+        return {"status": "ok", "motor": req.motor, "posicion": pos,
+                "posicion_um": round(motor_.posicion_um, 2)}
 
     @app.post("/api/focus/jog")
     def focus_jog(req: FocusJogReq):
         """Arranca (o mantiene vivo) el movimiento continuo."""
-        if timelapse.is_running():
-            return {"error": "Timelapse en curso"}
+        ocupado = _ocupado()
+        if ocupado:
+            return {"error": ocupado}
         motor_ = _motor(req.motor)
         if motor_ is None:
             return {"error": f"cam{req.motor} no tiene motor de enfoque"}
@@ -685,6 +715,9 @@ def create_app(camera, illuminations, timelapse, motores=None,
         reescribe por UART sobre el CHOPCONF que ya esta cargado, que es
         lo que el chip espera y ademas conserva la posicion acumulada.
         """
+        ocupado = _ocupado()
+        if ocupado:
+            return {"error": ocupado}
         motor_ = _motor(req.motor)
         if motor_ is None:
             return {"error": f"cam{req.motor} no tiene motor de enfoque"}
@@ -732,14 +765,11 @@ def create_app(camera, illuminations, timelapse, motores=None,
         if not autofocus_lock.acquire(blocking=False):
             return {"error": "Ya hay un autofoco corriendo"}
         try:
-            rango = req.rango
-            if req.rango_um is not None:
-                motor_ref = autofocus.motores.get(req.camera)
-                if motor_ref is None:
-                    return {"error": f"cam{req.camera} no tiene motor de enfoque"}
-                rango = micropasos_por_um(req.rango_um, motor_ref.microsteps)
+            # rango_um se convierte DENTRO de enfocar_auto, ya en la
+            # resolucion interna fija (no en la que dejo el usuario).
             opciones = dict(
-                metodo=req.metodo, rango=rango, puntos=req.puntos,
+                metodo=req.metodo, rango=req.rango, rango_um=req.rango_um,
+                rango_max_um=req.rango_max_um, puntos=req.puntos,
                 refinamientos=req.refinamientos, iteraciones=req.iteraciones,
                 usar_luz=req.usar_luz, patron=req.patron)
             # Solo se manda si el pedido lo trae explicito: cada metodo
@@ -773,7 +803,8 @@ def create_app(camera, illuminations, timelapse, motores=None,
             return {"error": "Ya hay un autofoco corriendo"}
         try:
             return autofocus.calibrar_dpc(
-                req.camera, amplitud=req.amplitud, puntos=req.puntos,
+                req.camera, amplitud=req.amplitud, amplitud_um=req.amplitud_um,
+                enfocar_antes=req.enfocar_antes, puntos=req.puntos,
                 eje=req.eje, repeticiones=req.repeticiones)
         except Exception as e:
             return {"error": str(e)}
@@ -798,9 +829,10 @@ def create_app(camera, illuminations, timelapse, motores=None,
             return {"error": "Ya hay un autofoco corriendo"}
         try:
             from core.pila_foco import grabar_pila
-            return grabar_pila(autofocus, req.camera, rango=req.rango,
-                               puntos=req.puntos, eje=req.eje,
-                               notas=req.notas)
+            with autofocus.motores[req.camera].resolucion():
+                return grabar_pila(autofocus, req.camera, rango=req.rango,
+                                   puntos=req.puntos, eje=req.eje,
+                                   notas=req.notas)
         except Exception as e:
             return {"error": str(e)}
         finally:

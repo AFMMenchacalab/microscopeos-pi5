@@ -82,6 +82,7 @@ bien por debajo de los 0.6A/fase nominales del motor hasta confirmar
 termicamente que no calienta. Ver TODO_HW.
 """
 
+import contextlib
 import math
 import struct
 import threading
@@ -126,6 +127,16 @@ _VFS_ALTA_SENSIBILIDAD = 0.180
 # 5 um por paso completo: husillo T6x1 y 200 pasos/vuelta (ver autofocus.py).
 HOLGURA_MIN_UM = 25.0
 UM_POR_PASO_COMPLETO = 5.0
+
+# Resolucion de TODOS los movimientos que el software hace por su cuenta
+# (autofoco, calibracion, timelapse, pila de foco). El selector de la
+# interfaz solo cambia la de los movimientos manuales: antes autofoco y
+# timelapse corrian a la resolucion que hubiera quedado puesta a mano, y
+# la misma configuracion (rango en micropasos, holgura) significaba
+# distancias distintas segun eso. 1/16 = 0.31 um por micropaso, muy por
+# debajo de la profundidad de campo, y ~16x mas rapido que 1/256 (el
+# autofoco a 1/256 tardaba ~1.5 min, a 1/16 ~10 s).
+MICROSTEPS_INTERNO = 16
 
 MRES_MAP = {256: 0, 128: 1, 64: 2, 32: 3, 16: 4, 8: 5, 4: 6, 2: 7, 1: 8}
 
@@ -318,12 +329,13 @@ class FocusMotorController:
         self.irun_ma_real = 0
         self.ihold_ma_real = 0
         self.microsteps = microsteps
-        # Posicion RELATIVA en micropasos desde el arranque: no hay
-        # final de carrera ni encoder, asi que el cero es "donde estaba
-        # cuando arranco el servidor". Sirve para el autofoco (volver a
-        # un maximo) y para mostrar cuanto se movio, no como coordenada
-        # absoluta de la plataforma.
-        self.position = 0
+        # Posicion RELATIVA desde el arranque: no hay final de carrera ni
+        # encoder, asi que el cero es "donde estaba cuando arranco el
+        # servidor". Se guarda en 1/256 de paso (la resolucion interna
+        # del driver), y `position` la expresa en micropasos de la
+        # resolucion actual: asi cambiar de resolucion ida y vuelta (lo
+        # hace cada autofoco) no acumula redondeos.
+        self._pos256 = 0
 
         self._lock = threading.RLock()
         self._jog_thread = None
@@ -402,30 +414,60 @@ class FocusMotorController:
                       f"puestos) -- revisar si otro driver comparte la "
                       f"misma direccion MS1/MS2")
 
+    # =============================
+    # POSICION
+    # =============================
+    @property
+    def position(self):
+        """Posicion en micropasos de la resolucion ACTUAL."""
+        return int(round(self._pos256 * self.microsteps / 256))
+
+    @position.setter
+    def position(self, valor):
+        self._pos256 = int(round(valor * 256 / self.microsteps))
+
+    @property
+    def posicion_um(self):
+        """Posicion en micras, independiente de la resolucion."""
+        return self._pos256 * UM_POR_PASO_COMPLETO / 256
+
+    def um_por_micropaso(self):
+        return UM_POR_PASO_COMPLETO / self.microsteps
+
     def set_microsteps(self, microsteps):
         """Cambia la resolucion en caliente reescribiendo MRES.
 
         No hace falta recrear el objeto (que reabriria GPIO y puerto
         serie): MRES vive en CHOPCONF y el resto de los campos del
-        registro se conservan.
-
-        La posicion acumulada se reescala para que siga representando el
-        mismo desplazamiento fisico: 200 micropasos a 1/16 son la decima
-        parte de 200 micropasos a 1/1.
+        registro se conservan. La posicion no cambia: se guarda en
+        1/256 de paso y `position` solo la expresa en la nueva unidad.
         """
         if microsteps not in MRES_MAP:
             raise ValueError(
                 f"microsteps invalido: {microsteps} (validos: "
                 f"{sorted(MRES_MAP)})")
         with self._lock:
-            anterior = self.microsteps
             self._chopconf &= ~(0xF << 24)
             self._chopconf |= (MRES_MAP[microsteps] << 24)
             self._uart.write(REG_CHOPCONF, self._chopconf)
             self.microsteps = microsteps
-            if anterior:
-                self.position = round(self.position * microsteps / anterior)
         return microsteps
+
+    @contextlib.contextmanager
+    def resolucion(self, microsteps=MICROSTEPS_INTERNO):
+        """Corre un bloque a una resolucion fija y al salir deja la que
+        habia puesto el usuario. Es lo que usan autofoco, calibracion,
+        timelapse y pila de foco: lo que el software hace solo no puede
+        depender de en que quedo el selector de la interfaz."""
+        self.stop_jog()
+        anterior = self.microsteps
+        if anterior != microsteps:
+            self.set_microsteps(microsteps)
+        try:
+            yield self
+        finally:
+            if self.microsteps != anterior:
+                self.set_microsteps(anterior)
 
     def set_current(self, irun_ma, ihold_ma=None, iholddelay=4):
         """Fija IRUN (corriente moviendose) e IHOLD (corriente en reposo)
@@ -484,6 +526,7 @@ class FocusMotorController:
             "direccion_uart": self.uart_address,
             "microsteps": self.microsteps,
             "posicion": self.position,
+            "posicion_um": round(self.posicion_um, 2),
             "irun_ma": self.irun_ma_real,
             "ihold_ma": self.ihold_ma_real,
             "habilitado": self.is_enabled(),
@@ -563,7 +606,8 @@ class FocusMotorController:
                 time.sleep(delay)
                 GPIO.output(self.step_pin, GPIO.LOW)
                 time.sleep(delay)
-            self.position += abs(steps) * (1 if direction > 0 else -1)
+            self._pos256 += (abs(steps) * (256 // self.microsteps)
+                             * (1 if direction > 0 else -1))
         return self.position
 
     def mover(self, pasos, direction=1, delay=0.003, mantener=False):
@@ -582,6 +626,15 @@ class FocusMotorController:
             finally:
                 if not mantener:
                     self.reposo()
+
+    def mover_um(self, um, delay=0.003, mantener=False):
+        """Movimiento manual en micras (+ baja, - sube), redondeado al
+        micropaso de la resolucion actual. Devuelve la posicion."""
+        pasos = int(round(abs(um) / self.um_por_micropaso()))
+        if pasos == 0:
+            return self.position
+        return self.mover(pasos, direction=1 if um > 0 else -1,
+                          delay=delay, mantener=mantener)
 
     def mover_a(self, posicion, delay=0.003, backlash=0, mantener=False):
         """Va a una posicion (en la escala relativa de self.position).

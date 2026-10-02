@@ -303,7 +303,10 @@ for cam in (0, 1):
     check(f"cam{cam}: apaga la luz al terminar", not luces[cam].encendida)
     check(f"cam{cam}: deja el driver en reposo",
           motores[cam].is_enabled() == motores[cam].retener)
-    check(f"cam{cam}: devuelve la curva de nitidez", len(r["curva"]) == 13)
+    # Pidio 13 puntos, pero el barrido nunca deja mas de
+    # PASO_MAX_BARRIDO_UM entre puntos: en 3200 micropasos (1 mm) son mas.
+    check(f"cam{cam}: devuelve la curva de nitidez",
+          len(r["curva"]) == r["puntos"] >= 13, f"{len(r['curva'])} puntos")
 
 foco_real[0] = motores[0].position + 9000
 check("avisa cuando el maximo queda pegado al borde del rango",
@@ -541,13 +544,30 @@ check("la calibracion queda persistida", mod_af.ARCHIVO_CALIBRACION.exists())
 check("se relee del disco al reconstruir",
       Autofocus(cam_fase, motores, luces_f).calibrado(0))
 
-# Calibrar fuera del rango lineal sesga la ganancia: es la advertencia de
-# TODO_HW 2.4b, y conviene que quede demostrada y no solo escrita.
+# Calibrar fuera del rango lineal sesgaba la ganancia (TODO_HW 2.4b).
+# Ahora los puntos fuera de la zona util se descartan: o no alcanzan
+# para una recta y no se guarda nada, o la ganancia sale bien.
 cal_ancha = af.calibrar_dpc(0, amplitud=6000, puntos=5, delay=0, settle=0)
-check("calibrar fuera del regimen lineal sobreestima la ganancia",
-      abs(cal_ancha["calibracion"]["micropasos_por_pixel"]) > medido * 1.1,
-      f"{abs(cal_ancha['calibracion']['micropasos_por_pixel']):.1f} vs "
-      f"{medido:.1f} micropasos/px")
+mpp_ancha = cal_ancha["calibracion"]["micropasos_por_pixel"]
+check("calibrar demasiado ancho ya no guarda una ganancia sesgada",
+      not cal_ancha["guardada"] or abs(abs(mpp_ancha) - medido) < medido * 0.1,
+      f"guardada={cal_ancha['guardada']} mpp={mpp_ancha} "
+      f"(bien: {medido:.1f}) usados={cal_ancha['puntos_usados']}")
+check("y si no la guarda, la calibracion buena sigue en pie",
+      cal_ancha["guardada"] or
+      abs(abs(af.calibracion[0]["micropasos_por_pixel"]) - medido) < 1e-6)
+
+# Con los valores por defecto de la interfaz (micras, enfoque previo) se
+# puede calibrar arrancando desenfocado: primero busca el foco.
+_ir(foco_fase + 30)   # ~9 um fuera de foco
+cal_def = af.calibrar_dpc(0, delay=0, settle=0)
+check("calibrar desde fuera de foco: busca el foco primero y calibra bien",
+      cal_def["confiable"] and
+      abs(abs(cal_def["calibracion"]["micropasos_por_pixel"]) - esperado) < 3,
+      f"confiable={cal_def['confiable']} r2={cal_def['r2']:.3f} "
+      f"mpp={cal_def['calibracion']['micropasos_por_pixel']}")
+check("y la amplitud por defecto esta en micras (24 um)",
+      abs(cal_def["amplitud_um"] - 24.0) < 1.5, str(cal_def["amplitud_um"]))
 _ir(foco_fase)
 af.calibrar_dpc(0, amplitud=800, puntos=5, delay=0, settle=0)   # recalibrar bien
 
@@ -688,19 +708,27 @@ tl = TimelapseManager(camara2, luces2,
                       autofocus=Autofocus(camara2, motores2, luces2))
 
 os.chdir(tempfile.mkdtemp(prefix="tl_motores_"))
-tl.start(modo="blanco", interval_seconds=1, duration_seconds=2.5,
+# Se corta por cantidad de ciclos y no por duracion: cuanto tarda un
+# autofoco depende de la maquina, y con una duracion fija de 2.5 s a
+# veces entraba un solo ciclo y la prueba fallaba sin que nada anduviera
+# mal. Se para despues del ciclo 4 (puede colarse alguno mas: los ciclos
+# atrasados se recuperan seguidos).
+tl.start(modo="blanco", interval_seconds=1, duration_seconds=600,
          stabilization_time=0, camaras=[0, 1], autofocus=True,
          autofocus_cada=2,
          autofocus_opts={"rango": 800, "puntos": 7, "refinamientos": 1,
                          "delay": 0, "settle": 0})
-while tl.is_running():
+while tl.is_running() and tl.ciclo_actual < 4:
     time.sleep(0.05)
+tl.stop()
 
 log = open(os.path.join(tl.base_folder, "timelapse.log")).read()
 n_af = log.count("autofoco cam")
 check("el log deja constancia de cada cuanto reenfoca",
       "autofoco=cada 2 ciclo(s)" in log)
-check("reenfoca 1 de cada 2 ciclos, no todos", n_af == 4,
+# Ciclos 1, 3, 5...: dos camaras por ciclo con autofoco.
+check("reenfoca 1 de cada 2 ciclos, no todos",
+      tl.ciclo_actual >= 3 and n_af == 2 * ((tl.ciclo_actual + 1) // 2),
       f"{n_af} enfoques en {tl.ciclo_actual} ciclos")
 csv = os.path.join(tl.base_folder, "autofoco.csv")
 check("registra la deriva del foco en autofoco.csv", os.path.exists(csv))

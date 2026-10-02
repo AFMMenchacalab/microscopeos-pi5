@@ -25,6 +25,14 @@ MODOS = {
 }
 
 
+# Cuanto puede alejarse el foco, en total, de donde estaba al iniciar el
+# timelapse. La deriva real (temperatura, evaporacion) es de decenas de
+# um en un experimento; si un autofoco pide ir mas alla, es mas probable
+# un error que una deriva, y sin finales de carrera (TODO_HW 1.5) un
+# error acumulado puede llevar el objetivo contra la muestra.
+DERIVA_MAXIMA_UM = 250.0
+
+
 class TimelapseManager:
 
     def __init__(self, camera, illuminations, autofocus=None, contador=None,
@@ -150,24 +158,37 @@ class TimelapseManager:
         for cam in camaras:
             if not self.autofocus.disponible(cam):
                 continue
+            motor = self.autofocus.motores.get(cam)
+            previa_um = motor.posicion_um
+            ancla_um = self._ancla_um.setdefault(cam, previa_um)
             try:
                 r = self.autofocus.enfocar_auto(cam, **opciones)
+                deriva = motor.posicion_um - ancla_um
+                if abs(deriva) > DERIVA_MAXIMA_UM:
+                    with motor.resolucion():
+                        motor.mover_a(int(round(previa_um / motor.um_por_micropaso())),
+                                      backlash=64)
+                    r["encontrado"] = False
+                    r["aviso"] = (f"pedia ir a {deriva:+.0f} um del inicio "
+                                  f"(tope {DERIVA_MAXIMA_UM:.0f}); se quedo donde estaba")
                 self._log(f"  autofoco cam{cam} [{r.get('metodo', '?')}]: "
-                          f"pos={r['posicion']} "
-                          f"(mov {r['desplazamiento']:+d}) "
+                          f"{motor.posicion_um - ancla_um:+.1f} um desde el inicio "
+                          f"(mov {motor.posicion_um - previa_um:+.1f} um) "
                           + (f"nitidez={r['nitidez']:.1f} "
                              if r.get("nitidez") is not None else
                              f"corrimiento={r['corrimiento_px']:+.2f}px "
                              if r.get("corrimiento_px") is not None else "")
+                          + (f"rango {r['rango_um']:.0f} um (ampliado) "
+                             if r.get("ampliado") else "")
                           + (f"[{r['aviso']}] " if r.get("aviso") else "")
                           + f"{r['segundos']}s"
-                          + ("  [MAXIMO EN EL BORDE DEL RANGO]"
-                             if r.get("fuera_de_rango") else ""))
-                self._log_autofoco(ciclo, ts, cam, r)
+                          + ("" if r.get("encontrado", not r.get("fuera_de_rango"))
+                             else "  [NO ENCONTRO EL FOCO -- esta foto puede salir borrosa]"))
+                self._log_autofoco(ciclo, ts, cam, r, motor.posicion_um - ancla_um)
             except Exception as e:
                 self._log(f"  autofoco cam{cam}: ERROR -> {e}")
 
-    def _log_autofoco(self, ciclo, ts, cam, r):
+    def _log_autofoco(self, ciclo, ts, cam, r, deriva_um=None):
         try:
             path = os.path.join(self.base_folder, "autofoco.csv")
             nuevo = not os.path.exists(path) or os.path.getsize(path) == 0
@@ -175,12 +196,17 @@ class TimelapseManager:
                 if nuevo:
                     f.write("timestamp,ciclo,camara,metodo,posicion,"
                             "desplazamiento,nitidez,corrimiento_px,"
-                            "fuera_de_rango\n")
+                            "fuera_de_rango,deriva_um,desplazamiento_um,"
+                            "rango_um,encontrado\n")
+                encontrado = r.get("encontrado", not r.get("fuera_de_rango"))
                 f.write(f"{ts},{ciclo},{cam},{r.get('metodo', '')},"
                         f"{r['posicion']},{r['desplazamiento']},"
                         f"{r.get('nitidez', '')},"
                         f"{r.get('corrimiento_px', '')},"
-                        f"{int(bool(r.get('fuera_de_rango')))}\n")
+                        f"{int(bool(r.get('fuera_de_rango')))},"
+                        f"{'' if deriva_um is None else round(deriva_um, 2)},"
+                        f"{r.get('desplazamiento_um', '')},"
+                        f"{r.get('rango_um', '')},{int(bool(encontrado))}\n")
         except Exception:
             pass
 
@@ -411,6 +437,9 @@ class TimelapseManager:
             self._log("Autofoco pedido pero no hay motores de enfoque "
                       "disponibles -- se continua sin autofoco.")
             autofocus = False
+        # Posicion de cada eje al primer autofoco (um): referencia para
+        # DERIVA_MAXIMA_UM y para la columna deriva_um de autofoco.csv.
+        self._ancla_um = {}
         if contar and self.contador is None:
             self._log("Conteo de celulas pedido pero no hay contador "
                       "disponible -- se continua sin conteo.")
