@@ -9,6 +9,7 @@
     ms:   {0: 16, 1: 16},                    // microstepping manual
     cal:  {0: null, 1: null},
     jog:  null,                              // {motor, dir, hasta}
+    luz:  {0: {on: false, modo: 'full', percent: 80}, 1: {on: false, modo: 'full', percent: 80}},
     ocupado: false,
     muestras: {},
   };
@@ -50,6 +51,15 @@
       g.imageSmoothingQuality='high';g.drawImage(chico,0,0,640,480);
     }
     if(d>3){g.fillStyle='rgba(140,150,138,'+Math.min(.55,d/90)+')';g.fillRect(0,0,640,480);}
+    // la luz: apagada = negro; brillo; fondo negro invierte; colores tiñe
+    const L=sim.luz[cam];
+    if(!L.on){g.fillStyle='#050607';g.fillRect(0,0,640,480);return lienzo;}
+    if(L.modo==='ring'){g.globalCompositeOperation='difference';g.fillStyle='#d8dcd6';g.fillRect(0,0,640,480);g.globalCompositeOperation='source-over';}
+    if(L.modo==='rheinberg'){g.globalCompositeOperation='multiply';g.fillStyle='#7fa8ff';g.fillRect(0,0,640,480);g.globalCompositeOperation='source-over';}
+    if(['left','right','top','bottom'].includes(L.modo)){g.globalCompositeOperation='multiply';g.fillStyle='#b9f5c4';g.fillRect(0,0,640,480);g.globalCompositeOperation='source-over';}
+    const k=L.percent/80;
+    if(k<1){g.fillStyle='rgba(0,0,0,'+Math.min(.95,1-k)+')';g.fillRect(0,0,640,480);}
+    else if(k>1){g.fillStyle='rgba(255,255,255,'+Math.min(.6,(k-1)*.9)+')';g.fillRect(0,0,640,480);}
     return lienzo;
   }
   const pendiente={};
@@ -162,13 +172,23 @@
     if(ruta==='/status')return json({running:false,camara_activa:motorSel||0,ciclo:0,carpeta:null});
     if(ruta==='/api/analisis/medir'){
       const d=Math.abs(sim.pos[b.camera]-sim.foco[b.camera]);
-      return d>10?json({vacio:true,n:0}):json({n:b.camera?38:55,ms:140});
+      return (d>10||!sim.luz[b.camera].on)?json({vacio:true,n:0}):json({n:b.camera?38:55,ms:140});
     }
     if(ruta==='/api/analisis/estado')return json({ultimos:{}});
     if(ruta==='/api/analisis/foto')return json({n:motorSel?38:55,ms:620,overlay:'demo.png'});
     if(ruta==='/timelapse/start')return json({error:'En la demo no se corren timelapses: esto se inicia en el microscopio real'});
     if(ruta.startsWith('/capture/'))return json({saved:'captura_demo.tif'});
     if(ruta==='/light/color_dpc')return json({color:'00FF00'});
+    if(ruta==='/light/set'){
+      for(const c of b.camaras||[0,1]){sim.luz[c]={on:true,modo:b.modo,percent:b.percent??sim.luz[c].percent};pintar(c);}
+      return json({status:'ok',modo:b.modo});
+    }
+    if(ruta==='/light/off'){
+      for(const c of (b.camaras||[0,1])){sim.luz[c].on=false;pintar(c);}
+      return json({status:'off'});
+    }
+    if(ruta==='/light/estado')return json({matrices:{0:{encendida:sim.luz[0].on,modo:sim.luz[0].modo,percent:sim.luz[0].percent},
+                                                     1:{encendida:sim.luz[1].on,modo:sim.luz[1].modo,percent:sim.luz[1].percent}}});
     if(ruta==='/files/list')return json({capturas:[],timelapses:[]});
     if(ruta==='/profiles/list')return json({perfiles:['demo']});
     if(ruta==='/api/usb/estado')return json({dispositivos:[],copia:{},evento:0});

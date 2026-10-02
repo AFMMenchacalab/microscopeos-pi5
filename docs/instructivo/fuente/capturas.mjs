@@ -10,8 +10,8 @@ await p.screenshot({ path: 'manual/img/pagina.png' });
 await shot('.guia', 'guia');
 await shot('.head', 'encabezado');
 await shot('#sec-luz', 'luz');
-await p.locator('#lightBtn').click(); await p.waitForTimeout(400);
-await shot('#sec-luz', 'luz_encendida');
+await p.locator('#luzCtl [data-acc=on]').click(); await p.waitForTimeout(400);
+await shot('#sec-luz', 'luz_encendida'); await p.waitForTimeout(2700);
 // desenfocar un poco cam0 para que se note
 await p.evaluate(() => { __sim.pos[0] = 14; __sim.pos[1] = -9.3; __simPintar(0); __simPintar(1); });
 await p.waitForTimeout(400);

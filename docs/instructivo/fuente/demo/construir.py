@@ -37,7 +37,7 @@ aviso = """<section class="demo" aria-label="Aviso de demo">
     <h2>Demo con un microscopio simulado</h2>
     <p>Así se ve la página <b>/ui</b> del microscopio. Los botones mueven un motor de mentira y la imagen
     se enfoca y desenfoca como la real. Nada de esto toca el equipo.</p>
-    <p style="margin-top:6px">Prueba: enciende la luz, toca «Enfocar automáticamente», o muévete con
+    <p style="margin-top:6px">Prueba: enciende la luz (la imagen está negra hasta entonces), toca «Enfocar automáticamente», o muévete con
     <kbd>W</kbd> <kbd>S</kbd> (cambia el paso con <kbd>A</kbd> <kbd>D</kbd>). Toca una imagen para agrandarla.</p>
   </div>
   <button id="demoReset"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span class="lbl">Desenfocar todo</span></button>

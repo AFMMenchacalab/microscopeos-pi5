@@ -97,6 +97,9 @@ class LightReq(BaseModel):
     color_anillo: str = "FF6A00"
     camaras: list = [0, 1]
 
+class LightOffReq(BaseModel):
+    camaras: list | None = None   # None = todas
+
 class ColorDpcReq(BaseModel):
     color: str = "00FF00"     # RRGGBB; "FFFFFF" = blanco
 
@@ -301,6 +304,10 @@ def create_app(camera, illuminations, timelapse, motores=None,
     # "luz": ultimo modo aplicado a cada matriz, para poder restaurarlo
     # despues de una medicion puntual de celulas (ver _luz_aplicar).
     estado = {"camara_activa": 0, "luz": {}}
+    # Serializa los comandos a las matrices: el deslizador de brillo manda
+    # varios pedidos seguidos, FastAPI los atiende en hilos distintos, y
+    # dos escrituras a la vez por el mismo puerto serie se mezclan.
+    luz_lock = threading.RLock()
     profile_manager = ProfileManager()
     # Serializa el autofoco: mueve motor Y camara a la vez, asi que dos
     # corridas simultaneas se pisarian el modo de la camara.
@@ -394,17 +401,27 @@ def create_app(camera, illuminations, timelapse, motores=None,
         luz = illuminations.get(cam)
         if luz is None:
             return
-        if percent is not None:
-            luz.set_brightness(percent)
-        if modo == "off":
-            luz.off()
-        elif modo == "rheinberg":
-            luz.rheinberg(color_centro, color_anillo)
-        else:
-            getattr(luz, _METODOS_LUZ[modo])()
-        estado["luz"][cam] = {"modo": modo, "percent": percent,
-                              "color_centro": color_centro,
-                              "color_anillo": color_anillo}
+        with luz_lock:
+            if percent is not None:
+                # Sin reenviar el patron: lo manda la llamada de abajo.
+                luz.brightness_percent = max(0, min(100, percent))
+            if modo == "off":
+                luz.off()
+            elif modo == "rheinberg":
+                luz.rheinberg(color_centro, color_anillo)
+            else:
+                getattr(luz, _METODOS_LUZ[modo])()
+            previo = estado["luz"].get(cam) or {}
+            estado["luz"][cam] = {
+                "modo": modo,
+                # Al apagar se recuerda el brillo que tenia, para mostrarlo.
+                "percent": percent if percent is not None else previo.get("percent"),
+                # y el ultimo modo encendido, para que al volver a prender
+                # la interfaz ofrezca el mismo.
+                "modo_previo": (previo.get("modo") if previo.get("modo") not in (None, "off")
+                                else previo.get("modo_previo")),
+                "color_centro": color_centro,
+                "color_anillo": color_anillo}
 
     def _luz_restaurar(cam, previo):
         """Vuelve a como estaba. Si nunca se supo, apaga."""
@@ -471,10 +488,28 @@ def create_app(camera, illuminations, timelapse, motores=None,
         return {"status": "on"}
 
     @app.post("/light/off")
-    def light_off():
-        for cam in illuminations:
+    def light_off(req: LightOffReq | None = None):
+        camaras = illuminations if req is None or req.camaras is None else req.camaras
+        for cam in camaras:
             _luz_aplicar(cam, "off")
         return {"status": "off"}
+
+    @app.get("/light/estado")
+    def light_estado():
+        """Como quedo cada matriz (para que la interfaz muestre lo real al
+        abrirse, o despues de una captura o un conteo que tocaron la luz)."""
+        out = {}
+        for cam, luz in illuminations.items():
+            if luz is None:
+                continue
+            e = estado["luz"].get(cam) or {}
+            out[str(cam)] = {
+                "encendida": bool(getattr(luz, "state", False)),
+                "modo": (e.get("modo") if e.get("modo") not in (None, "off")
+                         else e.get("modo_previo") or "full"),
+                "percent": getattr(luz, "brightness_percent", e.get("percent")),
+            }
+        return {"matrices": out}
 
     # ===============================
     # Captura

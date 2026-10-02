@@ -233,6 +233,18 @@
       transition-duration:.001ms !important}
   }
 
+  /* ---------- luz ---------- */
+  .luzon{width:100%;min-height:56px;font-size:15px;font-weight:600;margin-bottom:var(--sp-3);
+    flex-direction:column;gap:0;line-height:1.25}
+  .luzon .sub{font-size:11.5px;font-weight:400;opacity:.8}
+  .luzon .fila{display:flex;align-items:center;gap:8px}
+  .luzdos{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:600px){.luzdos{grid-template-columns:1fr}}
+  .luzdos .luzbloque{border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
+  .luztit{font-size:12.5px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .luz-sync{width:100%;min-height:38px;font-size:12.5px;color:var(--dim);background:transparent;
+    border-style:dashed}
+
   /* ---------- pasos numerados (guia y titulos) ---------- */
   .paso{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:22px;height:22px;
     border-radius:50%;background:var(--green);color:#04130a;font-size:12px;font-weight:700;
@@ -382,6 +394,8 @@
   <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8.5 20h7"/><path d="M12 16v4"/></symbol>
   <symbol id="i-server" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="7" rx="1.8"/><rect x="3.5" y="13" width="17" height="7" rx="1.8"/><path d="M7.5 7.5h.01"/><path d="M7.5 16.5h.01"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.2"/><path d="M15.2 15.2 20 20"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+  <symbol id="i-unlink" viewBox="0 0 24 24"><path d="M15.5 12.5l3.2-3.2a4 4 0 0 0-5.7-5.7L10 6.6"/><path d="M8.5 11.5l-3.2 3.2a4 4 0 0 0 5.7 5.7l3-3"/><path d="M4 4l3 3"/><path d="M20 20l-3-3"/></symbol>
   <symbol id="i-eject" viewBox="0 0 24 24"><path d="M12 5 5 13h14Z"/><path d="M5 18h14"/></symbol>
 </defs>
 </svg>
@@ -417,34 +431,13 @@
     <section class="panel" id="sec-luz">
       <h2><span class="paso">1</span>Enciende la luz</h2>
       <p class="hint">Sin luz la imagen se ve negra. «Normal» sirve para casi todo; «Relieve» hace
-      visibles las células sin teñir.</p>
-      <div class="field">
-        <label for="lightModo">Tipo de luz</label>
-        <select id="lightModo" onchange="lightModoChange()">
-          <option value="full">Normal (campo claro)</option>
-          <option value="left">Relieve desde la izquierda (DPC)</option>
-          <option value="right">Relieve desde la derecha (DPC)</option>
-          <option value="top">Relieve desde arriba (DPC)</option>
-          <option value="bottom">Relieve desde abajo (DPC)</option>
-          <option value="ring">Fondo negro (campo oscuro)</option>
-          <option value="rheinberg">De colores (Rheinberg)</option>
-        </select>
-      </div>
+      visibles las células sin teñir. Todo se aplica al momento, sin botón de aplicar.</p>
+      <div id="luzCtl"></div>
       <div class="row" id="rheinbergColors" style="display:none">
-        <div class="field"><label for="colorCentro">Color centro</label><input type="color" id="colorCentro" value="#0000ff"></div>
-        <div class="field"><label for="colorAnillo">Color anillo</label><input type="color" id="colorAnillo" value="#ff6a00"></div>
+        <div class="field"><label for="colorCentro">Color del centro</label><input type="color" id="colorCentro" value="#0000ff" onchange="cambioColorRheinberg()"></div>
+        <div class="field"><label for="colorAnillo">Color del anillo</label><input type="color" id="colorAnillo" value="#ff6a00" onchange="cambioColorRheinberg()"></div>
       </div>
-      <div class="field">
-        <label for="bright">Brillo</label>
-        <div class="slider">
-          <input type="range" id="bright" min="0" max="100" value="80" oninput="brightLabel()">
-          <span class="val" id="brightVal">80%</span>
-        </div>
-      </div>
-      <div class="camsel">
-        <button id="lightBtn" onclick="aplicarLuz()"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg><span class="lbl">Encender luz</span></button>
-        <button id="lightOffBtn" onclick="apagarLuz()"><svg class="ic" aria-hidden="true"><use href="#i-power"/></svg><span class="lbl">Apagar luz</span></button>
-      </div>
+      <button id="luzSync" class="luz-sync" onclick="alternarSyncLuz()"></button>
     </section>
 
     <section class="panel" id="sec-ver">
@@ -950,7 +943,6 @@ function marcarConexion(ok){
 }
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
-function brightLabel(){document.getElementById('brightVal').textContent=document.getElementById('bright').value+'%';}
 
 async function refrescarUna(n){
   if(running||live[n])return;
@@ -988,33 +980,149 @@ async function toggleLive(n){
     refrescarUna(n);
   }
 }
-function lightModoChange(){
+// ===== Luz =====
+// Un solo boton de encendido; el tipo de luz y el brillo se aplican al
+// momento. Por defecto las dos matrices van iguales ("sincronizadas"); un
+// boton las separa y aparece un juego de controles por camara.
+const MODOS_LUZ=[
+  ['full','Normal (campo claro)'],
+  ['left','Relieve desde la izquierda (DPC)'],
+  ['right','Relieve desde la derecha (DPC)'],
+  ['top','Relieve desde arriba (DPC)'],
+  ['bottom','Relieve desde abajo (DPC)'],
+  ['ring','Fondo negro (campo oscuro)'],
+  ['rheinberg','De colores (Rheinberg)'],
+];
+const luz={sync:true,cams:{0:{on:false,modo:'full',percent:80},1:{on:false,modo:'full',percent:80}}};
+try{if(localStorage.getItem('microscopeos_luz_sync')==='0')luz.sync=false;}catch(e){}
+let ultimaEdicionLuz=0;
+const envioLuz={};
+
+function bloqueLuz(clave,titulo){
+  const id='luz_'+clave;
+  return '<div class="luzbloque" data-luz="'+clave+'">'
+    +(titulo?'<div class="luztit"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>'+titulo+'</div>':'')
+    +'<button class="luzon" data-acc="on"><span class="fila"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg><span class="lbl"></span></span><span class="sub"></span></button>'
+    +'<div class="field"><label for="'+id+'_modo">Tipo de luz</label><select id="'+id+'_modo" data-acc="modo">'
+    +MODOS_LUZ.map(m=>'<option value="'+m[0]+'">'+m[1]+'</option>').join('')+'</select></div>'
+    +'<div class="field" style="margin-bottom:0"><label for="'+id+'_brillo">Brillo</label><div class="slider">'
+    +'<input type="range" id="'+id+'_brillo" min="0" max="100" data-acc="brillo"><span class="val"></span></div></div>'
+    +'</div>';
+}
+function camsDe(b){return b.dataset.luz==='ambas'?[0,1]:[+b.dataset.luz];}
+function renderLuz(){
+  const el=document.getElementById('luzCtl');
+  el.innerHTML=luz.sync?bloqueLuz('ambas','')
+    :'<div class="luzdos">'+bloqueLuz(0,'Cámara 0')+bloqueLuz(1,'Cámara 1')+'</div>';
+  el.querySelectorAll('.luzbloque').forEach(b=>{
+    const cams=camsDe(b);
+    b.querySelector('[data-acc=on]').onclick=()=>{
+      const on=!luz.cams[cams[0]].on;
+      cams.forEach(c=>luz.cams[c].on=on);
+      pintarLuz();enviarLuz(cams);
+      toast((on?'Luz encendida':'Luz apagada')+(cams.length===1?' en la cámara '+cams[0]:''));
+    };
+    b.querySelector('[data-acc=modo]').onchange=e=>{
+      cams.forEach(c=>luz.cams[c].modo=e.target.value);
+      pintarLuz();if(luz.cams[cams[0]].on)enviarLuz(cams);
+    };
+    b.querySelector('[data-acc=brillo]').oninput=e=>{
+      cams.forEach(c=>luz.cams[c].percent=+e.target.value);
+      pintarLuz();if(luz.cams[cams[0]].on)enviarLuz(cams);
+    };
+  });
+  const sb=document.getElementById('luzSync');
+  sb.innerHTML=luz.sync
+    ?'<svg class="ic" aria-hidden="true"><use href="#i-unlink"/></svg>Separar: una luz distinta en cada cámara'
+    :'<svg class="ic" aria-hidden="true"><use href="#i-link"/></svg>Volver a poner la misma luz en las dos';
+  pintarLuz();
+  if(running)deshabilitarLuz(true);
+}
+function pintarLuz(){
+  document.querySelectorAll('#luzCtl .luzbloque').forEach(b=>{
+    const st=luz.cams[camsDe(b)[0]];
+    const bt=b.querySelector('[data-acc=on]');
+    bt.classList.toggle('lit',st.on);
+    bt.querySelector('.lbl').textContent=st.on?'Luz encendida':'Encender luz';
+    bt.querySelector('.sub').textContent=st.on?'toca para apagar':'';
+    const sel=b.querySelector('[data-acc=modo]');if(sel.value!==st.modo)sel.value=st.modo;
+    const rg=b.querySelector('[data-acc=brillo]');
+    if(document.activeElement!==rg)rg.value=st.percent;
+    b.querySelector('.val').textContent=st.percent+'%';
+  });
   document.getElementById('rheinbergColors').style.display=
-    document.getElementById('lightModo').value==='rheinberg'?'grid':'none';
-  // Si la luz ya esta prendida, cambiar el tipo la cambia al momento.
-  if(document.getElementById('lightBtn').classList.contains('lit'))aplicarLuz();
+    [0,1].some(c=>luz.cams[c].modo==='rheinberg')?'grid':'none';
 }
-async function aplicarLuz(){
-  if(running)return;
-  const modo=document.getElementById('lightModo').value;
-  const body={modo:modo,percent:+document.getElementById('bright').value,camaras:[0,1]};
-  if(modo==='rheinberg'){
-    body.color_centro=document.getElementById('colorCentro').value.slice(1).toUpperCase();
-    body.color_anillo=document.getElementById('colorAnillo').value.slice(1).toUpperCase();
+function deshabilitarLuz(on){
+  document.querySelectorAll('#luzCtl button,#luzCtl select,#luzCtl input,#luzSync').forEach(e=>e.disabled=on);
+}
+function enviarLuz(cams){
+  ultimaEdicionLuz=Date.now();
+  if(cams.length===2&&luz.sync)return enviarGrupoLuz([0,1]);
+  cams.forEach(c=>enviarGrupoLuz([c]));
+}
+// Un pedido a la vez por grupo: mientras se arrastra el brillo se manda
+// el ultimo valor apenas termina el anterior, sin hacer cola.
+async function enviarGrupoLuz(cams){
+  const k=cams.join(','), e=envioLuz[k]||(envioLuz[k]={enCurso:false,pendiente:false});
+  if(e.enCurso){e.pendiente=true;return;}
+  e.enCurso=true;
+  try{
+    const st=luz.cams[cams[0]];
+    let r;
+    if(st.on){
+      const body={modo:st.modo,percent:st.percent,camaras:cams};
+      if(st.modo==='rheinberg'){
+        body.color_centro=document.getElementById('colorCentro').value.slice(1).toUpperCase();
+        body.color_anillo=document.getElementById('colorAnillo').value.slice(1).toUpperCase();
+      }
+      r=await fetch('/light/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }else{
+      r=await fetch('/light/off',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({camaras:cams})});
+    }
+    const d=await r.json();
+    if(d.error)toast(d.error);
+  }catch(err){toast('Sin conexión con la luz');}
+  finally{
+    e.enCurso=false;ultimaEdicionLuz=Date.now();
+    if(e.pendiente){e.pendiente=false;enviarGrupoLuz(cams);}
   }
-  const r=await fetch('/light/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const d=await r.json();
-  if(d.error){toast(d.error);return;}
-  document.getElementById('lightBtn').classList.add('lit');
-  document.getElementById('lightBtn').querySelector('.lbl').textContent='Luz encendida';
-  toast('Luz encendida: '+document.getElementById('lightModo').selectedOptions[0].text.toLowerCase());
 }
-async function apagarLuz(){
-  await fetch('/light/off',{method:'POST'});
-  document.getElementById('lightBtn').classList.remove('lit');
-  document.getElementById('lightBtn').querySelector('.lbl').textContent='Encender luz';
-  toast('Luz apagada');
+function alternarSyncLuz(){
+  luz.sync=!luz.sync;
+  try{localStorage.setItem('microscopeos_luz_sync',luz.sync?'1':'0');}catch(e){}
+  if(luz.sync){
+    // Al volver a juntarlas, la cámara 1 copia lo de la 0.
+    Object.assign(luz.cams[1],luz.cams[0]);
+    enviarLuz([0,1]);
+    toast('Las dos cámaras tienen la misma luz');
+  }else toast('Ahora cada cámara tiene su propia luz');
+  renderLuz();
 }
+function cambioColorRheinberg(){
+  [0,1].filter(c=>luz.cams[c].on&&luz.cams[c].modo==='rheinberg')
+    .forEach(c=>enviarLuz(luz.sync?[0,1]:[c]));
+}
+// Lee como quedaron las matrices (otra persona, una captura o un conteo
+// pueden haberlas cambiado). No pisa lo que el usuario esta moviendo.
+async function cargarLuz(forzar){
+  if(!forzar&&(Date.now()-ultimaEdicionLuz<3000||Object.values(envioLuz).some(e=>e.enCurso)))return;
+  try{
+    const d=await (await fetch('/light/estado')).json();
+    const m=d.matrices||{};
+    for(const c of [0,1]){
+      const x=m[c];if(!x)continue;
+      luz.cams[c].on=!!x.encendida;
+      if(x.modo&&MODOS_LUZ.some(mm=>mm[0]===x.modo))luz.cams[c].modo=x.modo;
+      if(x.percent!=null)luz.cams[c].percent=Math.round(x.percent);
+    }
+    const a=luz.cams[0],b=luz.cams[1];
+    const distintas=a.on!==b.on||a.modo!==b.modo||a.percent!==b.percent;
+    if(luz.sync&&distintas&&m[0]&&m[1]){luz.sync=false;renderLuz();}
+    else pintarLuz();
+  }catch(e){}
+}
+renderLuz();
 async function capturar(){
   if(running)return;
   await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));   // apaga el vivo antes de capturar
@@ -1026,7 +1134,7 @@ async function capturar(){
   const d=await r.json();
   if(d.error){toast(d.error);return;}
   toast('Guardado: '+(Array.isArray(d.saved)?d.saved.length+' fotos':d.saved));
-  document.getElementById('lightBtn').classList.remove('lit');
+  cargarLuz(true);
 }
 // ============================================================
 // Foco motorizado: un eje Z por camara, seleccionable.
@@ -1392,7 +1500,8 @@ async function toggleConteo(n){
   // medir cada `periodo` y necesita la fase visible en cada medición.
   if(document.getElementById('cntOblicua').checked){
     await fetch('/light/set',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({modo:'left',percent:+document.getElementById('bright').value,camaras:[n]})});
+      body:JSON.stringify({modo:'left',percent:luz.cams[n].percent,camaras:[n]})});
+    cargarLuz(true);
     toast('CAM '+n+': luz en media apertura, y ahí se queda mientras cuente');
   }
   if(!live[n]) toast('Encendé el vivo de CAM '+n+' para ver las marcas');
@@ -1487,8 +1596,9 @@ function setRunning(on){
   document.getElementById('dot').className='dot '+(on?'run':'idle');
   document.getElementById('state').textContent=on?'Timelapse en curso':'Listo';
   document.getElementById('s_state').textContent=on?'Timelapse en curso':'Listo';
-  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn','afBtn','lbAfBtn','calBtn','cntFotoBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  ['liveBtn0','liveBtn1','refresh','snap','start','afBtn','lbAfBtn','calBtn','cntFotoBtn'].forEach(id=>document.getElementById(id).disabled=on);
   document.querySelectorAll('.zbtn,[data-paso]').forEach(b=>b.disabled=on);
+  deshabilitarLuz(on);
   document.getElementById('stop').disabled=!on;
   if(on){
     [0,1].forEach(n=>{
@@ -1772,6 +1882,7 @@ setInterval(pollNas,2000);pollNas();
 setInterval(pollUsb,2000);pollUsb();
 
 setInterval(poll,2000);poll();refrescarAmbas();
+setInterval(()=>cargarLuz(false),4000);cargarLuz(true);
 setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();aplicarResolucion(false);
 // Mas rapido que el resto de los sondeos: el conteo en vivo se refresca
 // varias veces por segundo del lado del servidor y el numero tiene que
