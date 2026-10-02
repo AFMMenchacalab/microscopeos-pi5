@@ -219,7 +219,9 @@ class RequestFake:
 
 class Picamera2Fake:
     instancias_creadas = 0
-    def __init__(self, camera_num=0):
+    tuning_recibido = None
+    def __init__(self, camera_num=0, tuning=None):
+        Picamera2Fake.tuning_recibido = tuning
         self.n_capturas = 0
         Picamera2Fake.instancias_creadas += 1
         self.camera_num = camera_num
@@ -237,7 +239,14 @@ class Picamera2Fake:
     def start(self): self.corriendo = True; self.n_start += 1
     def stop(self): self.corriendo = False
     def close(self): self.cerrada = True
+    @staticmethod
+    def load_tuning_file(nombre):
+        return {"version": 2.0, "algorithms": [
+            {"rpi.black_level": {}}, {"rpi.alsc": {}}, {"rpi.awb": {}}]}
     def set_controls(self, c): self.controles.update(c)
+    def capture_metadata(self):
+        return {"ExposureTime": self.controles.get("ExposureTime"),
+                "ColourGains": self.controles.get("ColourGains", (1.0, 1.0))}
     def capture_array(self, nombre):
         # Contador: el autofoco descarta el primer frame tras cambiar la
         # iluminacion (puede haberse expuesto antes del cambio), y eso

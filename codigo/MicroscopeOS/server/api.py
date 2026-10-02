@@ -44,6 +44,13 @@ _FOLDER_RE = re.compile(r'^timelapse_\d{8}_\d{6}$')
 _FILE_RE = re.compile(r'^[A-Za-z0-9_.\-]+\.tif$')
 _PERFIL_RE = re.compile(r'^[A-Za-z0-9 _\-]{1,40}$')
 ARCHIVO_ILUM = BASE_DIR / "profiles" / "iluminacion.json"
+# Calibracion de imagen (exposicion + balance de blancos por camara) y el
+# campo plano de cada camara en profiles/flat_cam{n}.npy.
+ARCHIVO_CALIB = BASE_DIR / "profiles" / "calibracion_imagen.json"
+
+
+def _ruta_flat(cam):
+    return ARCHIVO_CALIB.parent / f"flat_cam{cam}.npy"
 
 
 def _ruta_captura(filename):
@@ -314,6 +321,10 @@ class ConteoFotoReq(BaseModel):
 class ConteoCarpetaReq(BaseModel):
     carpeta: str
     intervalo_s: int | None = None
+
+class CalibrarImagenReq(BaseModel):
+    camaras: list = [0, 1]
+
 
 class CalibrarDpcReq(BaseModel):
     camera: int = 0
@@ -675,6 +686,116 @@ def create_app(camera, illuminations, timelapse, motores=None,
     def set_exposure(req: ExposureReq):
         camera.set_exposure(req.exposure, req.gain)
         return {"status": "ok"}
+
+    # ===============================
+    # Calibracion de imagen (EN PRUEBAS)
+    # ===============================
+    # Ver Camera.calibrar_imagen(). Se guarda solo si TODAS las camaras
+    # pedidas convergen: en la Pi el balance llego una vez al tope (8.0) y
+    # dejar eso puesto pinta toda la imagen de un color.
+    def _cargar_calibracion():
+        try:
+            datos = json.loads(ARCHIVO_CALIB.read_text())
+        except (OSError, ValueError):
+            return
+        if not hasattr(camera, "set_colour_gains"):
+            return
+        for cam, gains in (datos.get("colour_gains") or {}).items():
+            cam = int(cam)
+            camera.set_colour_gains(cam, gains)
+            try:
+                camera.set_flat(cam, np.load(_ruta_flat(cam)))
+            except (OSError, ValueError):
+                pass
+        if datos.get("exposure_us"):
+            camera.set_exposure(int(datos["exposure_us"]), camera.gain)
+
+    _cargar_calibracion()
+
+    @app.get("/camera/calibracion")
+    def calibracion_get():
+        try:
+            datos = json.loads(ARCHIVO_CALIB.read_text())
+        except (OSError, ValueError):
+            return {"calibrada": False}
+        return {"calibrada": True, **datos}
+
+    @app.post("/camera/calibrar")
+    def calibrar_imagen(req: CalibrarImagenReq):
+        """Con un portaobjetos vacio: enciende campo claro BLANCO en cada
+        camara, calibra y deja la luz como estaba."""
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        if not hasattr(camera, "calibrar_imagen"):
+            return {"error": "Esta camara no se puede calibrar"}
+        resultados, exposiciones = {}, []
+        for cam in req.camaras:
+            luz = illuminations.get(cam)
+            previo = estado["luz"].get(cam)
+            color = getattr(luz, "color_campo", None)
+            try:
+                if luz is not None and hasattr(luz, "set_color_campo"):
+                    luz.set_color_campo("FFFFFF")   # blanco, solo mientras
+                _luz_aplicar(cam, "full")
+                time.sleep(0.3)
+                r = camera.calibrar_imagen(cam)
+            except Exception as e:
+                return {"error": f"Camara {cam}: {e}"}
+            finally:
+                if luz is not None and hasattr(luz, "set_color_campo"):
+                    luz.set_color_campo(color or "FFFFFF")
+                _luz_restaurar(cam, previo)
+            resultados[str(cam)] = r
+            exposiciones.append(r["exposure_us"])
+        if not all(r["converge"] for r in resultados.values()):
+            # Se vuelve a lo que habia guardado (o a nada).
+            for cam in req.camaras:
+                camera.set_colour_gains(cam, None)
+                camera.set_flat(cam, None)
+            _cargar_calibracion()
+            return {"error": "La calibracion no convergio (el color quedo en "
+                             "el limite). No se guardo nada: revisa que el "
+                             "campo este vacio y la luz en blanco.",
+                    "camaras": resultados}
+        # La exposicion es comun: la menor, para que ninguna sature.
+        exposicion = min(exposiciones)
+        camera.set_exposure(exposicion, camera.gain)
+        try:
+            datos = json.loads(ARCHIVO_CALIB.read_text())
+        except (OSError, ValueError):
+            datos = {}
+        datos["exposure_us"] = exposicion
+        datos.setdefault("colour_gains", {})
+        datos["fecha"] = time.strftime("%Y-%m-%d %H:%M")
+        try:
+            ARCHIVO_CALIB.parent.mkdir(parents=True, exist_ok=True)
+            for cam in req.camaras:
+                datos["colour_gains"][str(cam)] = resultados[str(cam)]["colour_gains"]
+                flat = camera.get_flat(cam)
+                if flat is not None:
+                    # 160x120 basta: el mapa es suave y se reescala al vivo
+                    np.save(_ruta_flat(cam),
+                            cv2.resize(flat, (160, 120), interpolation=cv2.INTER_AREA))
+            ARCHIVO_CALIB.write_text(json.dumps(datos, indent=2))
+        except OSError as e:
+            return {"error": f"No se pudo guardar: {e}", "camaras": resultados}
+        return {"status": "ok", "exposure_us": exposicion, "camaras": resultados}
+
+    @app.post("/camera/calibracion/borrar")
+    def calibracion_borrar():
+        for cam in list(getattr(camera, "_colour_gains", {})) + list(illuminations):
+            if hasattr(camera, "set_colour_gains"):
+                camera.set_colour_gains(cam, None)
+                camera.set_flat(cam, None)
+            try:
+                _ruta_flat(cam).unlink()
+            except OSError:
+                pass
+        try:
+            ARCHIVO_CALIB.unlink()
+        except OSError:
+            pass
+        return {"calibrada": False}
 
     @app.post("/brightness")
     def set_brightness(req: BrightnessReq):

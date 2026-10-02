@@ -837,6 +837,10 @@
         <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
       </div>
       <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
+      <p class="hint" style="margin-top:14px"><b>Calibrar imagen</b> (en pruebas): con un portaobjetos <b>vacío</b>, ajusta la exposición, el blanco y las orillas oscuras del vivo. Si no logra un buen resultado, no cambia nada.</p>
+      <button id="btnCalibrar" onclick="calibrarImagen()" style="width:100%">Calibrar imagen (portaobjetos vacío)</button>
+      <div class="stat"><span class="k">Calibración</span><span class="v" id="s_calib">—</span></div>
+      <button class="enlace" onclick="borrarCalibracion()">Quitar calibración</button>
       </div>
     </details>
     <details class="panel">
@@ -1785,6 +1789,27 @@ async function aplicarCamara(){
   await fetch('/exposure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exposure:+document.getElementById('exp').value,gain:+document.getElementById('gain').value})});
   toast('Exposición aplicada');
 }
+async function cargarCalibracion(){
+  try{
+    const d=await (await fetch('/camera/calibracion')).json();
+    document.getElementById('s_calib').textContent=d.calibrada?('Sí · '+(d.fecha||'')):'No';
+  }catch(e){}
+}
+async function calibrarImagen(){
+  if(!confirm('Quita la muestra y deja el portaobjetos vacío. La luz se pondrá blanca unos segundos. ¿Calibrar?'))return;
+  const btn=document.getElementById('btnCalibrar');btn.disabled=true;btn.textContent='Calibrando…';
+  try{
+    const d=await (await fetch('/camera/calibrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({camaras:[0,1]})})).json();
+    if(d.error)toast(d.error);
+    else{toast('Imagen calibrada');document.getElementById('exp').value=d.exposure_us;}
+  }catch(e){toast('Error: '+e);}
+  finally{btn.disabled=false;btn.textContent='Calibrar imagen (portaobjetos vacío)';cargarCalibracion();}
+}
+async function borrarCalibracion(){
+  await fetch('/camera/calibracion/borrar',{method:'POST'});
+  toast('Calibración quitada');cargarCalibracion();
+}
+cargarCalibracion();
 async function iniciar(){
   await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));
   const body={modo:document.getElementById('modo').value,

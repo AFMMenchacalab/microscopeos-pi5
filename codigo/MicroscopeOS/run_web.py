@@ -54,7 +54,8 @@ except (OSError, ValueError):
 for _n, _l in illuminations.items():
     _c = (_ilum.get("camaras") or {}).get(str(_n), {})
     _l.set_color_dpc(_c.get("dpc", _ilum.get("color_dpc", "00FF00")))
-    _l.set_color_campo(_c.get("campo", "FFFFFF"))
+    # "color_claro": nombre que usaba la version de la Pi del 2026-10-01
+    _l.set_color_campo(_c.get("campo", _ilum.get("color_claro", "FFFFFF")))
     if _c.get("rheinberg"):
         _l._rheinberg_colors = tuple(_c["rheinberg"])
 

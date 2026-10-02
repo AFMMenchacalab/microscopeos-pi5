@@ -174,6 +174,7 @@ from core.timelapse import TimelapseManager
 from server.api import create_app
 import server.api as _api
 _api.ARCHIVO_ILUM = tmp / "iluminacion.json"     # no tocar profiles/ del repo
+_api.ARCHIVO_CALIB = tmp / "calib" / "calibracion_imagen.json"
 
 class Luz:
     def __init__(self):
@@ -298,6 +299,41 @@ check("y al cerrar anota estado y fotos", ej["estado"] == "detenido antes de tie
 check("LEEME.txt dentro", "Células día 1" in (carpeta / "LEEME.txt").read_text())
 lst = cl.get("/api/experimentos").json()["experimentos"]
 check("aparece en la galeria como timelapse", any(e["id"] == carpeta.name and e["tipo"] == "timelapse" for e in lst))
+
+print("\n=== CAMARA: tuning sin ALSC y calibracion de imagen ===")
+ruta_t = emuladores.Picamera2Fake.tuning_recibido
+algs = json.loads(Path(ruta_t).read_text())["algorithms"] if ruta_t else []
+check("la camara se abre con un tuning propio sin rpi.alsc",
+      algs and not any("rpi.alsc" in a for a in algs) and any("rpi.awb" in a for a in algs), ruta_t)
+luces[0].on()
+check("sin calibrar", cl.get("/camera/calibracion").json() == {"calibrada": False})
+# Frames negros: el balance no puede converger (ganancias al tope).
+r = cl.post("/camera/calibrar", json={"camaras": [0]}).json()
+check("si el color queda en el limite NO se guarda nada",
+      "error" in r and not r["camaras"]["0"]["converge"] and not _api.ARCHIVO_CALIB.exists()
+      and 0 not in cam._colour_gains and cam.get_flat(0) is None, r)
+check("y la luz vuelve a como estaba", luces[0].current_pattern == "FULL" and luces[0].color_campo is None)
+check("y la camara no se queda con el color en el tope",
+      tuple(cam._cams[0].controles.get("ColourGains")) == (1.0, 1.0), cam._cams[0].controles.get("ColourGains"))
+# Campo vacio parejo y neutro: converge.
+_orig = emuladores.Picamera2Fake.capture_array
+emuladores.Picamera2Fake.capture_array = lambda self, n: np.full((480, 640, 3), 200, np.uint8)
+luces[0].set_color_campo("FF0000")
+try:
+    r = cl.post("/camera/calibrar", json={"camaras": [0]}).json()
+finally:
+    emuladores.Picamera2Fake.capture_array = _orig
+check("campo parejo: calibra y guarda", r.get("status") == "ok" and _api.ARCHIVO_CALIB.exists()
+      and (tmp / "calib" / "flat_cam0.npy").exists(), r)
+check("devuelve el color de campo claro que habia", luces[0].color_campo == "FF0000")
+g = cl.get("/camera/calibracion").json()
+check("queda registrada", g["calibrada"] and g["colour_gains"]["0"] == [1.0, 1.0] and g["exposure_us"] == r["exposure_us"], g)
+check("el vivo se corrige con el campo plano", cam.get_flat(0) is not None
+      and cam._aplicar_flat(0, np.full((48, 64, 3), 100, np.uint8)).shape == (48, 64, 3))
+luces[0].set_color_campo("FFFFFF")
+b = cl.post("/camera/calibracion/borrar").json()
+check("quitar calibracion", b == {"calibrada": False} and not _api.ARCHIVO_CALIB.exists()
+      and cam.get_flat(0) is None and 0 not in cam._colour_gains)
 
 print("\n" + "=" * 50)
 print(f"PASS: {ok}   FAIL: {fail}")

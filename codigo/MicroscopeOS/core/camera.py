@@ -15,7 +15,9 @@ solo se reconfigura cuando cambia de modo (preview <-> still).
 from picamera2 import Picamera2
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import json
 import os
+import tempfile
 import time
 import threading
 import numpy as np
@@ -44,6 +46,44 @@ PREVIEW_RAW_SIZE = (1640, 1232)
 RAW_FORMAT = "SBGGR10"
 
 
+def _tuning_microscopio():
+    """Calibracion del ISP para el microscopio: la de fabrica del IMX219
+    pero SIN rpi.alsc (correccion de sombreado de lente). Devuelve la ruta
+    de un JSON para Picamera2(tuning=...).
+
+    Las tablas de ALSC estan medidas para la lentecita de fabrica del
+    modulo, no para la optica del microscopio: aplicadas aqui
+    sobrecorregian rojo y azul hacia las orillas y el vivo salia con un
+    anillo magenta y el centro de otro color, aunque la muestra fuera
+    uniforme. Sin ALSC el ISP no toca el color por posicion; queda solo
+    la vinieta real de la optica. Las capturas raw no pasan por el ISP,
+    asi que esto solo cambia el vivo y los JPEG/PNG procesados.
+    (Probado en la Pi el 2026-10-01: el centro paso de azul puro a casi
+    blanco y la orilla de magenta a lila claro.)
+
+    OJO: libcamera lee el tuning UNA vez, cuando arranca su CameraManager
+    (el primer Picamera2 del proceso), y lo usa para las dos camaras. Por
+    eso aqui no se consulta nada de la camara (global_camera_info ya
+    arrancaria el manager con el tuning de fabrica): el sensor se fija a
+    mano, igual que STILL_SIZE.
+
+    Si algo falla se devuelve None y Picamera2 usa la calibracion de
+    fabrica, como antes."""
+    try:
+        tuning = Picamera2.load_tuning_file("imx219.json")
+        tuning["algorithms"] = [a for a in tuning["algorithms"]
+                                if "rpi.alsc" not in a]
+        ruta = os.path.join(tempfile.gettempdir(),
+                            f"microscopeos_imx219_{os.getuid()}.json")
+        with open(ruta, "w") as f:
+            json.dump(tuning, f)
+        return ruta
+    except Exception as e:
+        print(f"AVISO: sin tuning propio de la camara ({e}); "
+              f"se usa el de fabrica")
+        return None
+
+
 class CameraController:
 
     def __init__(self, camera_nums=(0, 1)):
@@ -61,6 +101,13 @@ class CameraController:
         # core.metadatos.Contexto: si esta puesto, cada foto se guarda con
         # sus metadatos adentro (objetivo, escala, luz, foco...).
         self.metadatos = None
+        self._tuning = _tuning_microscopio()  # ver docstring: sin ALSC
+        # Calibracion de imagen por camara (ver calibrar_imagen()):
+        #   _colour_gains[n] = (rojo, azul), balance de blancos fijo del ISP
+        #   _flat[n]         = ganancia por pixel (h, w, 3) para el vivo
+        self._colour_gains = {}
+        self._flat = {}
+        self._flat_cache = {}
 
     # =============================
     # CICLO DE VIDA DE LAS INSTANCIAS
@@ -73,7 +120,8 @@ class CameraController:
                 # CAM0/CAM1 de la placa. Confirmar con `rpicam-hello --list-cameras`
                 # que el orden coincide con el cableado fisico; si estan
                 # invertidos, se intercambian aqui y no en el resto del codigo.
-                self._cams[camera_num] = Picamera2(camera_num=camera_num)
+                self._cams[camera_num] = Picamera2(
+                    camera_num=camera_num, tuning=self._tuning)
                 self._modes[camera_num] = None
             return self._cams[camera_num]
 
@@ -110,6 +158,8 @@ class CameraController:
             "AeEnable": False,
             "AwbEnable": False
         }
+        if camera_num in self._colour_gains:
+            controles["ColourGains"] = self._colour_gains[camera_num]
         if mode == "preview":
             # El stream de preview pasa por el ISP, que por defecto
             # realza bordes y hace reduccion de ruido. Las dos cosas
@@ -169,6 +219,150 @@ class CameraController:
             picam2.close()
 
     # =============================
+    # CALIBRACION DE IMAGEN (campo vacio)
+    # =============================
+    # Con un portaobjetos vacio y campo claro, deja la imagen lo mas
+    # pareja y neutra posible en tres pasos:
+    #   1. exposicion: lo mas brillante del campo queda en ~80 % del
+    #      rango. Un pixel saturado (255) no tiene informacion: una celula
+    #      ahi desaparece, por eso esto va primero.
+    #   2. balance de blancos: ColourGains fijos en el ISP, medidos en el
+    #      centro, para que la luz blanca salga gris. Afecta al vivo y a
+    #      las imagenes procesadas; el raw no pasa por el ISP.
+    #   3. campo plano: un mapa de ganancia por pixel que iguala orillas y
+    #      centro (vinieta de la optica + tinte del IMX219 en las orillas).
+    #      Se aplica SOLO al JPEG del vivo: el autofoco (get_focus_frame),
+    #      el conteo (gancho anotar, que recibe el frame sin corregir) y
+    #      las capturas no lo ven, asi que no cambia ninguna medicion.
+    # EN PRUEBAS: en la Pi (2026-10-01) el balance no convergio (las
+    # ganancias llegaron al tope). Por eso, si una ganancia queda en el
+    # tope, el resultado se marca "converge": False y no se guarda.
+    OBJETIVO_BRILLO = 200       # de 255, para lo mas brillante del campo
+    EXPOSICION_MIN_US = 100
+    EXPOSICION_MAX_US = 200000
+    GANANCIA_COLOR = (0.3, 8.0)
+
+    @staticmethod
+    def _promedio(picam2, n, descartar=4):
+        """Promedio de n frames del preview (BGR float32), tirando antes
+        los que pudieron exponerse con los controles anteriores."""
+        for _ in range(descartar):
+            picam2.capture_array("main")
+        acum = None
+        for _ in range(n):
+            f = picam2.capture_array("main").astype(np.float32)
+            acum = f if acum is None else acum + f
+        return acum / n
+
+    @staticmethod
+    def _centro(img, frac=0.3):
+        h, w = img.shape[:2]
+        dh, dw = int(h * frac / 2), int(w * frac / 2)
+        return img[h // 2 - dh:h // 2 + dh, w // 2 - dw:w // 2 + dw]
+
+    def calibrar_imagen(self, camera_num):
+        """Calibra exposicion, balance de blancos y campo plano de una
+        camara. La luz de campo claro (blanca) tiene que estar encendida y
+        el campo vacio; eso lo arregla quien llama (server/api.py).
+
+        Devuelve {"exposure_us", "colour_gains", "brillo_max", "saturado",
+        "converge"}. Solo si converge se dejan puestos el balance y el
+        campo plano. La exposicion NO se aplica a las dos camaras aqui: es
+        global, y quien llama decide (la menor, para que ninguna sature)."""
+        lo, hi = self.GANANCIA_COLOR
+        with self._locks[camera_num]:
+            picam2 = self._ensure_mode(camera_num, "preview")
+            exposicion = self.exposure_time
+            meta = picam2.capture_metadata()
+            rojo, azul = meta.get("ColourGains") or (1.0, 1.0)
+            # Para volver atras si no converge: lo guardado, o lo que tenia.
+            previos = self._colour_gains.get(camera_num) or (rojo, azul)
+
+            for _ in range(5):
+                # 1. exposicion: el p99.5 del canal mas alto al objetivo.
+                img = self._promedio(picam2, 3)
+                pico = float(np.percentile(img.max(axis=2), 99.5))
+                if abs(pico - self.OBJETIVO_BRILLO) > 10:
+                    if pico >= 250:
+                        factor = 0.5        # saturado: no se sabe cuanto
+                    else:
+                        # valores con gamma (~2.2): pasar a lineal
+                        factor = (self.OBJETIVO_BRILLO / max(pico, 1)) ** 2.2
+                    exposicion = int(min(self.EXPOSICION_MAX_US, max(
+                        self.EXPOSICION_MIN_US,
+                        exposicion * min(4.0, max(0.25, factor)))))
+                    picam2.set_controls({"ExposureTime": exposicion})
+                    img = self._promedio(picam2, 3)
+
+                # 2. balance de blancos en el centro, en lineal.
+                b, g, r = (self._centro(img).reshape(-1, 3).mean(0)
+                           / 255.0) ** 2.2
+                rojo = float(min(hi, max(lo, rojo * g / max(r, 1e-4))))
+                azul = float(min(hi, max(lo, azul * g / max(b, 1e-4))))
+                picam2.set_controls({"ColourGains": (rojo, azul)})
+
+                img = self._promedio(picam2, 3)
+                pico = float(np.percentile(img.max(axis=2), 99.5))
+                b, g, r = self._centro(img).reshape(-1, 3).mean(0)
+                if abs(pico - self.OBJETIVO_BRILLO) <= 10 and \
+                        max(abs(r - g), abs(b - g)) <= 3:
+                    break
+
+            converge = lo < rojo < hi and lo < azul < hi
+            if converge:
+                # 3. campo plano, con la imagen ya expuesta y balanceada.
+                img = self._promedio(picam2, 16)
+            else:
+                picam2.set_controls({"ColourGains": previos})
+
+        if converge:
+            # Suavizado fuerte: el mapa tiene que seguir la vinieta, no el
+            # polvo ni el ruido (eso se "pintaria" en el vivo).
+            plano = cv2.GaussianBlur(img, (0, 0), sigmaX=img.shape[1] / 32)
+            referencia = float(np.percentile(plano.mean(axis=2), 99))
+            ganancia = np.clip(referencia / np.maximum(plano, 1.0), 0.5, 4.0)
+            self._colour_gains[camera_num] = (rojo, azul)
+            self.set_flat(camera_num, ganancia)
+        return {"exposure_us": exposicion,
+                "colour_gains": [round(rojo, 3), round(azul, 3)],
+                "brillo_max": round(pico, 1),
+                "saturado": pico >= 250,
+                "converge": converge}
+
+    def set_colour_gains(self, camera_num, gains):
+        """Balance de blancos fijo (rojo, azul), o None para quitarlo."""
+        if gains is None:
+            self._colour_gains.pop(camera_num, None)
+            return
+        self._colour_gains[camera_num] = tuple(float(x) for x in gains)
+        with self._locks[camera_num]:
+            if self._modes.get(camera_num) is not None:
+                self._cams[camera_num].set_controls(
+                    {"ColourGains": self._colour_gains[camera_num]})
+
+    def set_flat(self, camera_num, ganancia):
+        """Mapa de ganancia (h, w, 3) para el vivo, o None para quitarlo."""
+        if ganancia is None:
+            self._flat.pop(camera_num, None)
+        else:
+            self._flat[camera_num] = np.asarray(ganancia, np.float32)
+        self._flat_cache.pop(camera_num, None)
+
+    def get_flat(self, camera_num):
+        return self._flat.get(camera_num)
+
+    def _aplicar_flat(self, camera_num, frame):
+        ganancia = self._flat.get(camera_num)
+        if ganancia is None or frame.ndim != 3:
+            return frame
+        cache = self._flat_cache.get(camera_num)
+        if cache is None or cache.shape != frame.shape:
+            cache = cv2.resize(ganancia, (frame.shape[1], frame.shape[0]),
+                               interpolation=cv2.INTER_LINEAR)
+            self._flat_cache[camera_num] = cache
+        return cv2.convertScaleAbs(frame.astype(np.float32) * cache)
+
+    # =============================
     # EXPOSURE
     # =============================
     def set_exposure(self, exposure_us, gain):
@@ -223,6 +417,7 @@ class CameraController:
                 frame = anotar(camera_num, frame)
             except Exception:
                 pass
+        frame = self._aplicar_flat(camera_num, frame)
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ok:
             return None

@@ -419,6 +419,9 @@ class TimelapseManager:
             # reconstruir la fase en la PC); "FFFFFF" = blanco
             "color_dpc": next((getattr(l, "color_dpc", None) or "FFFFFF"
                                for l in self.illuminations.values() if l is not None), None),
+            # color del campo claro de cada camara ("FFFFFF" = blanco)
+            "color_campo": {str(n): getattr(l, "color_campo", None) or "FFFFFF"
+                            for n, l in self.illuminations.items() if l is not None},
         }
         self.experimentos.actualizar(self.base_folder, **meta)
         return os.path.join(self.base_folder, "experimento.json")
