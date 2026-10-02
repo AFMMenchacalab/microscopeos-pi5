@@ -460,6 +460,12 @@ class TimelapseManager:
             # Que se calculo de las 4 crudas y si se borraron (core/dpc.py)
             from core import dpc
             meta["dpc_procesado"] = dict(dpc.OPCIONES, **dpc_opts)
+            if meta["dpc_procesado"].get("borrar_crudas", True):
+                # "sufijos" sigue diciendo lo que se captura (_L _R _T _B);
+                # esto es lo que queda en disco y le llega a la PC.
+                meta["dpc_procesado"]["sufijos"] = dpc.salidas(dpc_opts)
+            meta["dpc_procesado"]["valor_dpc"] = (
+                f"(pixel - {dpc.CERO}) / {round(1 / dpc.ESCALA_DPC)}")
         self.experimentos.actualizar(self.base_folder, **meta)
         return os.path.join(self.base_folder, "experimento.json")
 

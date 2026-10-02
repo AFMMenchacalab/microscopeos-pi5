@@ -715,11 +715,15 @@
             <label for="tlDpcBorrar">Borrar las 4 fotos originales (ahorra espacio)</label>
           </div>
           <div class="field check">
+            <input type="checkbox" id="tlDpcSuma" checked onchange="resumenTl()">
+            <label for="tlDpcSuma">Guardar también la foto normal, más chica (~3 MB)</label>
+          </div>
+          <div class="field check">
             <input type="checkbox" id="tlDpcFase" onchange="resumenTl()">
             <label for="tlDpcFase">Guardar también la fase (en prueba)</label>
           </div>
           <div class="field check">
-            <input type="checkbox" id="tlDpcJpg" checked>
+            <input type="checkbox" id="tlDpcJpg" checked onchange="resumenTl()">
             <label for="tlDpcJpg">Vista previa en color (JPG)</label>
           </div>
         </div>
@@ -1687,8 +1691,7 @@ function resumenTl(){
   const el=document.getElementById('tlResumen');
   if(!(cada>0)||!(horas>0)){el.textContent='Pon cada cuántos minutos y durante cuántas horas.';return;}
   const n=Math.max(1,Math.floor(horas*60/cada));
-  const porCiclo=tlFotosPorCiclo()*2;
-  const bytes=n*porCiclo*3280*2464*2;
+  const bytes=n*tlBytesPorCiclo()*2;
   let espacio='';
   const dest=document.getElementById('tlDestino').value;
   const libre=dest==='local'?(galeria.espacio||{}).libre_bytes
@@ -1698,16 +1701,21 @@ function resumenTl(){
   el.textContent='Se tomarán '+n+' foto'+(n>1?'s':'')+' por cámara, una cada '+cada+' min durante '+horas+' h.'+espacio
     +' Puedes cerrar esta página: el microscopio sigue solo.';
 }
-// Relieve DPC: cuantos TIFF de 16 MB quedan por camara y por ciclo (igual
-// que _fotos_por_ciclo en server/api.py).
+// Bytes que quedan en disco por camara y por ciclo (igual que
+// _bytes_por_ciclo en server/api.py y dpc.bytes_por_ciclo en core/dpc.py).
 function tlDpcProc(){
   return document.getElementById('modo').value==='dpc'&&document.getElementById('tlDpcProc').checked;
 }
-function tlFotosPorCiclo(){
-  if(document.getElementById('modo').value!=='dpc')return 1;
-  if(!tlDpcProc())return 4;
-  return 2+(document.getElementById('tlDpcFase').checked?1:0)
-    +(document.getElementById('tlDpcBorrar').checked?0:4);
+function tlBytesPorCiclo(){
+  const foto=3280*2464*2;                       // TIFF de 16 bits sin comprimir
+  if(document.getElementById('modo').value!=='dpc')return foto;
+  if(!tlDpcProc())return 4*foto;
+  const comp=0.75;                              // dpcLR/dpcTB/suma comprimidos
+  return 2*foto*comp
+    +(document.getElementById('tlDpcSuma').checked?foto*Math.pow(1640/3280,2)*comp:0)
+    +(document.getElementById('tlDpcFase').checked?foto:0)
+    +(document.getElementById('tlDpcJpg').checked?1.5e6:0)
+    +(document.getElementById('tlDpcBorrar').checked?0:4*foto);
 }
 function tlDpcChange(){
   document.getElementById('tlDpcOpts').style.display=
@@ -1961,6 +1969,7 @@ async function iniciar(){
   body.respaldar_nas=document.getElementById('tlNas').checked;
   body.dpc_procesar=document.getElementById('tlDpcProc').checked;
   body.dpc_borrar_crudas=document.getElementById('tlDpcBorrar').checked;
+  body.dpc_suma=document.getElementById('tlDpcSuma').checked;
   body.dpc_fase=document.getElementById('tlDpcFase').checked;
   body.dpc_jpg=document.getElementById('tlDpcJpg').checked;
   const r=await fetch('/timelapse/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

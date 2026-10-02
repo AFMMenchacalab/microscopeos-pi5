@@ -106,8 +106,32 @@ check("(sin normalizar el fondo saldria corrido)",
       abs(float(crudo[lejos].mean())) > 0.1, f"media={crudo[lejos].mean():+.3f}")
 
 v = np.linspace(-1, 1, 1001, dtype=np.float32)
-check("uint16 ida y vuelta (DPC)",
-      np.abs(dpc.desde_uint16(dpc.a_uint16(v, dpc.ESCALA_DPC), dpc.ESCALA_DPC) - v).max() < 2e-5)
+check("uint16 ida y vuelta (DPC): error de a lo mas medio paso",
+      np.abs(dpc.desde_uint16(dpc.a_uint16(v, dpc.ESCALA_DPC), dpc.ESCALA_DPC) - v).max()
+      <= dpc.ESCALA_DPC / 2 + 1e-7)
+# El paso tiene que quedar muy por debajo del ruido real del DPC (~0.008
+# por pixel en cam0): cuantizar suma ESCALA/sqrt(12) de ruido.
+check("el paso del DPC no agrega ruido (<2 % del de cam0)",
+      dpc.ESCALA_DPC / np.sqrt(12) < 0.02 * 0.008, f"paso={dpc.ESCALA_DPC:.2e}")
+s4, f4 = dpc.calcular_suma(L, R, T, B, ancho=400)
+media = (L.astype(np.float32) + R + T + B) / 4
+check("suma: promedio de las 4, reducido", s4.dtype == np.uint16 and s4.shape == (300, 400)
+      and f4 == 2.0, f"{s4.shape} x{f4}")
+check("suma: vale el promedio (en bloques de 2x2)",
+      np.abs(s4.astype(np.float32) - media.reshape(300, 2, 400, 2).mean((1, 3))).max() <= 1)
+check("suma: la absorcion se ve (es lo que el DPC no guarda)",
+      s4[225, 75] < 0.8 * s4[100, 300], f"mancha={s4[225, 75]} fondo={s4[100, 300]}")
+s0, f0 = dpc.calcular_suma(L, R, T, B, ancho=0)
+check("suma: ancho 0 = resolucion completa", s0.shape == FORMA and f0 == 1.0)
+check("salidas por defecto", dpc.salidas() == ["_dpcLR", "_dpcTB", "_suma"])
+check("salidas con fase y sin suma", dpc.salidas({"fase": True, "suma": False}) == ["_dpcLR", "_dpcTB", "_fase"])
+crudas_b = 4 * 3280 * 2464 * 2
+por_ciclo = dpc.bytes_por_ciclo()
+check("espacio: un ciclo procesado ocupa menos de la mitad que las crudas",
+      por_ciclo < 0.5 * crudas_b, f"{por_ciclo / 1e6:.1f} MB vs {crudas_b / 1e6:.1f} MB")
+check("espacio: la estimacion no queda corta (medido en cam0: ~25 MB)", por_ciclo > 25e6)
+check("espacio: sin borrar suma las crudas",
+      dpc.bytes_por_ciclo({"borrar_crudas": False}) == por_ciclo + crudas_b)
 check("uint16: el cero cae en 32768", int(dpc.a_uint16(np.zeros(1), dpc.ESCALA_DPC)[0]) == 32768)
 check("longitud de onda: verde", dpc.longitud_onda_um("00FF00") == 0.525)
 check("longitud de onda: blanco o sin dato", dpc.longitud_onda_um("FFFFFF") == 0.55
@@ -118,25 +142,38 @@ check("longitud de onda: blanco o sin dato", dpc.longitud_onda_um("FFFFFF") == 0
 print("\n2. procesar_ciclo: escribe, verifica y recien ahi borra")
 with tempfile.TemporaryDirectory() as tmp:
     rutas = escribir_ciclo(tmp)
-    r = dpc.procesar_ciclo(rutas, {"fase": True})
+    r = dpc.procesar_ciclo(rutas, {"fase": True, "suma_ancho": 400})
     nombres = sorted(os.path.basename(p) for p in os.listdir(tmp))
-    check("quedan dpcLR, dpcTB, fase y jpg", nombres == [
+    check("quedan dpcLR, dpcTB, fase, suma y jpg", nombres == [
         "0001_2026-10-01_16-27-09_dpc.jpg", "0001_2026-10-01_16-27-09_dpcLR.tif",
-        "0001_2026-10-01_16-27-09_dpcTB.tif", "0001_2026-10-01_16-27-09_fase.tif"],
+        "0001_2026-10-01_16-27-09_dpcTB.tif", "0001_2026-10-01_16-27-09_fase.tif",
+        "0001_2026-10-01_16-27-09_suma.tif"],
         str(nombres))
     check("las 4 crudas se borraron", len(r["borradas"]) == 4
           and not any(os.path.exists(p) for p in rutas.values()))
     a = tifffile.imread(os.path.join(tmp, "0001_2026-10-01_16-27-09_dpcLR.tif"))
     check("TIFF uint16 del mismo tamano", a.dtype == np.uint16 and a.shape == FORMA)
     with tifffile.TiffFile(os.path.join(tmp, "0001_2026-10-01_16-27-09_dpcLR.tif")) as t:
-        comp = t.pages[0].compression
-    check("TIFF sin compresion", int(comp) == 1, str(comp))
+        comp, pred = t.pages[0].compression, t.pages[0].predictor
+    check("TIFF comprimido sin perdida (deflate + predictor)", int(comp) == 8 and int(pred) == 2,
+          f"{comp} {pred}")
     check("el TIFF vale lo calculado",
           corr(dpc.desde_uint16(a, dpc.ESCALA_DPC), GX) > 0.95)
     m = metadatos.leer(os.path.join(tmp, "0001_2026-10-01_16-27-09_dpcLR.tif"))
     check("metadatos: escala y formula del valor",
           m.get("optica", {}).get("um_por_pixel") == 0.2159
-          and m.get("dpc", {}).get("valor") == "(pixel - 32768) / 32767", str(m.get("dpc")))
+          and m.get("dpc", {}).get("valor") == "(pixel - 32768) / 4096"
+          and m["dpc"].get("cero") == 32768 and m["dpc"].get("escala") == 1 / 4096, str(m.get("dpc")))
+    ruta_s = os.path.join(tmp, "0001_2026-10-01_16-27-09_suma.tif")
+    s = tifffile.imread(ruta_s)
+    ms = metadatos.leer(ruta_s)
+    check("suma en disco: reducida y con la escala en micras corregida",
+          s.shape == (300, 400) and abs(ms["optica"]["um_por_pixel"] - 0.4318) < 1e-9
+          and ms["suma"]["reduccion"] == 2.0, f"{s.shape} {ms.get('optica')}")
+    with tifffile.TiffFile(ruta_s) as t:
+        check("suma en disco: Fiji ve la escala de la foto reducida",
+              abs(t.pages[0].tags["XResolution"].value[0] / t.pages[0].tags["XResolution"].value[1]
+                  - 1 / 0.4318) < 1e-3)
     f = dpc.desde_uint16(tifffile.imread(
         os.path.join(tmp, "0001_2026-10-01_16-27-09_fase.tif")), dpc.ESCALA_FASE)
         # Solo |r|: el signo depende de como ve la matriz el montaje (esta
@@ -153,6 +190,15 @@ with tempfile.TemporaryDirectory() as tmp:
     dpc.procesar_ciclo(rutas, {"borrar_crudas": False, "jpg": False})
     check("borrar_crudas=False conserva las 4",
           all(os.path.exists(p) for p in rutas.values()))
+
+with tempfile.TemporaryDirectory() as tmp:
+    rutas = escribir_ciclo(tmp)
+    dpc.procesar_ciclo(rutas, {"comprimir": False, "suma": False, "jpg": False})
+    nombres = sorted(os.listdir(tmp))
+    with tifffile.TiffFile(os.path.join(tmp, nombres[0])) as t:
+        comp = t.pages[0].compression
+    check("comprimir=False y suma=False: solo los 2 DPC, sin comprimir",
+          len(nombres) == 2 and int(comp) == 1, f"{nombres} {comp}")
 
 with tempfile.TemporaryDirectory() as tmp:
     rutas = escribir_ciclo(tmp, meta={})        # sin optica: la fase no se puede
@@ -229,22 +275,27 @@ carpeta, archivos, enviados = correr({"borrar_crudas": True})
 fotos = [a for a in archivos if a.startswith("cam")]
 crudas = [a for a in fotos if a.endswith(("_L.tif", "_R.tif", "_T.tif", "_B.tif"))]
 ciclos = len([a for a in fotos if a.startswith("cam0/") and a.endswith("_dpcLR.tif")])
-check("3 ciclos, dos camaras, cada uno con dpcLR+dpcTB+jpg",
-      ciclos == 3 and len(fotos) == 3 * 2 * 3, f"{len(fotos)} archivos")
+check("3 ciclos, dos camaras, cada uno con dpcLR+dpcTB+suma+jpg",
+      ciclos == 3 and len(fotos) == 3 * 2 * 4, f"{len(fotos)} archivos")
 check("no queda ninguna cruda", not crudas, str(crudas[:2]))
 check("a la PC no se mando ninguna cruda (ya no existirian)",
       not any(n.endswith(("_L.tif", "_R.tif", "_T.tif", "_B.tif")) for n in enviados))
-check("a la PC se mandaron los DPC", sum(n.endswith("_dpcLR.tif") for n in enviados) == 6)
+check("a la PC se mandaron los DPC y la suma", sum(n.endswith("_dpcLR.tif") for n in enviados) == 6
+      and sum(n.endswith("_suma.tif") for n in enviados) == 6)
 meta = json.loads((carpeta / "experimento.json").read_text())
 check("experimento.json dice que se proceso",
       meta.get("dpc_procesado", {}).get("borrar_crudas") is True)
+check("experimento.json dice que archivos deja cada ciclo y como leerlos",
+      meta["dpc_procesado"].get("sufijos") == ["_dpcLR", "_dpcTB", "_suma"]
+      and meta["dpc_procesado"].get("valor_dpc") == "(pixel - 32768) / 4096", str(meta["dpc_procesado"]))
 leeme = (carpeta / "LEEME.txt").read_text()
 check("LEEME explica los archivos y la formula",
-      "_dpcLR.tif" in leeme and "32768" in leeme and "se borraron" in leeme)
+      "_dpcLR.tif" in leeme and "(píxel - 32768) / 4096" in leeme and "_suma.tif" in leeme
+      and "se borraron" in leeme)
 log = (carpeta / "timelapse.log").read_text()
 check("el log registra cada ciclo procesado", log.count("crudas borradas") == 6)
 check("la galeria cuenta los TIFF que quedan",
-      Experimentos(raiz=carpeta.parent).info(carpeta)["n_fotos"] == 12)
+      Experimentos(raiz=carpeta.parent).info(carpeta)["n_fotos"] == 18)
 
 carpeta, archivos, enviados = correr({"borrar_crudas": False, "jpg": False}, camaras=(0,))
 crudas = [a for a in archivos if a.endswith(("_L.tif", "_R.tif", "_T.tif", "_B.tif"))]

@@ -126,8 +126,12 @@ def escribir_leeme(carpeta, datos):
                 "                   El relieve se calculó al terminar cada ciclo:",
                 "                     _dpcLR.tif  izquierda-derecha, (L-R)/(L+R)",
                 "                     _dpcTB.tif  arriba-abajo, (T-B)/(T+B)",
-                "                     valor = (píxel - 32768) / 32767, de -1 a 1 (gris medio = 0)",
+                "                     valor = " + dpc.get("valor_dpc", "(pixel - 32768) / 32767").replace("pixel", "píxel")
+                + ", de -1 a 1 (gris medio = 0)",
             ]
+            if dpc.get("suma"):
+                lineas += ["                     _suma.tif   foto normal (campo claro): promedio de las 4,",
+                           "                                 a menor resolución (la escala en micras ya viene corregida)"]
             if dpc.get("fase"):
                 lineas += ["                     _fase.tif   fase, radianes = (píxel - 32768) * 0.0001",
                            "                                 (en prueba: sirve para ver, no para medir)"]

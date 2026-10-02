@@ -33,6 +33,7 @@ from core.experimentos import Experimentos, ID_RE, LEGADO_RE, BYTES_POR_FOTO
 from core import experimentos as exp_mod
 from core import marca_agua
 from core import metadatos as metadatos_mod
+from core import dpc
 from core.optica import Optica, OBJETIVOS
 from core.actualizar import Actualizador, ErrorActualizar, reiniciar
 
@@ -185,10 +186,12 @@ class TimelapseReq(BaseModel):
     # en paralelo con el envio a la PC.
     respaldar_nas: bool = False
     # Solo en modo dpc (core/dpc.py): al terminar cada ciclo calcular el
-    # DPC (dos TIFF de 16 bits sin compresion) y borrar las 4 crudas, que
-    # son 64 MB por camara y por ciclo. Opcional: fase y vista JPEG.
+    # DPC (dos TIFF de 16 bits comprimidos) y borrar las 4 crudas, que
+    # son 64 MB por camara y por ciclo. Opcional: campo claro reducido,
+    # fase y vista JPEG.
     dpc_procesar: bool = True
     dpc_borrar_crudas: bool = True
+    dpc_suma: bool = True
     dpc_fase: bool = False
     dpc_jpg: bool = True
 
@@ -819,18 +822,16 @@ def create_app(camera, illuminations, timelapse, motores=None,
     def _dpc_opts(req):
         if req.modo != "dpc" or not req.dpc_procesar:
             return None
-        return {"borrar_crudas": req.dpc_borrar_crudas,
+        return {"borrar_crudas": req.dpc_borrar_crudas, "suma": req.dpc_suma,
                 "fase": req.dpc_fase, "jpg": req.dpc_jpg}
 
-    def _fotos_por_ciclo(req):
-        """TIFF de 16 MB que quedan en disco por camara y por ciclo."""
+    def _bytes_por_ciclo(req):
+        """Lo que queda en disco por camara y por ciclo (igual que
+        tlBytesPorCiclo en index_uiux.html)."""
         opts = _dpc_opts(req)
         if opts is None:
-            return len(MODOS.get(req.modo, [1]))
-        # dpcLR + dpcTB (+ fase); el JPEG (~1 MB) se redondea a uno mas
-        # cada 16 ciclos, despreciable. Si no se borran, suman las 4 crudas.
-        return (2 + int(opts["fase"])
-                + (0 if opts["borrar_crudas"] else len(MODOS["dpc"])))
+            return len(MODOS.get(req.modo, [1])) * BYTES_POR_FOTO
+        return dpc.bytes_por_ciclo(opts)
 
     @app.post("/timelapse/start")
     def start_timelapse(req: TimelapseReq):
@@ -842,11 +843,9 @@ def create_app(camera, illuminations, timelapse, motores=None,
             if d is None:
                 return {"error": "La memoria USB elegida no esta disponible "
                         "o es de solo lectura"}
-            # Estimacion grosera de espacio: ~16 MB por TIFF de 16 bits a
-            # 3280x2464. Avisar antes de empezar, no a mitad de la noche.
-            n_fotos = _fotos_por_ciclo(req) * len(req.camaras)
+            # Avisar antes de empezar, no a mitad de la noche.
             ciclos = max(1, req.duration // max(1, req.interval))
-            necesario = ciclos * n_fotos * 16e6
+            necesario = ciclos * len(req.camaras) * _bytes_por_ciclo(req)
             if d.get("libre_bytes") is not None and necesario > d["libre_bytes"]:
                 return {"error": f"La memoria no alcanza: el timelapse ocupa "
                         f"~{necesario / 1e9:.1f} GB y hay "
@@ -855,9 +854,8 @@ def create_app(camera, illuminations, timelapse, motores=None,
         elif req.destino != "local":
             return {"error": f"destino invalido: {req.destino}"}
         else:
-            n_fotos = _fotos_por_ciclo(req) * len(req.camaras)
             ciclos = max(1, req.duration // max(1, req.interval))
-            necesario = ciclos * n_fotos * BYTES_POR_FOTO
+            necesario = ciclos * len(req.camaras) * _bytes_por_ciclo(req)
             libre = experimentos.espacio()["libre_bytes"]
             if necesario > libre * 0.95:
                 return {"error": f"No alcanza el espacio en la Raspberry: el timelapse "

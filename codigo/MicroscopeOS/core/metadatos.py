@@ -51,15 +51,20 @@ def _texto_info(meta, prefijo=""):
     return lineas
 
 
-def escribir(ruta, imagen, meta=None):
-    """Guarda `imagen` (uint16 2D) en `ruta` con los metadatos."""
+def escribir(ruta, imagen, meta=None, comprimir=False):
+    """Guarda `imagen` (uint16 2D) en `ruta` con los metadatos.
+
+    comprimir: deflate con predictor horizontal, sin perdida. Lo abren
+    Fiji/ImageJ y tifffile sin imagecodecs. Las crudas de la camara se
+    guardan sin comprimir (escribirlas tiene que ser instantaneo); lo que
+    se calcula despues, en un hilo aparte, si se comprime."""
     meta = dict(meta or {})
     meta.setdefault("software", SOFTWARE)
     meta.setdefault("fecha_hora", datetime.now().isoformat(timespec="seconds"))
     umpx = (meta.get("optica") or {}).get("um_por_pixel")
 
     ij = {"Info": "\n".join(_texto_info(meta))}
-    kw = {}
+    kw = {"compression": "zlib", "predictor": True} if comprimir else {}
     if umpx:
         ij["unit"] = "um"
         kw["resolution"] = (1.0 / umpx, 1.0 / umpx)

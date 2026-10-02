@@ -7,24 +7,36 @@ cada ciclo se calcula el DPC, se comprueba que quedo bien escrito en disco
 y recien entonces se borran las crudas (si se pidio).
 
 Lo que se guarda, por camara y por ciclo (mismo nombre que las crudas,
-con otro sufijo):
+con otro sufijo). Tamanos medidos con una captura real de cam0
+(3280x2464, 2026-10-01):
 
-    ..._dpcLR.tif   DPC izquierda-derecha  (L-R)/(L+R)      16 bits, sin compresion
-    ..._dpcTB.tif   DPC arriba-abajo       (T-B)/(T+B)      16 bits, sin compresion
-    ..._fase.tif    fase en radianes (opcional)             16 bits, sin compresion
-    ..._dpc.jpg     vista previa en color de los dos ejes (opcional)
+    ..._dpcLR.tif   DPC izquierda-derecha  (L-R)/(L+R)      ~10.6 MB
+    ..._dpcTB.tif   DPC arriba-abajo       (T-B)/(T+B)      ~10.6 MB
+    ..._suma.tif    campo claro (L+R+T+B)/4, a 1640 px      ~2.8 MB
+    ..._fase.tif    fase en radianes (opcional)             ~16 MB
+    ..._dpc.jpg     vista previa en color de los dos ejes   ~1 MB (opcional)
+
+En total ~25 MB contra 65 MB de las 4 crudas. La suma es lo unico que no
+se puede volver a sacar del DPC (el cociente descarta el brillo): es la
+foto "normal" del campo, y sirve para ver burbujas, desenfoque o una luz
+que falla. La fase, en cambio, sale entera de dpcLR y dpcTB, asi que la
+PC la puede calcular despues con la calibracion que haga falta.
 
 Formato de los TIFF: uint16 con el cero en 32768, porque el formato ImageJ
 (el que usa core/metadatos.py para que Fiji abra la escala sola) no admite
-enteros con signo. Para volver al valor fisico:
+enteros con signo. Comprimidos sin perdida (deflate con predictor, que
+Fiji abre). Para volver al valor fisico:
 
-    dpc  = (pixel - 32768) / 32767           -> rango [-1, 1]
+    dpc  = (pixel - 32768) / 4096            -> rango [-1, 1]
     fase = (pixel - 32768) * 1e-4            -> radianes, rango +-3.27
 
-Un float32 ocuparia el doble (32 MB) y dos de ellos pesarian lo mismo que
-las 4 crudas; 16 bits sobran para una senal que sale de un sensor de 10.
-La formula queda escrita tambien dentro de cada TIFF (metadatos, clave
-"dpc" o "fase").
+Por que 1/4096 y no 1/32767: el ruido de cada pixel del DPC es ~0.008
+(medido en los huecos de la muestra de cam0), o sea ~33 cuentas con este
+paso. Cuantizar a 1/4096 suma un error del 1 % de ese ruido, y los bits
+de mas que guardaba 1/32767 eran ruido que no se comprime: con 1/4096 el
+TIFF comprimido pesa 10.6 MB en vez de 13. La formula queda escrita
+dentro de cada TIFF (metadatos, clave "dpc" o "fase", con "cero" y
+"escala" para leerla sin parsear texto).
 
 DPC: cada imagen se divide primero por su propio fondo (una version muy
 suavizada de si misma). Sin eso la diferencia de brillo entre las dos
@@ -48,7 +60,7 @@ import numpy as np
 from core import metadatos
 
 CERO = 32768
-ESCALA_DPC = 1.0 / 32767        # valor DPC por cuenta
+ESCALA_DPC = 1.0 / 4096         # valor DPC por cuenta (ver arriba)
 ESCALA_FASE = 1e-4              # radianes por cuenta
 
 SUFIJOS_CRUDAS = ("_L", "_R", "_T", "_B")
@@ -71,6 +83,9 @@ OPCIONES = {
     "jpg": True,
     "jpg_ancho": 1640,          # 0 = resolucion completa
     "jpg_calidad": 90,
+    "suma": True,
+    "suma_ancho": 1640,         # 0 = resolucion completa
+    "comprimir": True,          # deflate sin perdida
     "sigma_fondo_px": 150,
     "regularizacion": 1e-2,
 }
@@ -103,6 +118,55 @@ def calcular_dpc(L, R, T, B, sigma_fondo_px=150):
     lr = (l - r) / np.maximum(l + r, 1e-6)
     tb = (t - b) / np.maximum(t + b, 1e-6)
     return np.clip(lr, -1, 1), np.clip(tb, -1, 1)
+
+
+def calcular_suma(L, R, T, B, ancho=0):
+    """Campo claro: el promedio de las 4 medias aperturas (juntas son la
+    apertura entera). Devuelve (uint16, factor de reduccion).
+
+    Se reduce con INTER_AREA, que promedia: a 1640 px cada pixel es la
+    media de 2x2, asi que no se pierde senal, solo detalle fino que el
+    DPC ya guarda a resolucion completa.
+    """
+    s = np.asarray(L, dtype=np.float32) + R
+    s += T
+    s += B
+    s *= 0.25
+    factor = 1.0
+    if ancho and s.shape[1] > ancho:
+        factor = s.shape[1] / ancho
+        alto = max(1, round(s.shape[0] / factor))
+        s = cv2.resize(s, (ancho, alto), interpolation=cv2.INTER_AREA)
+    return np.clip(np.rint(s), 0, 65535).astype(np.uint16), factor
+
+
+def salidas(opciones=None):
+    """Sufijos de los TIFF que deja cada ciclo. Van a experimento.json:
+    con las crudas borradas, es lo que la PC busca para saber que un
+    ciclo esta completo."""
+    op = dict(OPCIONES, **(opciones or {}))
+    return (["_dpcLR", "_dpcTB"] + (["_suma"] if op["suma"] else [])
+            + (["_fase"] if op["fase"] else []))
+
+
+def bytes_por_ciclo(opciones=None, forma=(2464, 3280)):
+    """Lo que ocupa en disco un ciclo de UNA camara, para avisar antes de
+    empezar si no alcanza el espacio. Con algo de margen sobre lo medido
+    (ver arriba): mejor sobrar que quedarse sin disco a mitad de la noche."""
+    op = dict(OPCIONES, **(opciones or {}))
+    crudo = forma[0] * forma[1] * 2
+    comp = 0.75 if op["comprimir"] else 1.0         # medido: 0.66 (DPC), 0.69 (suma)
+    total = 2 * crudo * comp
+    if op["suma"]:
+        lado = min(1.0, op["suma_ancho"] / forma[1]) if op["suma_ancho"] else 1.0
+        total += crudo * lado ** 2 * comp
+    if op["fase"]:
+        total += crudo
+    if op["jpg"]:
+        total += 1.5e6
+    if not op["borrar_crudas"]:
+        total += len(SUFIJOS_CRUDAS) * crudo
+    return int(total)
 
 
 def a_uint16(x, escala):
@@ -219,13 +283,13 @@ def modelo_fase(forma, meta):
 
 # ---------------------------------------------------------------- ciclo
 
-def _escribir_verificado(ruta, img, meta):
+def _escribir_verificado(ruta, img, meta, comprimir=False):
     """Escribe el TIFF y lo vuelve a leer. Solo si lo leido es identico a
     lo calculado se considera guardado: es lo que autoriza a borrar las
     crudas."""
     import tifffile
     tmp = ruta + ".parcial"
-    metadatos.escribir(tmp, img, meta)
+    metadatos.escribir(tmp, img, meta, comprimir=comprimir)
     leido = tifffile.imread(tmp)
     if leido.shape != img.shape or leido.dtype != img.dtype or not np.array_equal(leido, img):
         os.remove(tmp)
@@ -251,6 +315,7 @@ def procesar_ciclo(rutas, opciones=None):
     meta = metadatos.leer(rutas["_L"])
     imgs = [tifffile.imread(rutas[s]) for s in SUFIJOS_CRUDAS]
     lr, tb = calcular_dpc(*imgs, sigma_fondo_px=op["sigma_fondo_px"])
+    suma = calcular_suma(*imgs, ancho=op["suma_ancho"]) if op["suma"] else None
     del imgs
 
     base = rutas["_L"][:-len("_L.tif")]
@@ -260,16 +325,34 @@ def procesar_ciclo(rutas, opciones=None):
         meta["iluminacion"]["nombre"] = "Relieve DPC calculado de 4 capturas"
     origen = [os.path.basename(rutas[s]) for s in SUFIJOS_CRUDAS]
 
+    comp = bool(op["comprimir"])
     archivos = []
     for eje, datos in (("LR", lr), ("TB", tb)):
         m = dict(meta, dpc={
             "eje": eje,
             "formula": "(L-R)/(L+R)" if eje == "LR" else "(T-B)/(T+B)",
-            "valor": f"(pixel - {CERO}) / 32767",
+            "valor": f"(pixel - {CERO}) / {round(1 / ESCALA_DPC)}",
+            "cero": CERO, "escala": ESCALA_DPC,
             "sigma_fondo_px": op["sigma_fondo_px"],
             "de": origen})
         archivos.append(_escribir_verificado(
-            f"{base}_dpc{eje}.tif", a_uint16(datos, ESCALA_DPC), m))
+            f"{base}_dpc{eje}.tif", a_uint16(datos, ESCALA_DPC), m, comp))
+
+    if suma is not None:
+        img, factor = suma
+        m = dict(meta, suma={
+            "formula": "(L+R+T+B)/4",
+            "reduccion": round(factor, 4),
+            "de": origen})
+        m["iluminacion"] = dict(meta.get("iluminacion") or {},
+                                nombre="Campo claro (suma de las 4 capturas DPC)")
+        if (meta.get("optica") or {}).get("um_por_pixel"):
+            # La foto reducida tiene pixeles mas grandes: que Fiji y la
+            # PC midan bien en micras.
+            m["optica"] = dict(meta["optica"],
+                               um_por_pixel=meta["optica"]["um_por_pixel"] * factor)
+        archivos.append(_escribir_verificado(f"{base}_suma.tif", img, m, comp))
+        del suma, img
 
     info = {}
     if op["fase"]:
@@ -278,13 +361,14 @@ def procesar_ciclo(rutas, opciones=None):
         m = dict(meta, fase={
             "unidad": "rad",
             "valor": f"(pixel - {CERO}) * {ESCALA_FASE}",
+            "cero": CERO, "escala": ESCALA_FASE,
             "metodo": "Tikhonov, objeto debil (Tian & Waller 2015)",
             "regularizacion": op["regularizacion"],
             "matriz_led": MATRIZ, **info,
             "aviso": "util para ver y segmentar; radianes absolutos no calibrados",
             "de": origen})
         archivos.append(_escribir_verificado(
-            f"{base}_fase.tif", a_uint16(fase, ESCALA_FASE), m))
+            f"{base}_fase.tif", a_uint16(fase, ESCALA_FASE), m, comp))
         info["fase_p99_rad"] = round(float(np.percentile(fase[::4, ::4], 99)), 3)
         del fase
 

@@ -309,16 +309,22 @@ def gb(cuerpo):
     return float(m.group(1)) if m else None
 crudas, por_defecto = gb(dict(largo, dpc_procesar=False)), gb(largo)
 con_fase = gb(dict(largo, dpc_fase=True))
-check("por defecto (DPC y borrar) ocupa la mitad que las 4 crudas",
-      crudas and por_defecto and abs(por_defecto / crudas - 0.5) < 0.01, f"{por_defecto} vs {crudas} GB")
-check("con fase, 3/4", con_fase and abs(con_fase / crudas - 0.75) < 0.01, f"{con_fase} GB")
+from core import dpc as dpc_mod
+foto = 3280 * 2464 * 2
+check("por defecto (DPC + suma, borrando) ocupa menos de la mitad que las 4 crudas",
+      crudas and por_defecto and por_defecto / crudas < 0.5
+      and abs(por_defecto / crudas - dpc_mod.bytes_por_ciclo() / (4 * foto)) < 0.01,
+      f"{por_defecto} vs {crudas} GB")
+check("con fase, una foto de 16 MB mas", con_fase and abs((con_fase - por_defecto) / crudas - 0.25) < 0.01,
+      f"{con_fase} GB")
 check("sin borrar, suma las crudas",
-      abs(gb(dict(largo, dpc_borrar_crudas=False)) / crudas - 1.5) < 0.01)
+      abs((gb(dict(largo, dpc_borrar_crudas=False)) - por_defecto) / crudas - 1) < 0.01)
+check("sin la suma ocupa menos", gb(dict(largo, dpc_suma=False)) < por_defecto)
 r = cl.post("/timelapse/start", json={"modo": "dpc", "interval": 600, "duration": 1,
                                       "camaras": [0], "dpc_fase": True}).json()
 tl.stop()
 check("la API pasa las opciones al timelapse",
-      r.get("dpc") == {"borrar_crudas": True, "fase": True, "jpg": True}, r)
+      r.get("dpc") == {"borrar_crudas": True, "suma": True, "fase": True, "jpg": True}, r)
 r = cl.post("/timelapse/start", json={"modo": "blanco", "interval": 600, "duration": 1,
                                       "camaras": [0]}).json()
 tl.stop()
