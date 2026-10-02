@@ -22,6 +22,8 @@ import numpy as np
 import cv2
 import tifffile
 
+from core import metadatos
+
 # Resolucion nativa del IMX219.
 STILL_SIZE = (3280, 2464)
 PREVIEW_SIZE = (640, 480)
@@ -56,6 +58,9 @@ class CameraController:
 
         self.preview_cam = None              # compat: ultima camara activada
         self._preview_cams = set()           # camaras en vivo AHORA (puede haber 2)
+        # core.metadatos.Contexto: si esta puesto, cada foto se guarda con
+        # sus metadatos adentro (objetivo, escala, luz, foco...).
+        self.metadatos = None
 
     # =============================
     # CICLO DE VIDA DE LAS INSTANCIAS
@@ -286,8 +291,13 @@ class CameraController:
     # =============================
     # CAPTURE (debayer a gris 16-bit)
     # =============================
-    def capture_image(self, camera_num, folder="captures", filename=None):
+    def capture_image(self, camera_num, folder="captures", filename=None, meta=None):
+        """meta: datos extra para los metadatos de esta foto (experimento,
+        ciclo, canal). La luz y el resto los junta self.metadatos AHORA,
+        antes de disparar, que es cuando valen."""
         os.makedirs(folder, exist_ok=True)
+        info = (self.metadatos.para(camera_num, meta)
+                if self.metadatos is not None else None)
 
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -321,11 +331,14 @@ class CameraController:
         # daba imagen correcta; con el ISP nuevo hay que reconfirmar el
         # orden efectivo del patron Bayer antes de fiarse del resultado.
         gray = cv2.cvtColor(raw16, cv2.COLOR_BayerRG2GRAY)
-        tifffile.imwrite(filename, gray)
+        if info is not None:
+            metadatos.escribir(filename, gray, info)
+        else:
+            tifffile.imwrite(filename, gray)
 
         return filename
 
-    def capture_both(self, folder="captures", filenames=None, camera_nums=None):
+    def capture_both(self, folder="captures", filenames=None, camera_nums=None, meta=None):
         """Captura de las dos camaras EN PARALELO.
 
         Solo es posible en Pi 5: con el mux de Pi 4 las capturas eran
@@ -360,7 +373,8 @@ class CameraController:
         resultados = {}
         with ThreadPoolExecutor(max_workers=len(camera_nums)) as pool:
             futuros = {
-                n: pool.submit(self.capture_image, n, folder, filenames[n])
+                n: pool.submit(self.capture_image, n, os.path.dirname(filenames[n]) or folder,
+                               filenames[n], meta)
                 for n in camera_nums
             }
             for n, fut in futuros.items():

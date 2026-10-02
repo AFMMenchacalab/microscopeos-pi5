@@ -12,6 +12,9 @@ from core.analisis import Contador, ContadorEnVivo
 from core.usb import MonitorUSB
 from core.envio import EnviadorPC
 from core.respaldo_nas import RespaldoNAS
+from core.experimentos import Experimentos
+from core.optica import Optica
+from core.metadatos import Contexto
 from server.api import create_app
 import uvicorn
 
@@ -92,12 +95,29 @@ enviador = EnviadorPC()
 # Respaldo en el NAS: cola propia, en paralelo; cede el turno a la PC.
 respaldo_nas = RespaldoNAS(ceder_a=enviador)
 
+# Donde se guardan las fotos (datos/<fecha>_<nombre>/) y la optica de
+# cada camara (objetivo y micras por pixel, profiles/optica.json).
+experimentos = Experimentos()
+optica = Optica()
+
+# Cada foto lleva adentro objetivo, escala, luz, foco y temperatura.
+try:
+    from temperature_controller import temperature_controller as _tc
+    _temperatura = _tc.status
+except Exception:
+    _temperatura = None
+camera.metadatos = Contexto(optica=optica, illuminations=illuminations,
+                            motores=motores, camera=camera,
+                            temperatura=_temperatura)
+
 timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus,
                              contador=contador, enviador=enviador,
-                             respaldo_nas=respaldo_nas)
+                             respaldo_nas=respaldo_nas,
+                             experimentos=experimentos)
 
 app = create_app(camera, illuminations, timelapse,
                  motores=motores, autofocus=autofocus, conteo=conteo,
-                 usb=usb, enviador=enviador, respaldo_nas=respaldo_nas)
+                 usb=usb, enviador=enviador, respaldo_nas=respaldo_nas,
+                 experimentos=experimentos, optica=optica)
 print("Servidor en http://0.0.0.0:8000")
 uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

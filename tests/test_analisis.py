@@ -503,7 +503,7 @@ class CamaraSintetica:
     timelapse tenga algo real que leer."""
     def __init__(self):
         self.n = 0
-    def capture_image(self, camera_num, folder, filename):
+    def capture_image(self, camera_num, folder, filename, meta=None):
         os.makedirs(folder, exist_ok=True)
         # Poblacion creciente entre ciclos, para que la curva tenga
         # pendiente y el ajuste de crecimiento sea verificable.
@@ -539,7 +539,7 @@ try:
                 for c, r in guardadas.items()}
     # capture_image recibe el .tif; se reescribe la extension despues
     class CamaraPNG(CamaraSintetica):
-        def capture_image(self, camera_num, folder, filename):
+        def capture_image(self, camera_num, folder, filename, meta=None):
             return super().capture_image(camera_num, folder,
                                          filename.replace(".tif", ".png"))
     tl.camera = CamaraPNG()

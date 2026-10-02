@@ -228,8 +228,10 @@ class MonitorUSB:
         self._escanear()
         return {"status": "ok", "mensaje": "Ya se puede retirar la memoria"}
 
-    def copiar(self, origen, punto):
-        """Copia una carpeta de timelapse a la memoria, en segundo plano."""
+    def copiar(self, origen, punto, subcarpeta="MicroscopeOS"):
+        """Copia una carpeta de experimento a la memoria, en segundo plano,
+        dentro de <memoria>/<subcarpeta>/ (asi todo lo del microscopio
+        queda junto y no se mezcla con lo que ya habia en la memoria)."""
         if self.copia.get("activa"):
             return {"error": "ya hay una copia en curso"}
         d = self.punto_valido(punto)
@@ -241,7 +243,7 @@ class MonitorUSB:
         if d.get("libre_bytes") is not None and total > d["libre_bytes"]:
             return {"error": f"no alcanza el espacio: hacen falta "
                     f"{total / 1e9:.1f} GB y hay {d['libre_bytes'] / 1e9:.1f} GB"}
-        destino = Path(punto) / origen.name
+        destino = Path(punto) / subcarpeta / origen.name if subcarpeta else Path(punto) / origen.name
         self.copia = {"activa": True, "origen": str(origen),
                       "destino": str(destino), "copiados": 0,
                       "total": len(archivos), "bytes_total": total,

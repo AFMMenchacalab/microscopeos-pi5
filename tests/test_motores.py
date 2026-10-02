@@ -165,7 +165,7 @@ class CamaraDesenfocable:
             img = img + self._rng_ruido.normal(0, self.ruido, img.shape)
         return np.clip(img, 0, 255).astype(np.uint8)
 
-    def capture_image(self, camera_num, folder, filename):
+    def capture_image(self, camera_num, folder, filename, meta=None):
         os.makedirs(folder, exist_ok=True)
         open(filename, "wb").write(b"TIF")
         self.capturas.append((camera_num, os.path.basename(filename)))

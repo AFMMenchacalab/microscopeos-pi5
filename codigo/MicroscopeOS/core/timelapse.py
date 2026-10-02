@@ -4,6 +4,9 @@ import os
 import threading
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
+
+from core.experimentos import Experimentos, nombre_foto
 
 
 class TimelapseState(Enum):
@@ -36,8 +39,11 @@ DERIVA_MAXIMA_UM = 250.0
 class TimelapseManager:
 
     def __init__(self, camera, illuminations, autofocus=None, contador=None,
-                 enviador=None, respaldo_nas=None):
+                 enviador=None, respaldo_nas=None, experimentos=None):
         self.camera = camera
+        # Donde se crean las carpetas (core/experimentos.py). Sin uno
+        # explicito, datos/ en el directorio de trabajo.
+        self.experimentos = experimentos or Experimentos(raiz=Path("datos"))
         self.illuminations = illuminations
         # Instancia de core.autofocus.Autofocus, o None si no hay
         # motores de enfoque conectados. Opcional a proposito: el
@@ -308,11 +314,12 @@ class TimelapseManager:
                         time.sleep(stabilization_time)
 
                     filename = os.path.join(
-                        cam_folder, f"img_{ts}{sufijo}.tif")
+                        cam_folder, nombre_foto(ts, self.ciclo_actual, sufijo))
                     self.camera.capture_image(
                         camera_num=cam,
                         folder=cam_folder,
-                        filename=filename)
+                        filename=filename,
+                        meta=self._meta_foto(sufijo))
                     guardadas[cam][sufijo] = filename
 
                     self._log(f"  cam{cam}{sufijo}: OK")
@@ -351,13 +358,14 @@ class TimelapseManager:
 
                 filenames = {
                     cam: os.path.join(self.base_folder, f"cam{cam}",
-                                      f"img_{ts}{sufijo}.tif")
+                                      nombre_foto(ts, self.ciclo_actual, sufijo))
                     for cam in camaras
                 }
                 self.camera.capture_both(
                     folder=self.base_folder,
                     filenames=filenames,
-                    camera_nums=camaras)
+                    camera_nums=camaras,
+                    meta=self._meta_foto(sufijo))
 
                 for cam in camaras:
                     guardadas[cam][sufijo] = filenames[cam]
@@ -387,13 +395,21 @@ class TimelapseManager:
                 except Exception as e:
                     self._log(f"  {nombre}: no se pudo encolar {ruta} -> {e}")
 
+    def _meta_foto(self, sufijo):
+        """Lo que cada foto del timelapse agrega a sus metadatos."""
+        canales = {"_L": "izquierda", "_R": "derecha", "_T": "arriba", "_B": "abajo"}
+        meta = {"experimento": {"nombre": self.nombre_experimento,
+                                "id": os.path.basename(self.base_folder),
+                                "tipo": "timelapse", "ciclo": self.ciclo_actual}}
+        if sufijo:
+            meta["canal_dpc"] = canales.get(sufijo, sufijo)
+        return meta
+
     def _escribir_metadatos(self, modo, interval_seconds, duration_seconds,
                             camaras, nombre):
         """experimento.json: lo que la PC necesita para agrupar las fotos
         de un mismo ciclo (sufijos del modo) sin adivinar por el nombre."""
         meta = {
-            "nombre": nombre,
-            "inicio": datetime.now().isoformat(timespec="seconds"),
             "modo": modo,
             "sufijos": [s for s, _ in MODOS[modo]],
             "intervalo_s": interval_seconds,
@@ -404,10 +420,8 @@ class TimelapseManager:
             "color_dpc": next((getattr(l, "color_dpc", None) or "FFFFFF"
                                for l in self.illuminations.values() if l is not None), None),
         }
-        ruta = os.path.join(self.base_folder, "experimento.json")
-        with open(ruta, "w") as f:
-            json.dump(meta, f, indent=2, ensure_ascii=False)
-        return ruta
+        self.experimentos.actualizar(self.base_folder, **meta)
+        return os.path.join(self.base_folder, "experimento.json")
 
     def _run(self, modo, interval_seconds, duration_seconds,
              stabilization_time, camaras, simultaneo,
@@ -418,11 +432,13 @@ class TimelapseManager:
         self.state = TimelapseState.RUNNING
         patrones = MODOS[modo]
 
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # carpeta_raiz vacia = directorio de trabajo del servicio (lo de
-        # siempre); si no, p. ej. el punto de montaje de una memoria USB.
-        self.base_folder = os.path.join(carpeta_raiz or "", f"timelapse_{stamp}")
-        os.makedirs(self.base_folder, exist_ok=True)
+        # Carpeta del experimento: datos/AAAA-MM-DD_HHMM_<nombre>, o en
+        # la memoria USB (carpeta_raiz) bajo MicroscopeOS/.
+        raiz = os.path.join(carpeta_raiz, "MicroscopeOS") if carpeta_raiz else None
+        self.base_folder = str(self.experimentos.crear_timelapse(nombre, raiz=raiz))
+        self.nombre_experimento = self.experimentos.info(self.base_folder)["nombre"]
+        self.ciclo_actual = 0
+        self._detenido = False
         for cam in camaras:
             os.makedirs(os.path.join(self.base_folder, f"cam{cam}"), exist_ok=True)
         self._enviar(self._escribir_metadatos(modo, interval_seconds,
@@ -467,7 +483,8 @@ class TimelapseManager:
             if current_time >= next_capture_time:
                 ciclo += 1
                 self.ciclo_actual = ciclo
-                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                ahora = datetime.now()
+                ts = ahora.strftime("%Y%m%d_%H%M%S")
                 self._log(f"--- Ciclo {ciclo} ({ts}) ---")
 
                 # Registrar temperatura al inicio de cada ciclo
@@ -482,10 +499,10 @@ class TimelapseManager:
 
                 if simultaneo:
                     guardadas = self._capturar_simultaneo(
-                        patrones, camaras, ts, stabilization_time)
+                        patrones, camaras, ahora, stabilization_time)
                 else:
                     guardadas = self._capturar_secuencial(
-                        patrones, camaras, ts, stabilization_time)
+                        patrones, camaras, ahora, stabilization_time)
 
                 for cam, rutas in sorted(guardadas.items()):
                     for sufijo, _ in patrones:
@@ -510,7 +527,15 @@ class TimelapseManager:
         self._graficar_temperatura()
         if contar:
             self._resumir_analisis(interval_seconds)
-        for extra in ("temperatura.csv", "autofoco.csv", "conteo.csv"):
+        try:
+            self.experimentos.finalizar(
+                self.base_folder, fin=datetime.now().isoformat(timespec="seconds"),
+                estado="detenido antes de tiempo" if self._detenido else "completo",
+                ciclos=ciclo)
+        except Exception as e:
+            self._log(f"No se pudo cerrar experimento.json: {e}")
+        for extra in ("experimento.json", "LEEME.txt", "temperatura.csv",
+                      "autofoco.csv", "conteo.csv"):
             ruta = os.path.join(self.base_folder, extra)
             if os.path.exists(ruta):
                 self._enviar(ruta)
@@ -547,6 +572,7 @@ class TimelapseManager:
 
     def stop(self):
         if self.state == TimelapseState.RUNNING:
+            self._detenido = True
             self.state = TimelapseState.STOPPED
             if self.thread is not None:
                 self.thread.join()

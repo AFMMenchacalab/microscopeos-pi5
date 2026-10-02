@@ -29,6 +29,11 @@ from temperature_controller import temperature_controller
 from core.timelapse import MODOS
 from core.profile_manager import ProfileManager
 from core.config import SystemConfig, CameraSettings, TimelapseSettings
+from core.experimentos import Experimentos, ID_RE, LEGADO_RE, BYTES_POR_FOTO
+from core import experimentos as exp_mod
+from core import marca_agua
+from core import metadatos as metadatos_mod
+from core.optica import Optica, OBJETIVOS
 
 # ===============================
 # Galeria de archivos: solo lectura, con nombres validados por regex
@@ -96,6 +101,32 @@ class LightReq(BaseModel):
     color_centro: str = "0000FF"
     color_anillo: str = "FF6A00"
     camaras: list = [0, 1]
+
+class NombreReq(BaseModel):
+    nombre: str
+
+class CodigoReq(BaseModel):
+    codigo: str
+
+class UsbPuntoReq(BaseModel):
+    punto: str
+
+class OpticaReq(BaseModel):
+    camara: int = 0
+    objetivo: str | None = None
+    aumento: float | None = None
+    na: float | None = None
+    aumento_adicional: float | None = None
+    pixel_um: float | None = None
+    um_por_pixel_medido: float | None = None
+    borrar_medido: bool = False
+
+class MarcaReq(BaseModel):
+    config: dict | None = None
+    preset: str | None = None
+
+class LogoReq(BaseModel):
+    png_base64: str
 
 class LightOffReq(BaseModel):
     camaras: list | None = None   # None = todas
@@ -290,13 +321,15 @@ class CalibrarDpcReq(BaseModel):
 
 def create_app(camera, illuminations, timelapse, motores=None,
                autofocus=None, motor=None, conteo=None, usb=None,
-               enviador=None, respaldo_nas=None):
+               enviador=None, respaldo_nas=None, experimentos=None, optica=None):
     """motores: {numero_de_camara: FocusMotorController}. `motor` se
     acepta todavia como un solo eje suelto (compatibilidad con la
     version de un motor) y se mapea a la camara 0.
 
     conteo: core.analisis.ContadorEnVivo, o None para arrancar sin
     conteo de celulas."""
+    experimentos = experimentos or Experimentos()
+    optica = optica or Optica()
 
     app = FastAPI()
     if motores is None:
@@ -518,60 +551,78 @@ def create_app(camera, illuminations, timelapse, motores=None,
     # {modo}: FastAPI prueba las rutas en orden de declaracion, y con el
     # orden invertido "both" se intentaba parsear como camera_num:int y
     # tiraba 422 antes de llegar siquiera a esta ruta.
+    def _captura_meta(nombre_exp, carpeta, sufijo):
+        canales = {"_L": "izquierda", "_R": "derecha", "_T": "arriba", "_B": "abajo"}
+        m = {"experimento": {"nombre": nombre_exp, "id": carpeta.name, "tipo": "foto"}}
+        if sufijo:
+            m["canal_dpc"] = canales.get(sufijo, sufijo)
+        return m
+
     @app.post("/capture/both/{modo}")
-    def capture_both(modo: str):
+    def capture_both(modo: str, nombre: str = ""):
         """Captura las dos camaras en paralelo (Pi 5, sin mux).
 
         Enciende AMBAS matrices a la vez. Ver TODO_HW.md (prioridad 2)
         antes de usarlo con datos que importen.
+
+        Las fotos van al experimento de hoy con ese nombre (o a «Fotos
+        sueltas»), y al terminar la luz vuelve a como estaba.
         """
         if timelapse.is_running():
             return {"error": "Timelapse en curso"}
         from datetime import datetime
-        folder = "capturas_unicas"
-        os.makedirs(folder, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        carpeta = experimentos.carpeta_fotos(nombre)
+        nombre_exp = experimentos.info(carpeta)["nombre"]
+        ahora = datetime.now()
         patrones = MODOS.get(modo, MODOS["blanco"])
         cams = sorted(illuminations.keys())
+        previos = {c: estado["luz"].get(c) for c in cams}
         guardados = []
-        for sufijo, metodo in patrones:
+        try:
+            for sufijo, metodo in patrones:
+                with luz_lock:
+                    for cam in cams:
+                        luz = illuminations.get(cam)
+                        if luz:
+                            getattr(luz, metodo)()
+                time.sleep(0.3)
+                res = camera.capture_both(
+                    folder=str(carpeta),
+                    filenames={c: str(carpeta / f"cam{c}" / exp_mod.nombre_foto(ahora, sufijo=sufijo))
+                               for c in cams},
+                    camera_nums=cams, meta=_captura_meta(nombre_exp, carpeta, sufijo))
+                guardados += [str(Path(v).relative_to(carpeta)) for v in res.values()]
+        finally:
             for cam in cams:
-                luz = illuminations.get(cam)
-                if luz:
-                    getattr(luz, metodo)()
-            time.sleep(0.3)
-            res = camera.capture_both(
-                folder=folder,
-                filenames={c: f"{folder}/cam{c}_{ts}{sufijo}.tif" for c in cams},
-                camera_nums=cams)
-            guardados += [os.path.basename(v) for v in res.values()]
-            for cam in cams:
-                luz = illuminations.get(cam)
-                if luz:
-                    luz.off()
-        return {"saved": guardados}
+                _luz_restaurar(cam, previos[cam])
+        return {"saved": guardados, "experimento": carpeta.name, "nombre": nombre_exp}
 
     @app.post("/capture/{camera_num}/{modo}")
-    def capture(camera_num: int, modo: str):
+    def capture(camera_num: int, modo: str, nombre: str = ""):
         if timelapse.is_running():
             return {"error": "Timelapse en curso"}
         from datetime import datetime
-        folder = "capturas_unicas"
-        os.makedirs(folder, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        carpeta = experimentos.carpeta_fotos(nombre)
+        nombre_exp = experimentos.info(carpeta)["nombre"]
+        ahora = datetime.now()
         guardados = []
         patrones = MODOS.get(modo, MODOS["blanco"])
         luz = illuminations.get(camera_num)
-        for sufijo, metodo in patrones:
-            if luz:
-                getattr(luz, metodo)()
-                time.sleep(0.3)
-            fn = f"{folder}/cam{camera_num}_{ts}{sufijo}.tif"
-            camera.capture_image(camera_num=camera_num, folder=folder, filename=fn)
-            guardados.append(os.path.basename(fn))
-        if luz:
-            luz.off()
-        return {"saved": guardados}
+        previo = estado["luz"].get(camera_num)
+        try:
+            for sufijo, metodo in patrones:
+                if luz:
+                    with luz_lock:
+                        getattr(luz, metodo)()
+                    time.sleep(0.3)
+                fn = carpeta / f"cam{camera_num}" / exp_mod.nombre_foto(ahora, sufijo=sufijo)
+                camera.capture_image(camera_num=camera_num, folder=str(fn.parent),
+                                     filename=str(fn),
+                                     meta=_captura_meta(nombre_exp, carpeta, sufijo))
+                guardados.append(str(fn.relative_to(carpeta)))
+        finally:
+            _luz_restaurar(camera_num, previo)
+        return {"saved": guardados, "experimento": carpeta.name, "nombre": nombre_exp}
 
     # ===============================
     # Exposicion / Brillo
@@ -612,6 +663,16 @@ def create_app(camera, illuminations, timelapse, motores=None,
             carpeta_raiz = d["punto"]
         elif req.destino != "local":
             return {"error": f"destino invalido: {req.destino}"}
+        else:
+            n_fotos = len(MODOS.get(req.modo, [1])) * len(req.camaras)
+            ciclos = max(1, req.duration // max(1, req.interval))
+            necesario = ciclos * n_fotos * BYTES_POR_FOTO
+            libre = experimentos.espacio()["libre_bytes"]
+            if necesario > libre * 0.95:
+                return {"error": f"No alcanza el espacio en la Raspberry: el timelapse "
+                        f"ocupa ~{necesario / 1e9:.1f} GB y hay {libre / 1e9:.1f} GB libres. "
+                        f"Borra experimentos viejos, guárdalo en una memoria USB, o toma "
+                        f"fotos menos seguido."}
         if req.enviar_pc and (enviador is None or not enviador.url):
             return {"error": "Falta configurar la direccion de la PC "
                     "(panel 'Envío a computadora')"}
@@ -1032,10 +1093,8 @@ def create_app(camera, illuminations, timelapse, motores=None,
     def usb_copiar(req: UsbCopiarReq):
         if usb is None:
             return {"error": "monitor USB no disponible"}
-        if not _FOLDER_RE.match(req.carpeta):
-            return {"error": "Nombre de carpeta invalido"}
-        origen = (BASE_DIR / req.carpeta).resolve()
-        if origen.parent != BASE_DIR.resolve() or not origen.is_dir():
+        origen = experimentos.resolver(req.carpeta)
+        if origen is None:
             return {"error": f"No existe {req.carpeta}"}
         if timelapse.is_running() and Path(str(timelapse.base_folder)).resolve() == origen:
             return {"error": "Ese timelapse todavia esta corriendo"}
@@ -1078,16 +1137,13 @@ def create_app(camera, illuminations, timelapse, motores=None,
         que la PC ya tiene con el mismo hash no se vuelve a mandar."""
         if enviador is None:
             return {"error": "envio no disponible"}
-        if _FOLDER_RE.match(req.carpeta):
-            carpeta = (BASE_DIR / req.carpeta).resolve()
-            if carpeta.parent != BASE_DIR.resolve():
-                return {"error": "Carpeta invalida"}
-        else:
+        carpeta = experimentos.resolver(req.carpeta)
+        if carpeta is None:
             carpeta = Path(req.carpeta).resolve()
-            en_usb = usb is not None and any(
-                d.get("punto") and carpeta.parent == Path(d["punto"]).resolve()
-                for d in usb.estado()["dispositivos"])
-            if not (en_usb and _FOLDER_RE.match(carpeta.name)):
+            puntos = [Path(d["punto"]).resolve() for d in usb.estado()["dispositivos"]
+                      if d.get("punto")] if usb is not None else []
+            en_usb = any(carpeta.parent in (p, p / "MicroscopeOS") for p in puntos)
+            if not (en_usb and (ID_RE.match(carpeta.name) or LEGADO_RE.match(carpeta.name))):
                 return {"error": "Carpeta invalida"}
         if not carpeta.is_dir():
             return {"error": f"No existe {req.carpeta}"}
@@ -1269,6 +1325,280 @@ def create_app(camera, illuminations, timelapse, motores=None,
     # Interfaz
     # ===============================
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # ===============================
+    # Experimentos: galeria, descargas, renombrar, papelera
+    # (core/experimentos.py)
+    # ===============================
+    from starlette.background import BackgroundTask
+    import tempfile
+    import hashlib
+    import base64
+
+    MINIATURAS = experimentos.raiz / ".miniaturas"
+
+    def _en_curso():
+        if timelapse.is_running() and getattr(timelapse, "base_folder", None):
+            return Path(timelapse.base_folder).resolve()
+        return None
+
+    def _exp(ident):
+        c = experimentos.resolver(ident)
+        if c is None:
+            raise ValueError("Ese experimento ya no existe")
+        return c
+
+    def _miniatura(p, size):
+        """Miniatura JPEG con cache en disco: decodificar un TIFF de 16 MP
+        en la Pi tarda; la galeria pide muchas."""
+        st = p.stat()
+        clave = hashlib.sha1(f"{p}|{st.st_mtime_ns}|{st.st_size}|{size}".encode()).hexdigest()
+        cache = MINIATURAS / f"{clave}.jpg"
+        if cache.is_file():
+            return cache.read_bytes()
+        datos = _thumb_jpeg(p, size)
+        try:
+            MINIATURAS.mkdir(parents=True, exist_ok=True)
+            cache.write_bytes(datos)
+        except OSError:
+            pass
+        return datos
+
+    @app.get("/api/experimentos")
+    def exp_listar():
+        experimentos.vaciar_papelera()
+        en_curso = _en_curso()
+        lista = experimentos.listar()
+        for e in lista:
+            e["en_curso"] = bool(en_curso and en_curso.name == e["id"])
+        dispositivos = (usb.estado().get("dispositivos", []) if usb is not None else [])
+        return {"experimentos": lista, "espacio": experimentos.espacio(),
+                "usb": [{"punto": d["punto"], "etiqueta": d.get("etiqueta"),
+                         "libre_bytes": d.get("libre_bytes")}
+                        for d in dispositivos if d.get("montado") and d.get("escribible")]}
+
+    @app.get("/api/exp/{ident}")
+    def exp_detalle(ident: str):
+        try:
+            c = _exp(ident)
+        except ValueError as e:
+            return {"error": str(e)}
+        info = experimentos.info(c)
+        info["imagenes"] = experimentos.imagenes(c)
+        info["en_curso"] = c == _en_curso()
+        return info
+
+    @app.get("/api/exp/{ident}/mini/{rel:path}")
+    def exp_mini(ident: str, rel: str, size: int = 320):
+        p = experimentos.ruta_imagen(ident, rel)
+        if p is None:
+            return Response(status_code=404)
+        return Response(content=_miniatura(p, max(64, min(size, 1600))), media_type="image/jpeg",
+                        headers={"Cache-Control": "max-age=86400"})
+
+    @app.get("/api/exp/{ident}/original/{rel:path}")
+    def exp_original(ident: str, rel: str):
+        p = experimentos.ruta_imagen(ident, rel)
+        if p is None:
+            return Response(status_code=404)
+        nombre = f"{ident}_{rel.replace('/', '_')}"
+        return FileResponse(str(p), media_type="image/tiff", filename=nombre)
+
+    @app.get("/api/exp/{ident}/info/{rel:path}")
+    def exp_info_foto(ident: str, rel: str):
+        p = experimentos.ruta_imagen(ident, rel)
+        if p is None:
+            return {"error": "no existe"}
+        return {"metadatos": metadatos_mod.leer(p), "bytes": p.stat().st_size}
+
+    def _compartir_bytes(p, formato="jpg", ancho_max=None):
+        img = tifffile.imread(str(p))
+        meta = metadatos_mod.leer(p)
+        return marca_agua.exportar(img, meta, marca_agua.cargar(), formato, ancho_max)
+
+    @app.get("/api/exp/{ident}/compartir/{rel:path}")
+    def exp_compartir(ident: str, rel: str, formato: str = "jpg"):
+        """Copia 8 bits con la marca de agua configurada (el original no
+        se toca)."""
+        p = experimentos.ruta_imagen(ident, rel)
+        if p is None:
+            return Response(status_code=404)
+        formato = "png" if formato == "png" else "jpg"
+        try:
+            datos = _compartir_bytes(p, formato)
+        except Exception as e:
+            return Response(content=str(e), status_code=500)
+        nombre = f"{ident}_{Path(rel).stem}.{formato}"
+        return Response(content=datos, media_type="image/png" if formato == "png" else "image/jpeg",
+                        headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+    @app.get("/api/exp/{ident}/zip")
+    def exp_zip(ident: str, tipo: str = "originales"):
+        """Todo el experimento en un .zip, armado en un archivo temporal
+        (en memoria, uno grande se comia la RAM). tipo=compartir: JPG con
+        marca de agua en vez de los .tif."""
+        try:
+            c = _exp(ident)
+        except ValueError:
+            return Response(status_code=404)
+        fd, tmp = tempfile.mkstemp(suffix=".zip", dir=str(experimentos.raiz))
+        os.close(fd)
+        try:
+            if tipo == "compartir":
+                with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
+                    for rel in experimentos.imagenes(c):
+                        zf.writestr(f"{ident}/{Path(rel).with_suffix('.jpg')}",
+                                    _compartir_bytes(c / rel, "jpg"))
+                nombre = f"{ident}_para_compartir.zip"
+            else:
+                experimentos.zip(ident, tmp)
+                nombre = f"{ident}.zip"
+        except Exception as e:
+            os.unlink(tmp)
+            return Response(content=str(e), status_code=500)
+        return FileResponse(tmp, media_type="application/zip", filename=nombre,
+                            background=BackgroundTask(os.unlink, tmp))
+
+    @app.post("/api/exp/{ident}/renombrar")
+    def exp_renombrar(ident: str, req: NombreReq):
+        try:
+            c = _exp(ident)
+            if c == _en_curso():
+                return {"error": "No se puede renombrar mientras el timelapse está corriendo"}
+            return {"id": experimentos.renombrar(ident, req.nombre)}
+        except (ValueError, OSError) as e:
+            return {"error": str(e)}
+
+    @app.post("/api/exp/{ident}/borrar")
+    def exp_borrar(ident: str):
+        try:
+            c = _exp(ident)
+            if c == _en_curso():
+                return {"error": "No se puede borrar mientras el timelapse está corriendo"}
+            return {"codigo": experimentos.borrar(ident)}
+        except (ValueError, OSError) as e:
+            return {"error": str(e)}
+
+    @app.post("/api/papelera/restaurar")
+    def papelera_restaurar(req: CodigoReq):
+        try:
+            return {"id": experimentos.restaurar(req.codigo)}
+        except (ValueError, OSError) as e:
+            return {"error": str(e)}
+
+    @app.post("/api/exp/{ident}/usb")
+    def exp_a_usb(ident: str, req: UsbPuntoReq):
+        if usb is None:
+            return {"error": "No hay memorias USB disponibles"}
+        try:
+            c = _exp(ident)
+        except ValueError as e:
+            return {"error": str(e)}
+        if c == _en_curso():
+            return {"error": "Espera a que termine el timelapse para copiarlo"}
+        return usb.copiar(c, req.punto, subcarpeta="MicroscopeOS")
+
+    # ===============================
+    # Optica: objetivo y escala de cada camara (core/optica.py)
+    # ===============================
+    @app.get("/api/optica")
+    def optica_get():
+        return {"camaras": optica.todas(), "objetivos": OBJETIVOS}
+
+    @app.post("/api/optica")
+    def optica_set(req: OpticaReq):
+        cambios = {k: v for k, v in req.model_dump().items()
+                   if k not in ("camara", "borrar_medido") and v is not None}
+        if req.borrar_medido:
+            cambios["um_por_pixel_medido"] = None
+        try:
+            return {"camara": optica.cambiar(req.camara, cambios)}
+        except ValueError as e:
+            return {"error": str(e)}
+
+    # ===============================
+    # Marca de agua de las copias para compartir (core/marca_agua.py)
+    # ===============================
+    def _marca_estado():
+        cfg = marca_agua.cargar()
+        return {"config": cfg, "preset": marca_agua.preset_de(cfg),
+                "presets": list(marca_agua.PRESETS), "campos": marca_agua.CAMPOS,
+                "logo_propio": marca_agua.LOGO.is_file(),
+                "disponible": marca_agua.Image is not None}
+
+    @app.get("/api/marca")
+    def marca_get():
+        return _marca_estado()
+
+    @app.post("/api/marca")
+    def marca_set(req: MarcaReq):
+        cfg = marca_agua.cargar()
+        try:
+            if req.preset:
+                cfg = marca_agua.con_preset(cfg, req.preset)
+            if req.config:
+                c = dict(cfg)
+                c.update({k: v for k, v in req.config.items() if k != "campos"})
+                if "campos" in req.config:
+                    c["campos"] = dict(cfg["campos"], **req.config["campos"])
+                cfg = c
+            marca_agua.guardar(cfg)
+        except ValueError as e:
+            return {"error": str(e)}
+        return _marca_estado()
+
+    @app.get("/api/marca/vista")
+    def marca_vista(ancho: int = 900, t: str = ""):
+        """Vista previa con la ultima foto guardada (o una de ejemplo)."""
+        ultima = None
+        for e in experimentos.listar():
+            if e.get("portada"):
+                ultima = experimentos.ruta_imagen(e["id"], e["portada"])
+                if ultima:
+                    break
+        try:
+            if ultima is not None:
+                img, meta = tifffile.imread(str(ultima)), metadatos_mod.leer(ultima)
+            else:
+                img = marca_agua.muestra_sintetica()
+                meta = {"experimento": {"nombre": "Ejemplo"},
+                        "fecha_hora": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "optica": optica.de(0), "camara": {"numero": 0},
+                        "iluminacion": {"nombre": "Normal (campo claro)"}}
+            if not meta.get("optica"):
+                # foto de una version anterior, sin metadatos: se usa la
+                # optica actual de la camara 0 para poder previsualizar
+                meta["optica"] = optica.de(0)
+            datos = marca_agua.exportar(img, meta, marca_agua.cargar(), "jpg",
+                                        max(300, min(ancho, 1600)))
+        except Exception as e:
+            return Response(content=str(e), status_code=500)
+        return Response(content=datos, media_type="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/marca/logo")
+    def marca_logo(req: LogoReq):
+        """Logo propio: PNG en base64 (lo manda la pagina al elegir un archivo)."""
+        try:
+            datos = base64.b64decode(req.png_base64.split(",", 1)[-1], validate=True)
+            if len(datos) > 5_000_000:
+                return {"error": "El logo pesa demasiado (máximo 5 MB)"}
+            from PIL import Image as _I
+            im = _I.open(io.BytesIO(datos)).convert("RGBA")
+            im.thumbnail((1200, 1200))
+            marca_agua.LOGO.parent.mkdir(parents=True, exist_ok=True)
+            im.save(marca_agua.LOGO, "PNG")
+        except Exception as e:
+            return {"error": f"No es una imagen válida ({e})"}
+        return _marca_estado()
+
+    @app.post("/api/marca/logo/quitar")
+    def marca_logo_quitar():
+        try:
+            marca_agua.LOGO.unlink()
+        except FileNotFoundError:
+            pass
+        return _marca_estado()
 
     @app.get("/", response_class=HTMLResponse)
     def index():
