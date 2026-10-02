@@ -1,6 +1,6 @@
 # Instructivo de uso
 
-`Instructivo_MicroscopeOS.pdf` es el instructivo para imprimir (carta, 10 páginas), pensado para alguien que nunca usó el microscopio. Cubre la página `/ui`: encender la luz, ver la muestra, enfocar (con botones, con el teclado o de forma automática), tomar fotos y hacer un timelapse. Incluye una tabla de problemas y una tarjeta para recortar y tener junto al microscopio.
+`Instructivo_MicroscopeOS.pdf` es el instructivo para imprimir (carta, 12 páginas), pensado para alguien que nunca usó el microscopio. Cubre la página `/ui`: encender la luz, ver la muestra, enfocar (con botones, con el teclado o de forma automática), tomar fotos y hacer un timelapse, las fotos guardadas, la marca de agua y la escala. Incluye una tabla de problemas y una tarjeta para recortar y tener junto al microscopio.
 
 ## Cómo regenerarlo si cambia la interfaz
 

@@ -12,6 +12,13 @@
     luz:  {0: {on: false, modo: 'full', percent: 80}, 1: {on: false, modo: 'full', percent: 80}},
     ocupado: false,
     muestras: {},
+    exps: [],                                // experimentos simulados
+    papelera: {},
+    optica: {0: {objetivo:'20x', aumento:20, na:0.4, aumento_adicional:1, pixel_um:1.12, um_por_pixel_medido:null},
+             1: {objetivo:'20x', aumento:20, na:0.4, aumento_adicional:1, pixel_um:1.12, um_por_pixel_medido:null}},
+    marca: {activa:true, logo:false, escala:true, datos:true,
+            campos:{experimento:true, fecha:true, objetivo:true, escala:true, luz:true, camara:false},
+            posicion:'abajo-derecha', tamano:'mediano', estilo:'oscuro'},
   };
   window.__sim = sim;
 
@@ -75,6 +82,46 @@
     });
   }
   window.__simPintar=pintar;
+  window.__simMarca=function(fuente){
+    const c=document.createElement('canvas');c.width=800;c.height=600;
+    const g=c.getContext('2d');g.drawImage(fuente,0,0,800,600);
+    const M=sim.marca;if(!M.activa)return c.toDataURL('image/jpeg',.85);
+    const f={pequeno:.75,mediano:1,grande:1.45}[M.tamano], fp=Math.round(800*.016*f), m=Math.round(fp*.9), p=Math.round(fp*.55);
+    const fondo=M.estilo==='claro'?'rgba(255,255,255,.75)':'rgba(0,0,0,.6)', tinta=M.estilo==='claro'?'#0f1720':'#fff';
+    const caja=(pos,w,h)=>{const x=pos.includes('izquierda')?m:800-w-m, y=pos.includes('arriba')?m:600-h-m;
+      g.fillStyle=fondo;g.beginPath();g.roundRect(x,y,w,h,fp*.35);g.fill();return [x,y];};
+    const pd=M.posicion, pe=M.datos?(pd==='abajo-izquierda'?'abajo-derecha':'abajo-izquierda'):'abajo-izquierda',
+          pl=M.datos?(pd==='arriba-izquierda'?'arriba-derecha':'arriba-izquierda'):'abajo-derecha';
+    const o=descOptica(0);
+    if(M.datos){
+      const ls=[];const C=M.campos;
+      if(C.experimento)ls.push(['Células día 1',1]);
+      if(C.fecha)ls.push([new Date().toLocaleDateString('es',{day:'numeric',month:'short',year:'numeric'})+' · '+new Date().toTimeString().slice(0,5),0]);
+      if(C.objetivo)ls.push(['Objetivo '+o.objetivo+' · NA '+o.na,0]);
+      if(C.escala)ls.push([o.um_por_pixel+' µm/píxel',0]);
+      if(C.luz)ls.push(['Luz: Normal (campo claro)',0]);
+      if(C.camara)ls.push(['Cámara 0',0]);
+      if(ls.length){
+        const al=fp*1.32;let w=0;ls.forEach(l=>{g.font=(l[1]?'bold ':'')+fp+'px DejaVu Sans, sans-serif';w=Math.max(w,g.measureText(l[0]).width);});
+        const [x,y]=caja(pd,w+2*p,al*ls.length+2*p-fp*.25);
+        ls.forEach((l,i)=>{g.font=(l[1]?'bold ':'')+fp+'px DejaVu Sans, sans-serif';g.fillStyle=tinta;g.textBaseline='top';
+          const tw=g.measureText(l[0]).width;g.fillText(l[0],pd.includes('izquierda')?x+p:x+w+p-tw,y+p+i*al);});
+      }
+    }
+    if(M.escala){
+      const umpx=o.um_por_pixel*3280/800, tope=800*.2*umpx, L=[1,2,5,10,20,25,50,100,200,250,500].filter(v=>v<=tope).pop()||1, lp=L/umpx;
+      g.font='bold '+fp+'px DejaVu Sans, sans-serif';const et=L+' µm', tw=g.measureText(et).width, gr=Math.max(3,fp*.38);
+      const w=Math.max(lp,tw)+2*p, h=fp*1.25+gr+2*p;const [x,y]=caja(pe,w,h);
+      g.fillStyle=tinta;g.textBaseline='top';g.fillText(et,x+(w-tw)/2,y+p-fp*.1);g.fillRect(x+(w-lp)/2,y+h-p-gr,lp,gr);
+    }
+    if(M.logo){
+      g.font='bold '+Math.round(fp*1.45)+'px DejaVu Sans, sans-serif';
+      const a=g.measureText('Microscope').width,bb=g.measureText('OS').width, w=a+bb+2*p, h=fp*1.9+2*p;
+      const [x,y]=caja(pl,w,h);g.textBaseline='middle';g.fillStyle=tinta;g.fillText('Microscope',x+p,y+h/2);g.fillStyle='#22c55e';g.fillText('OS',x+p+a,y+h/2);
+    }
+    return c.toDataURL('image/jpeg',.85);
+  };
+  window.__simRender=render;
 
   // ---------- movimiento ----------
   const espera=ms=>new Promise(r=>setTimeout(r,ms));
@@ -119,6 +166,47 @@
       rango_um:r,intentos,desplazamiento_um:+desp.toFixed(2),
       segundos:+((performance.now()-t0)/1000*6).toFixed(1)};   // el real tarda ~6x mas
   }
+
+  // ---------- experimentos simulados ----------
+  const OBJ=[['4x',4,.1],['10x',10,.25],['20x',20,.4],['40x',40,.65],['60x',60,.85],['100x',100,1.25]];
+  function descOptica(c){
+    const o=sim.optica[c], est=o.pixel_um/(o.aumento*o.aumento_adicional), u=o.um_por_pixel_medido||est;
+    return Object.assign({},o,{um_por_pixel:+u.toFixed(5),origen_escala:o.um_por_pixel_medido?'medido':'estimado',
+      campo_um:[+(3280*u).toFixed(1),+(2464*u).toFixed(1)],sensor:'IMX219',resolucion_px:[3280,2464]});
+  }
+  const NOMBRE_LUZ={full:'Normal (campo claro)',left:'Relieve DPC, desde la izquierda',right:'Relieve DPC, desde la derecha',
+    top:'Relieve DPC, desde arriba',bottom:'Relieve DPC, desde abajo',ring:'Fondo negro (campo oscuro)',rheinberg:'De colores (Rheinberg)'};
+  const pad=n=>String(n).padStart(2,'0');
+  const isoLocal=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  function slug(t){return (t||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9 _-]+/g,'').trim().replace(/[\s_]+/g,'_').slice(0,50);}
+  function foto(cam,cuando,ciclo,expNombre){
+    const L=sim.luz[cam];
+    return {rel:'cam'+cam+'/'+(ciclo?String(ciclo).padStart(4,'0')+'_':'')+isoLocal(cuando).replace('T','_').replace(/:/g,'-')+'.tif',
+      url:render(cam).toDataURL('image/jpeg',0.8),
+      meta:{fecha_hora:isoLocal(cuando),camara:{numero:cam,sensor:'IMX219',exposicion_us:12000,ganancia:1.2},
+        optica:descOptica(cam),iluminacion:{nombre:L.on?NOMBRE_LUZ[L.modo]:'Apagada',brillo_pct:L.percent},
+        foco:{posicion_um:sim.pos[cam]},incubadora:{temperature:37.0},experimento:{nombre:expNombre}}};
+  }
+  function infoExp(e){
+    return {id:e.id,nombre:e.nombre,tipo:e.tipo,inicio:e.inicio,inicio_legible:'',estado:e.estado||null,
+      intervalo_s:e.intervalo_s||null,camaras:[...new Set(e.imgs.map(i=>i.rel.slice(3,4)))].sort(),
+      n_fotos:e.imgs.length,bytes:e.imgs.length*16163840,portada:e.imgs.length?e.imgs[e.imgs.length-1].rel:null,en_curso:false};
+  }
+  function semillaExps(){
+    // un timelapse de ejemplo con la muestra enfocada
+    const g=sim.pos[0];sim.pos[0]=sim.foco[0];sim.pos[1]=sim.foco[1];
+    const luz0={...sim.luz[0]},luz1={...sim.luz[1]};
+    sim.luz[0]={on:true,modo:'full',percent:80};sim.luz[1]={on:true,modo:'full',percent:80};
+    const ini=new Date(Date.now()-3*3600e3);
+    const t={id:isoLocal(ini).slice(0,10)+'_'+pad(ini.getHours())+pad(ini.getMinutes())+'_Celulas_dia_1',nombre:'Células día 1',
+      tipo:'timelapse',inicio:isoLocal(ini),estado:'completo',intervalo_s:300,imgs:[]};
+    for(let k=0;k<6;k++)for(const c of [0,1])t.imgs.push(foto(c,new Date(ini.getTime()+k*300e3),k+1,t.nombre));
+    t.imgs.sort((a,b)=>a.rel<b.rel?-1:1);
+    sim.exps.push(t);
+    sim.pos[0]=g;sim.pos[1]=0;sim.luz[0]=luz0;sim.luz[1]=luz1;
+  }
+  window.__simSemilla=semillaExps;
+  window.__simFoto=(id,rel)=>{const e=sim.exps.find(x=>x.id===id);const f=e&&e.imgs.find(i=>i.rel===rel);return f;};
 
   // ---------- API simulada ----------
   const json=(d,code)=>new Response(JSON.stringify(d),{status:code||200,headers:{'Content-Type':'application/json'}});
@@ -177,7 +265,66 @@
     if(ruta==='/api/analisis/estado')return json({ultimos:{}});
     if(ruta==='/api/analisis/foto')return json({n:motorSel?38:55,ms:620,overlay:'demo.png'});
     if(ruta==='/timelapse/start')return json({error:'En la demo no se corren timelapses: esto se inicia en el microscopio real'});
-    if(ruta.startsWith('/capture/'))return json({saved:'captura_demo.tif'});
+    if(ruta.startsWith('/capture/')){
+      const q=new URLSearchParams(url.split('?')[1]||''), nombre=(q.get('nombre')||'').trim();
+      const ahora=new Date(), dia=isoLocal(ahora).slice(0,10);
+      const id=dia+'_'+(slug(nombre)||'Fotos_sueltas');
+      let e=sim.exps.find(x=>x.id===id);
+      if(!e){e={id,nombre:nombre||'Fotos sueltas',tipo:'fotos',inicio:isoLocal(ahora),imgs:[]};sim.exps.push(e);}
+      const partes=ruta.split('/'), cams=partes[2]==='both'?[0,1]:[+partes[2]];
+      const nuevas=cams.map(c=>foto(c,ahora,null,e.nombre));
+      e.imgs.push(...nuevas);
+      return json({saved:nuevas.map(f=>f.rel),experimento:e.id,nombre:e.nombre});
+    }
+    if(ruta==='/api/experimentos'){
+      const l=sim.exps.map(infoExp).sort((a,b)=>a.inicio<b.inicio?1:-1);
+      return json({experimentos:l,espacio:{total_bytes:58e9,libre_bytes:31e9-l.reduce((a,x)=>a+x.bytes,0),fotos_que_caben:1900},usb:[]});
+    }
+    let m=ruta.match(/^\/api\/exp\/([^/]+)(?:\/(\w+))?(?:\/(.*))?$/);
+    if(m){
+      const id=decodeURIComponent(m[1]), que=m[2], rel=m[3]?decodeURIComponent(m[3]):null;
+      const e=sim.exps.find(x=>x.id===id);
+      if(!e)return json({error:'Ese experimento ya no existe'});
+      if(!que)return json(Object.assign(infoExp(e),{imagenes:e.imgs.map(i=>i.rel)}));
+      if(que==='info'){const f=e.imgs.find(i=>i.rel===rel);return json({metadatos:f?f.meta:{},bytes:16163840});}
+      if(que==='renombrar'){
+        if(!slug(b.nombre))return json({error:'el nombre tiene que tener al menos una letra o número'});
+        e.nombre=b.nombre;e.id=e.id.replace(/^(\d{4}-\d{2}-\d{2}(_\d{4})?)_.*$/,'$1')+'_'+slug(b.nombre);
+        e.imgs.forEach(i=>i.meta.experimento.nombre=b.nombre);
+        return json({id:e.id});
+      }
+      if(que==='borrar'){const cod=Date.now()+'__'+e.id;sim.papelera[cod]=e;sim.exps=sim.exps.filter(x=>x!==e);return json({codigo:cod});}
+      if(que==='usb')return json({error:'En la demo no hay memorias USB'});
+    }
+    if(ruta==='/api/papelera/restaurar'){const e=sim.papelera[b.codigo];if(!e)return json({error:'ya no está en la papelera'});sim.exps.push(e);delete sim.papelera[b.codigo];return json({id:e.id});}
+    if(ruta==='/api/optica'){
+      if(opt&&opt.method==='POST'){
+        const o=sim.optica[b.camara];
+        if(b.objetivo){o.objetivo=b.objetivo;const x=OBJ.find(z=>z[0]===b.objetivo);if(x){o.aumento=x[1];o.na=x[2];}}
+        if(b.aumento_adicional)o.aumento_adicional=b.aumento_adicional;
+        if(b.um_por_pixel_medido)o.um_por_pixel_medido=b.um_por_pixel_medido;
+        if(b.borrar_medido)o.um_por_pixel_medido=null;
+        return json({camara:descOptica(b.camara)});
+      }
+      return json({camaras:{0:descOptica(0),1:descOptica(1)},objetivos:OBJ.map(x=>({nombre:x[0],aumento:x[1],na:x[2]}))});
+    }
+    if(ruta==='/api/marca'){
+      const PRE={ninguna:{activa:false},escala:{activa:true,logo:false,escala:true,datos:false},
+        cientifica:{activa:true,logo:false,escala:true,datos:true,campos:{experimento:true,fecha:true,objetivo:true,escala:true,luz:true,camara:true}},
+        publicidad:{activa:true,logo:true,escala:true,datos:false}};
+      if(opt&&opt.method==='POST'){
+        if(b.preset){const p=PRE[b.preset];Object.assign(sim.marca,p);if(p.campos)Object.assign(sim.marca.campos,p.campos);}
+        if(b.config){const c={...b.config};if(c.campos){Object.assign(sim.marca.campos,c.campos);delete c.campos;}Object.assign(sim.marca,c);}
+      }
+      const c=sim.marca;let preset='personalizada';
+      if(!c.activa)preset='ninguna';
+      else if(!c.logo&&c.escala&&!c.datos)preset='escala';
+      else if(!c.logo&&c.escala&&c.datos&&Object.values(c.campos).every(Boolean))preset='cientifica';
+      else if(c.logo&&c.escala&&!c.datos)preset='publicidad';
+      return json({config:JSON.parse(JSON.stringify(c)),preset,presets:['ninguna','escala','cientifica','publicidad'],
+        campos:['experimento','fecha','objetivo','escala','luz','camara'],logo_propio:false,disponible:true});
+    }
+    if(ruta==='/api/marca/logo')return json({error:'En la demo no se pueden subir archivos'});
     if(ruta==='/light/color_dpc')return json({color:'00FF00'});
     if(ruta==='/light/set'){
       for(const c of b.camaras||[0,1]){sim.luz[c]={on:true,modo:b.modo,percent:b.percent??sim.luz[c].percent};pintar(c);}

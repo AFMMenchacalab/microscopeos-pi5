@@ -129,8 +129,10 @@
     <span class="paso ch">2</span><span>Mira la muestra</span><span>pág. 4</span>
     <span class="paso ch">3</span><span>Enfoca (con botones, con el teclado o automático)</span><span>pág. 5</span>
     <span class="paso ch">4</span><span>Toma una foto o un timelapse</span><span>pág. 8</span>
-    <span></span><span>Si algo sale mal</span><span>pág. 9</span>
-    <span></span><span>Tarjeta para tener junto al microscopio</span><span>pág. 10</span>
+    <span></span><span>Tus fotos guardadas</span><span>pág. 9</span>
+    <span></span><span>Marca de agua y escala</span><span>pág. 10</span>
+    <span></span><span>Si algo sale mal</span><span>pág. 11</span>
+    <span></span><span>Tarjeta para tener junto al microscopio</span><span>pág. 12</span>
   </div>
 </section>
 
@@ -418,9 +420,10 @@
       <h3 style="margin-top:0">Una foto</h3>
       <img class="captura" src="img/foto.png" alt="Sección Toma una foto">
       <ol class="pasos" style="margin-top:3mm">
-        <li><span>Elige de qué cámara (o «Las dos») y el tipo de foto. «Normal» sirve casi siempre.</span></li>
-        <li><span>Toca <span class="boton verde">Tomar foto</span>.</span></li>
-        <li><span>Las fotos aparecen en <b>«Fotos guardadas»</b>, más abajo en la página. Desde ahí se descargan.</span></li>
+        <li><span>Si quieres, escribe <b>qué es</b> (ej. «Muestra B»): la foto va a una carpeta con ese nombre.
+        Si no, va a «Fotos sueltas» de hoy.</span></li>
+        <li><span>Elige la cámara y el tipo de foto («Normal» sirve casi siempre) y toca <span class="boton verde">Tomar foto</span>.</span></li>
+        <li><span>La foto aparece en <b>«Fotos guardadas»</b> (pág. 9).</span></li>
       </ol>
       <h3>Antes de un timelapse</h3>
       <ol class="pasos">
@@ -455,6 +458,99 @@
   </ol>
 </section>
 
+<!-- ========== FOTOS GUARDADAS ========== -->
+<section class="pagina">
+  <h2>Tus fotos guardadas</h2>
+  <div class="dos b">
+    <div>
+      <img class="captura" src="img/galeria.png" alt="Lista de fotos guardadas">
+      <p class="mini" style="margin-top:2mm">Arriba: cuánto espacio queda en el microscopio. Cada tarjeta es un
+      <b>experimento</b>: un timelapse, o las fotos sueltas de un día.</p>
+    </div>
+    <div>
+      <ol class="pasos">
+        <li><span>En <b>«Fotos guardadas»</b> toca un experimento. Se abre con todas sus fotos.</span></li>
+        <li><span>Toca una foto para verla en grande. Pasa a la siguiente con las flechas
+        o con <kbd>←</kbd> <kbd>→</kbd>. Al lado aparecen sus datos: objetivo, escala, luz, temperatura…</span></li>
+        <li><span>Para llevártelas:</span></li>
+      </ol>
+      <table style="margin-top:0">
+        <tr><td style="width:44%"><span class="boton verde">Descargar originales (.tif)</span></td>
+          <td>Para analizar (Fiji, ImageJ, Python). Son los datos sin tocar.</td></tr>
+        <tr><td><span class="boton">Descargar para compartir (.jpg)</span></td>
+          <td>Para presentaciones o redes. Llevan la marca de agua (pág. 10).</td></tr>
+      </table>
+    </div>
+  </div>
+  <figure style="margin-top:3mm">
+    <img class="captura" src="img/experimento.png" alt="Un experimento abierto" style="max-height:66mm;width:auto;margin:0 auto">
+  </figure>
+  <div class="dos" style="margin-top:3mm;grid-template-columns:1fr 1fr">
+    <div>
+      <h3 style="margin-top:0">Cambiar el nombre o borrar</h3>
+      <p>El lápiz <b>✎</b> junto al nombre lo cambia. <span class="boton" style="color:var(--rojo)">Borrar</span> pide que
+      lo toques dos veces. Aun así, durante unos segundos aparece <b>«Deshacer»</b>, y lo borrado se puede recuperar
+      hasta 7 días después.</p>
+      <div class="nota"><b>Las fotos llevan sus datos adentro</b>Escala en micras por píxel, objetivo, luz, foco y hora.
+      Fiji / ImageJ abre la foto ya con la escala puesta (Image › Show Info muestra el resto).</div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Si abres la carpeta en una computadora</h3>
+      <svg class="silueta" viewBox="0 0 330 150" width="100%" aria-label="Silueta de las carpetas de un experimento">
+        <g font-family="Fira Code, monospace" font-size="11.5" fill="currentColor">
+          <g fill="#e7b04a"><path d="M6 8h14l4 4h16v12H6z"/><path d="M26 44h14l4 4h16v12H26z"/><path d="M26 100h14l4 4h16v12H26z"/></g>
+          <text x="46" y="21" font-weight="700">2026-10-02_1030_Celulas_dia_1</text>
+          <rect x="30" y="28" width="10" height="12" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="46" y="38">LEEME.txt  ← qué es cada cosa</text>
+          <text x="66" y="57">cam0</text>
+          <text x="66" y="75" fill="#5b6875">0001_2026-10-02_10-30-00.tif</text>
+          <text x="66" y="91" fill="#5b6875">0002_2026-10-02_10-35-00.tif …</text>
+          <text x="66" y="113">cam1</text>
+          <text x="46" y="140" fill="#5b6875">fecha_hora_nombre · foto nº_fecha_hora</text>
+        </g>
+        <path d="M14 24v86h12M14 52h12" fill="none" stroke="#9aa6b1" stroke-width="1.5"/>
+      </svg>
+      <p class="mini">En la memoria USB o en el NAS quedan dentro de una carpeta <b>MicroscopeOS</b>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== MARCA DE AGUA ========== -->
+<section class="pagina">
+  <h2>Marca de agua y escala</h2>
+  <div class="dos b">
+    <img class="captura" src="img/marca.png" alt="Panel Marca de agua" style="max-height:96mm;width:auto">
+    <div>
+      <p>La marca de agua va <b>solo en las copias «para compartir»</b>. Las fotos originales nunca se modifican.</p>
+      <p>En <b>«Marca de agua»</b> elige una opción lista:</p>
+      <table>
+        <tr><td style="width:34%"><b>Sin marca</b></td><td>La copia sale limpia.</td></tr>
+        <tr><td><b>Solo escala</b></td><td>Una barra con su medida en micras.</td></tr>
+        <tr><td><b>Científica</b></td><td>Escala y un recuadro con nombre, fecha, objetivo, micras por píxel, luz y cámara.</td></tr>
+        <tr><td><b>Publicidad</b></td><td>El logo de MicroscopeOS y la escala.</td></tr>
+      </table>
+      <p>O ajústala a tu gusto: qué datos aparecen, en qué esquina, tamaño y fondo claro u oscuro.
+      La imagen de arriba muestra al momento cómo va a quedar. Con <b>«Usar mi propio logo»</b> pones el de tu
+      laboratorio.</p>
+    </div>
+  </div>
+  <div class="tira" style="grid-template-columns:1fr 1fr;margin:2mm auto 0;max-width:118mm">
+    <div><img src="img/ejemplo_cientifica.jpg" alt=""><b>Científica</b></div>
+    <div><img src="img/ejemplo_publicidad.jpg" alt=""><b>Publicidad</b></div>
+  </div>
+  <h3>Objetivo y escala</h3>
+  <div class="dos" style="grid-template-columns:1fr 1.2fr;align-items:start">
+    <img class="captura" src="img/optica.png" alt="Panel Objetivo y escala" style="max-height:50mm;width:auto">
+    <div>
+      <p>En <b>Más opciones › Objetivo y escala</b> se indica qué objetivo tiene cada cámara. Con eso se calcula
+      cuántas micras mide un píxel, que va dentro de cada foto y en la barra de escala.</p>
+      <div class="cuidado"><b>Si cambias el objetivo, cámbialo también aquí</b>Si no, las fotos nuevas tendrán una
+      escala equivocada. Para una escala exacta, mide un portaobjetos micrométrico y escribe el valor en
+      «La medí con un portaobjetos micrométrico».</div>
+    </div>
+  </div>
+</section>
+
 <!-- ========== PROBLEMAS ========== -->
 <section class="pagina">
   <h2>Si algo sale mal</h2>
@@ -473,6 +569,8 @@
       Revisa que estés en la misma red y recarga la página. Si sigue igual, avisa a la persona responsable.</td></tr>
     <tr><td>Aviso «<b>motor caliente</b>», «CORTO» o «CORTE TÉRMICO»</td><td>Deja de mover el foco y avisa a la persona
       responsable.</td></tr>
+    <tr><td>«<b>No alcanza el espacio</b>» al iniciar un timelapse</td><td>Borra experimentos que ya descargaste
+      (pág. 9), guárdalo en una memoria USB, o toma fotos menos seguido.</td></tr>
     <tr><td>Un cambio parece <b>no hacer nada</b>.</td><td>Mira el mensaje que aparece abajo, en el centro de la pantalla:
       siempre dice qué pasó.</td></tr>
   </table>
