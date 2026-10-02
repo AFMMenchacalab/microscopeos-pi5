@@ -695,7 +695,8 @@ def create_app(camera, illuminations, timelapse, motores=None,
         motor_.start_jog(direction=req.direction, delay=req.velocidad,
                          watchdog=req.watchdog)
         return {"status": "jog", "motor": req.motor,
-                "posicion": motor_.position}
+                "posicion": motor_.position,
+                "posicion_um": round(motor_.posicion_um, 2)}
 
     @app.post("/api/focus/jog/stop")
     def focus_jog_stop(req: FocusStopReq):

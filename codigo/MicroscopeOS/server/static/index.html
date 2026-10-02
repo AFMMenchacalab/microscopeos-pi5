@@ -50,6 +50,7 @@
   .field label{display:block;font-size:11px;color:var(--dim);margin-bottom:6px;letter-spacing:1px;text-transform:uppercase}
   .field input,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:10px;color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:13px}
   .field input:focus,.field select:focus{outline:none;border-color:var(--green)}
+  .unid{text-transform:none;letter-spacing:0}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .slider{display:flex;align-items:center;gap:10px}
   .slider input[type=range]{flex:1;accent-color:var(--amber)}
@@ -224,11 +225,11 @@
           <span class="val" id="focusVelVal">5</span>
         </div>
       </div>
-      <div class="stat"><span class="k">Posición (micropasos)</span><span class="v" id="s_focus_pos">—</span></div>
+      <div class="stat"><span class="k">Posición</span><span class="v" id="s_focus_pos">—</span></div>
       <div class="stat"><span class="k">Driver</span><span class="v" id="s_focus_drv">—</span></div>
       <div class="field" style="margin-top:14px;margin-bottom:8px">
-        <label>Rango de búsqueda (µm desde la posición actual)</label>
-        <input type="number" id="afRango" value="60" min="5" step="5">
+        <label>Búsqueda inicial, en micras (<span class="unid">µm</span>, total; si no lo encuentra amplía hasta 200)</label>
+        <input type="number" id="afRango" value="40" min="5" step="5">
       </div>
       <button id="afBtn" onclick="autoenfocar()" style="width:100%">◎ Autofoco de CAM 0</button>
       <button id="calBtn" onclick="calibrarDpc()" style="width:100%;margin-top:8px">⊹ Calibrar autofoco DPC</button>
@@ -291,7 +292,7 @@
     <div class="panel" style="margin-bottom:18px">
       <h2>Cámara</h2>
       <div class="row">
-        <div class="field"><label>Exposición µs</label><input type="number" id="exp" value="12000"></div>
+        <div class="field"><label>Exposición (<span class="unid">µs</span>)</label><input type="number" id="exp" value="12000"></div>
         <div class="field"><label>Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
       </div>
       <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
@@ -317,7 +318,7 @@
       </div>
       <div class="row" id="tlAfOpts" style="display:none">
         <div class="field"><label>Cada N ciclos</label><input type="number" id="tlAfCada" value="1" min="1"></div>
-        <div class="field"><label>Rango µpasos</label><input type="number" id="tlAfRango" value="1600" min="100"></div>
+        <div class="field"><label>Búsqueda inicial, en micras (<span class="unid">µm</span>)</label><input type="number" id="tlAfRango" value="40" min="5" step="5"></div>
       </div>
       <div class="field" style="display:flex;align-items:center;gap:10px">
         <input type="checkbox" id="tlCnt" style="width:auto" onchange="tlCntChange()">
@@ -639,7 +640,7 @@ async function refrescarFoco(){
     const m=d.motores&&d.motores[motorSel];
     const pos=document.getElementById('s_focus_pos'), drv=document.getElementById('s_focus_drv');
     if(!m){pos.textContent='—';drv.textContent='sin motor';return;}
-    pos.textContent=m.posicion+'  (1/'+m.microsteps+')';
+    pos.textContent=(m.posicion_um>0?'+':'')+m.posicion_um.toFixed(1)+' µm  (1/'+m.microsteps+')';
     if(m.uart!=='ok'){drv.textContent='UART: error';drv.className='v hot';return;}
     const avisos=[];
     if(m.sobretemp_corte)avisos.push('CORTE TÉRMICO');
@@ -670,7 +671,7 @@ async function autoenfocar(){
     // TODO_HW.md 1.5), mas chico tambien es menos riesgo.
     const rangoUm=+document.getElementById('afRango').value;
     const r=await fetch('/api/focus/auto',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({camera:cam,rango_um:rangoUm,puntos:13,refinamientos:2})});
+      body:JSON.stringify({camera:cam,rango_um:rangoUm,rango_max_um:Math.max(rangoUm,200),puntos:13,refinamientos:2})});
     const d=await r.json();
     if(d.error){toast(d.error);document.getElementById('s_af').textContent='error';return;}
     const um=d.desplazamiento_um, signo=um>0?'+':'';
@@ -698,15 +699,13 @@ async function autoenfocar(){
 }
 async function calibrarDpc(){
   const btn=document.getElementById('calBtn'), cam=motorSel;
-  if(!confirm('Calibrar el autofoco DPC de CAM '+cam+'.\n\nVa a mover la '
-    +'plataforma ±125 µm alrededor de la posición actual midiendo el '
-    +'corrimiento entre las dos medias iluminaciones.\n\nEnfocá a ojo ANTES: '
-    +'la relación es lineal solo cerca del foco, y calibrar lejos sesga la '
-    +'ganancia. La muestra tiene que tener estructura visible.'))return;
+  if(!confirm('Calibrar el autofoco DPC de CAM '+cam+'.\n\nPrimero busca el foco y '
+    +'luego mueve la plataforma ±12 µm alrededor midiendo el corrimiento entre '
+    +'las dos medias iluminaciones. La muestra tiene que tener estructura visible.'))return;
   btn.disabled=true;btn.textContent='⊹ Calibrando CAM '+cam+'...';
   try{
     const r=await fetch('/api/focus/calibrar',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({camera:cam,amplitud:1200,puntos:5,eje:'lr'})});
+      body:JSON.stringify({camera:cam,eje:'lr'})});
     const d=await r.json();
     if(d.error){toast(d.error);return;}
     toast(d.confiable
@@ -887,7 +886,8 @@ async function iniciar(){
   const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1],
     autofocus:document.getElementById('tlAf').checked,
     autofocus_cada:+document.getElementById('tlAfCada').value,
-    autofocus_rango:+document.getElementById('tlAfRango').value,
+    autofocus_rango_um:+document.getElementById('tlAfRango').value||40,
+    autofocus_rango_max_um:200,
     contar:document.getElementById('tlCnt').checked,
     contar_cada:+document.getElementById('tlCntCada').value,
     contar_overlay:document.getElementById('tlCntOverlay').checked};

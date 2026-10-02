@@ -93,8 +93,7 @@
   .ic-lg{width:22px;height:22px}
 
   /* ---------- focus / a11y ---------- */
-  a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,
-  .joy:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:8px}
+  a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:8px}
 
   /* ---------- header ---------- */
   .head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
@@ -184,6 +183,7 @@
     border-radius:8px;padding:10px 11px;color:var(--text);font-family:var(--font-mono);
     font-size:13px;min-height:42px}
   .field input:focus,.field select:focus{outline:none;border-color:var(--green)}
+  .unid{text-transform:none;letter-spacing:0}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   @media(max-width:420px){.row{grid-template-columns:1fr}}
   .check{display:flex;align-items:center;gap:9px}
@@ -210,23 +210,6 @@
     transition:transform .3s ease;z-index:50;box-shadow:0 12px 30px -12px rgba(0,0,0,.7)}
   .toast.show{transform:translateX(-50%) translateY(0)}
 
-  /* ---------- joystick ---------- */
-  .joy{position:relative;height:230px;background:var(--panel2);border:1px solid var(--line-strong);
-    border-radius:var(--radius);margin:var(--sp-3) 0;touch-action:none;cursor:grab;
-    overflow:hidden;user-select:none}
-  .joy.grab{cursor:grabbing;border-color:var(--green)}
-  .joy::after{content:'';position:absolute;left:14px;right:14px;top:50%;height:1px;background:var(--line-strong)}
-  .joyknob{position:absolute;left:50%;top:50%;width:78px;height:78px;margin:-39px 0 0 -39px;
-    border-radius:50%;background:var(--panel-solid);border:1px solid var(--green);
-    box-shadow:0 0 14px var(--green-soft);display:flex;align-items:center;justify-content:center;
-    color:var(--green);transition:box-shadow .15s}
-  .joy.grab .joyknob{box-shadow:0 0 22px var(--green)}
-  .joylbl{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;
-    gap:6px;font-size:10px;color:var(--dim);letter-spacing:1.2px;pointer-events:none;text-transform:uppercase}
-  .joylbl.up{top:9px}
-  .joylbl.dn{bottom:9px}
-  .joylbl .ic{width:12px;height:12px}
-
   .valve-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
     letter-spacing:.4px;padding:3px 10px;border-radius:20px;border:1px solid var(--line-strong);
     font-family:var(--font-mono)}
@@ -248,14 +231,54 @@
       transition-duration:.001ms !important}
   }
 
+  /* ---------- control de foco (panel y vista ampliada) ---------- */
+  .zpos{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+    padding:10px 14px;margin:var(--sp-3) 0;border:1px solid var(--line);border-radius:var(--radius-sm);
+    background:var(--panel2)}
+  .zpos .k{font-size:11px;color:var(--dim);letter-spacing:.8px;text-transform:uppercase}
+  .zpos .n{font-family:var(--font-mono);font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+  .zpos .u{color:var(--dim);font-size:13px;margin-left:4px}
+  .zbtn{width:100%;min-height:64px;font-size:16px;font-weight:600;touch-action:none;user-select:none;
+    -webkit-user-select:none}
+  .zbtn .ic{width:22px;height:22px}
+  .zbtn.moviendo{border-color:var(--green);background:var(--green-soft);color:var(--green)}
+  .zpasos{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+  .zpasos button{flex-direction:column;gap:0;padding:6px 4px;min-height:52px;line-height:1.2}
+  .zpasos button b{font-size:14px;font-family:var(--font-mono)}
+  .zpasos button small{font-size:10.5px;color:var(--dim);font-weight:400}
+  .zpasos button.active small{color:var(--green)}
+  .zayuda{font-size:11.5px;color:var(--dim);text-align:center;margin:2px 0 var(--sp-3)}
+  kbd{font-family:var(--font-mono);font-size:11px;border:1px solid var(--line-strong);border-radius:4px;
+    padding:0 5px;background:var(--panel2)}
+  .afbtn{width:100%;min-height:52px;font-size:15px}
+  details.sub{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-top:var(--sp-3)}
+  details.panel details.sub summary{display:list-item;cursor:pointer;padding:2px 0;font-size:12.5px;
+    color:var(--dim);list-style:revert;text-transform:none;letter-spacing:0}
+  details.panel details.sub[open] summary{margin-bottom:10px}
+
   /* ---------- lightbox (ampliar cámara) ---------- */
   .lightbox{position:fixed;inset:0;background:rgba(5,8,14,.86);backdrop-filter:blur(6px);
     -webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;
     z-index:200;padding:var(--sp-5)}
   .lightbox[hidden]{display:none}
-  .lightbox-stage{max-width:min(92vw,1100px);width:100%}
+  .lightbox-wrap{display:flex;gap:var(--sp-4);align-items:center;width:100%;
+    max-width:min(96vw,1400px);justify-content:center}
+  .lightbox-stage{flex:1;min-width:0;max-width:1100px}
   .lightbox-stage .view{max-height:86vh}
-  .lightbox-close{position:absolute;top:20px;right:20px;width:44px;height:44px;padding:0;
+  .lbfoco{flex:0 0 230px;background:var(--panel-solid);border:1px solid var(--line);
+    border-radius:var(--radius);padding:var(--sp-3)}
+  .lbfoco[hidden]{display:none}
+  .lbfoco .zbtn{min-height:58px}
+  .lbfoco .zpasos{grid-template-columns:repeat(2,1fr)}
+  .lbfoco h3{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim);
+    margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  @media(max-width:860px){
+    .lightbox{padding:76px var(--sp-3) var(--sp-3);align-items:flex-start;overflow:auto}
+    .lightbox-wrap{flex-direction:column;align-items:stretch}
+    .lbfoco{flex:none}
+    .lbfoco .zpasos{grid-template-columns:repeat(4,1fr)}
+  }
+  .lightbox-close{position:absolute;top:20px;right:20px;z-index:2;width:44px;height:44px;padding:0;
     border-radius:10px;background:var(--panel-solid);color:var(--text)}
   .lightbox-close:hover{border-color:var(--red);color:var(--red)}
 
@@ -464,55 +487,35 @@
       <summary><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="stitle">Foco motorizado</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
       <div class="camsel">
-        <button id="mBtn0" class="active" onclick="selMotor(0)">Eje CAM 0</button>
-        <button id="mBtn1" onclick="selMotor(1)">Eje CAM 1</button>
+        <button id="mBtn0" class="active" onclick="selMotor(0)"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>Cámara 0</button>
+        <button id="mBtn1" onclick="selMotor(1)"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>Cámara 1</button>
       </div>
-      <!-- Joystick: arrastrar arriba/abajo mueve el eje seleccionado de
-           forma continua; cuanto mas lejos del centro, mas rapido. -->
-      <div class="joy" id="joy" role="slider" aria-label="Joystick de enfoque vertical" tabindex="0" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0">
-        <span class="joylbl up"><svg class="ic" aria-hidden="true"><use href="#i-chev-up"/></svg>Subir</span>
-        <span class="joylbl dn"><svg class="ic" aria-hidden="true"><use href="#i-chev-down"/></svg>Bajar</span>
-        <div class="joyknob" id="joyKnob"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg></div>
-      </div>
-      <div class="row">
-        <button onclick="focusMove(-1)"><svg class="ic" aria-hidden="true"><use href="#i-chev-up"/></svg><span>Un paso</span></button>
-        <button onclick="focusMove(1)"><svg class="ic" aria-hidden="true"><use href="#i-chev-down"/></svg><span>Un paso</span></button>
-      </div>
-      <div class="field" style="margin-top:14px">
-        <label for="focusPasos">Pasos por click</label>
-        <input type="number" id="focusPasos" value="200" min="1">
-      </div>
-      <div class="field">
-        <label for="focusMicrosteps">Precisión (micropasos)</label>
-        <select id="focusMicrosteps" onchange="aplicarFocusConfig()">
-          <option value="1">1 — full step, máx. torque</option>
-          <option value="2">2</option>
-          <option value="4">4</option>
-          <option value="8">8</option>
-          <option value="16" selected>16</option>
-          <option value="32">32</option>
-          <option value="64">64</option>
-          <option value="128">128</option>
-          <option value="256">256 — máx. precisión</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="focusVel">Velocidad máxima</label>
-        <div class="slider">
-          <input type="range" id="focusVel" min="1" max="10" value="5" oninput="focusVelLabel()">
-          <span class="val" id="focusVelVal">5</span>
-        </div>
-      </div>
-      <div class="stat"><span class="k">Posición (micropasos)</span><span class="v" id="s_focus_pos">—</span></div>
+      <!-- Control de foco "a prueba de todo": dos botones grandes y el
+           tamaño del paso. Un toque mueve un paso; mantenerlo apretado
+           mueve sin parar hasta soltar. El mismo bloque se repite en la
+           vista ampliada (renderControlFoco). -->
+      <div class="zfoco" data-donde="panel"></div>
       <div class="stat"><span class="k">Driver</span><span class="v" id="s_focus_drv">—</span></div>
-      <div class="field" style="margin-top:14px;margin-bottom:8px">
-        <label for="afRango">Rango de búsqueda (µm desde la posición actual)</label>
-        <input type="number" id="afRango" value="60" min="5" step="5">
-      </div>
-      <button id="afBtn" onclick="autoenfocar()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Autofoco de CAM 0</span></button>
-      <button id="calBtn" onclick="calibrarDpc()" style="width:100%;margin-top:8px"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="lbl">Calibrar autofoco DPC</span></button>
-      <div class="stat" style="margin-top:6px"><span class="k">Autofoco DPC</span><span class="v" id="s_cal">—</span></div>
+
+      <button id="afBtn" class="primary afbtn" onclick="autoenfocar()" style="margin-top:var(--sp-3)"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Enfocar solo · Cámara 0</span></button>
+      <p class="hint" style="padding-top:6px">Busca el foco cerca de donde estás. Si no lo encuentra,
+      amplía la búsqueda sola (hasta ±100 µm) y, si ni así, no se mueve.</p>
       <div class="stat"><span class="k">Último autofoco</span><span class="v" id="s_af">—</span></div>
+
+      <details class="sub">
+        <summary>Opciones avanzadas del autofoco</summary>
+        <div class="row">
+          <div class="field"><label for="afRango">Búsqueda inicial, en micras (<span class="unid">µm</span>)</label><input type="number" id="afRango" value="40" min="5" step="5"></div>
+          <div class="field"><label for="afRangoMax">Búsqueda máxima, en micras (<span class="unid">µm</span>)</label><input type="number" id="afRangoMax" value="200" min="5" step="10"></div>
+        </div>
+        <p class="hint">Son el tamaño TOTAL de la búsqueda, centrada donde estás: 40 µm = 20 arriba y 20 abajo.
+        1 mm = 1000 µm.</p>
+        <button id="calBtn" onclick="calibrarDpc()" style="width:100%"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="lbl">Calibrar autofoco rápido</span></button>
+        <p class="hint" style="padding-top:6px">Opcional. Se hace una vez por objetivo, con una muestra que tenga
+        células: busca el foco y mide cuánto se corre la imagen al desenfocar. Con eso el autofoco
+        salta directo al foco en vez de barrer. Si no sale bien, no se guarda y todo sigue igual.</p>
+        <div class="stat"><span class="k">Autofoco rápido</span><span class="v" id="s_cal">—</span></div>
+      </details>
       </div>
     </details>
 
@@ -599,7 +602,7 @@
       <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Cámara</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
       <div class="row">
-        <div class="field"><label for="exp">Exposición µs</label><input type="number" id="exp" value="12000"></div>
+        <div class="field"><label for="exp">Exposición (<span class="unid">µs</span>)</label><input type="number" id="exp" value="12000"></div>
         <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
       </div>
       <button onclick="aplicarCamara()" style="width:100%">Aplicar exposición/ganancia</button>
@@ -623,12 +626,17 @@
         <div class="field"><label for="dur">Duración s</label><input type="number" id="dur" value="3600"></div>
       </div>
       <div class="field check">
-        <input type="checkbox" id="tlAf" onchange="tlAfChange()">
-        <label for="tlAf">Reenfocar automáticamente</label>
+        <input type="checkbox" id="tlAf" checked onchange="tlAfChange()">
+        <label for="tlAf">Reenfocar automáticamente antes de cada foto</label>
       </div>
-      <div class="row" id="tlAfOpts" style="display:none">
-        <div class="field"><label for="tlAfCada">Cada N ciclos</label><input type="number" id="tlAfCada" value="1" min="1"></div>
-        <div class="field"><label for="tlAfRango">Rango µpasos</label><input type="number" id="tlAfRango" value="1600" min="100"></div>
+      <div id="tlAfOpts">
+        <p class="hint">Enfoca tú antes de empezar. En cada ciclo busca el foco alrededor de donde quedó el
+        anterior; si no lo encuentra, amplía la búsqueda sola hasta ±100 µm. Cada intento queda en
+        autofoco.csv dentro de la carpeta del experimento.</p>
+        <div class="row">
+          <div class="field"><label for="tlAfCada">Cada cuántos ciclos</label><input type="number" id="tlAfCada" value="1" min="1"></div>
+          <div class="field"><label for="tlAfRango">Búsqueda inicial, en micras (<span class="unid">µm</span>)</label><input type="number" id="tlAfRango" value="40" min="5" step="5"></div>
+        </div>
       </div>
       <div class="field check">
         <input type="checkbox" id="tlCnt" onchange="tlCntChange()">
@@ -776,9 +784,16 @@
   </div>
 </div>
 
-<div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista de cámara ampliada" onclick="if(event.target===this)closeLightbox()">
+<div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista de cámara ampliada" onclick="if(event.target===this||event.target.classList.contains('lightbox-wrap'))closeLightbox()">
   <button class="lightbox-close" onclick="closeLightbox()" aria-label="Cerrar vista ampliada"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg></button>
-  <div class="lightbox-stage" id="lightboxStage"></div>
+  <div class="lightbox-wrap">
+    <div class="lightbox-stage" id="lightboxStage"></div>
+    <div class="lbfoco" id="lbFoco" hidden>
+      <h3><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg>Foco · <span id="lbCam">Cámara 0</span></h3>
+      <div class="zfoco" data-donde="zoom"></div>
+      <button class="primary afbtn" id="lbAfBtn" onclick="autoenfocar()"><svg class="ic" aria-hidden="true"><use href="#i-focus"/></svg><span class="lbl">Enfocar solo</span></button>
+    </div>
+  </div>
 </div>
 
 <div class="lightbox" id="usbAviso" hidden role="dialog" aria-modal="true" aria-labelledby="usbAvisoTit">
@@ -814,6 +829,10 @@ function toggleExpand(n){
   document.getElementById('lightboxStage').appendChild(view);
   view.classList.add('expanded');
   expandedCam=n;
+  // Con la cámara ampliada aparecen al lado los controles de foco de
+  // SU eje, para enfocar sin tener que salir del zoom.
+  document.getElementById('lbFoco').hidden=false;
+  if(motorSel!==n)selMotor(n);
   document.getElementById('lightbox').hidden=false;
   document.body.style.overflow='hidden';
 }
@@ -829,6 +848,7 @@ function closeLightbox(){
   if(expandedCam==='img')document.getElementById('lightboxStage').innerHTML='';
   else restoreView(expandedCam);
   expandedCam=null;
+  document.getElementById('lbFoco').hidden=true;
   document.getElementById('lightbox').hidden=true;
   document.body.style.overflow='';
 }
@@ -844,6 +864,7 @@ function openImagePreview(url){
   img.style.cssText='width:100%;height:auto;max-height:86vh;border-radius:16px;display:block;cursor:zoom-out';
   img.onclick=closeLightbox;
   stage.appendChild(img);
+  document.getElementById('lbFoco').hidden=true;
   expandedCam='img';
   document.getElementById('lightbox').hidden=false;
   document.body.style.overflow='hidden';
@@ -961,95 +982,150 @@ async function capturar(){
 // ============================================================
 // Foco motorizado: un eje Z por camara, seleccionable.
 // ============================================================
-let motorSel=0;                 // eje activo (numero de camara)
-let jogTimer=null, jogActivo=false;
+// Cuatro tamaños de paso. Cada uno trae la resolucion de micropasos con
+// la que se mueve A MANO -- y por eso la velocidad al mantener
+// apretado: mas fino = mas lento y preciso. Es lo UNICO que cambia la
+// resolucion: autofoco, calibracion y timelapse usan siempre una fija
+// en el servidor (MICROSTEPS_INTERNO), elijas lo que elijas aca.
+const PASOS_Z=[
+  {um:1,   ms:64, nombre:'Fino'},
+  {um:5,   ms:16, nombre:'Medio'},
+  {um:25,  ms:8,  nombre:'Grueso'},
+  {um:100, ms:2,  nombre:'Rápido'},
+];
+const DELAY_Z=0.003;            // s entre flancos STEP, el de siempre
+let motorSel=0, pasoSel=1, jogActivo=false, jogTimer=null, pasoEnCurso=false;
+try{
+  const g=localStorage.getItem('microscopeos_paso_z');
+  if(g!==null && PASOS_Z[+g])pasoSel=+g;
+}catch(e){}
+
+// El bloque de control se dibuja igual en el panel y en la vista
+// ampliada: los dos manejan el mismo eje (motorSel).
+function renderControlFoco(){
+  document.querySelectorAll('.zfoco').forEach(el=>{
+    el.innerHTML=
+      '<div class="zpos"><span class="k">Posición</span><span><span class="n zposN">—</span><span class="u">µm</span></span></div>'
+      +'<button class="zbtn" data-dir="-1"><svg class="ic" aria-hidden="true"><use href="#i-chev-up"/></svg>Subir</button>'
+      +'<div class="zpasos" role="radiogroup" aria-label="Tamaño del paso">'
+      +PASOS_Z.map((p,i)=>'<button role="radio" data-paso="'+i+'"><b>'+p.um+' µm</b><small>'+p.nombre+'</small></button>').join('')
+      +'</div>'
+      +'<button class="zbtn" data-dir="1"><svg class="ic" aria-hidden="true"><use href="#i-chev-down"/></svg>Bajar</button>'
+      +'<p class="zayuda">Toca: un paso · mantén apretado: sigue moviendo · teclado <kbd>↑</kbd> <kbd>↓</kbd></p>';
+    el.querySelectorAll('[data-paso]').forEach(b=>b.onclick=()=>elegirPaso(+b.dataset.paso));
+    el.querySelectorAll('.zbtn').forEach(b=>conectarBotonZ(b,+b.dataset.dir));
+  });
+  pintarPaso();
+}
+function pintarPaso(){
+  document.querySelectorAll('[data-paso]').forEach(b=>{
+    const on=+b.dataset.paso===pasoSel;
+    b.classList.toggle('active',on);b.setAttribute('aria-checked',on);
+  });
+}
+function pintarPosicion(um){
+  if(um==null)return;
+  const t=(um>0?'+':'')+um.toFixed(1);
+  document.querySelectorAll('.zposN').forEach(e=>e.textContent=t);
+}
+function elegirPaso(i){
+  pasoSel=i;pintarPaso();
+  try{localStorage.setItem('microscopeos_paso_z',i);}catch(e){}
+  aplicarResolucion(true);
+}
+// Pone en el eje seleccionado la resolucion del paso elegido.
+async function aplicarResolucion(avisar){
+  if(running)return;
+  try{
+    const r=await fetch('/api/focus/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({motor:motorSel,microsteps:PASOS_Z[pasoSel].ms})});
+    const d=await r.json();
+    if(d.error){if(avisar)toast(d.error);return;}
+    if(avisar)toast('Paso: '+PASOS_Z[pasoSel].um+' µm ('+PASOS_Z[pasoSel].nombre.toLowerCase()+')');
+  }catch(e){}
+}
 
 function selMotor(n){
   motorSel=n;
   document.getElementById('mBtn0').classList.toggle('active',n===0);
   document.getElementById('mBtn1').classList.toggle('active',n===1);
-  document.getElementById('afBtn').querySelector('.lbl').textContent='Autofoco de CAM '+n;
-  refrescarFoco();
-}
-function focusVelLabel(){document.getElementById('focusVelVal').textContent=document.getElementById('focusVel').value;}
-// El slider da la velocidad MAXIMA (delay minimo entre flancos STEP).
-// 1 -> 10ms (lento y con mucho par), 10 -> 1ms (rapido).
-function delayMinimo(){const v=+document.getElementById('focusVel').value;return 0.011-v*0.001;}
-
-async function focusMove(direction){
-  const pasos=+document.getElementById('focusPasos').value;
-  const r=await fetch('/api/focus/move',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({motor:motorSel,direction:direction,pasos:pasos,velocidad:delayMinimo()})});
-  const d=await r.json();
-  if(d.error){toast(d.error);return;}
-  toast((direction===1?'Bajando ':'Subiendo ')+pasos+' µpasos');
-  refrescarFoco();
-}
-async function aplicarFocusConfig(){
-  const microsteps=+document.getElementById('focusMicrosteps').value;
-  const r=await fetch('/api/focus/config',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({motor:motorSel,microsteps:microsteps})});
-  const d=await r.json();
-  if(d.error){toast(d.error);return;}
-  toast('Precisión: 1/'+microsteps+' de paso');
+  document.getElementById('afBtn').querySelector('.lbl').textContent='Enfocar solo · Cámara '+n;
+  document.getElementById('lbCam').textContent='Cámara '+n;
+  pintarPosicion(null);
+  aplicarResolucion(false);
   refrescarFoco();
 }
 
-// --- joystick vertical ---
-// Mientras esta apretado se reenvia /api/focus/jog cada 250 ms. Cada
-// pedido refresca el watchdog del servidor (1.5 s): si el navegador se
-// congela o se corta el WiFi con el joystick apretado, el motor se para
-// solo en vez de seguir bajando la plataforma contra la muestra.
-(function(){
-  const joy=document.getElementById('joy'), knob=document.getElementById('joyKnob');
-  const ZONA_MUERTA=0.14, RECORRIDO=85;   // px de desplazamiento maximo del knob
-  let t=0;                                // -1 (arriba) .. 1 (abajo)
-
-  function velocidad(){
-    // Fuera de la zona muerta, |t| mapea linealmente a la velocidad:
-    // apenas movido = 22ms entre flancos (lentisimo, para enfocar fino),
-    // al tope = el delay minimo del slider.
-    const u=(Math.abs(t)-ZONA_MUERTA)/(1-ZONA_MUERTA);
-    return 0.022-(0.022-delayMinimo())*u;
-  }
-  function pintar(){knob.style.transform='translateY('+(t*RECORRIDO)+'px)';joy.setAttribute('aria-valuenow',t.toFixed(2));}
-  function enviar(){
-    if(Math.abs(t)<ZONA_MUERTA)return;
-    fetch('/api/focus/jog',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({motor:motorSel,direction:t>0?1:-1,velocidad:velocidad(),watchdog:1.5})})
-      .then(r=>r.json()).then(d=>{if(d.error){toast(d.error);soltar();}}).catch(()=>{});
-  }
-  function mover(ev){
-    const r=joy.getBoundingClientRect();
-    const dy=(ev.clientY-(r.top+r.height/2))/(r.height/2);
-    t=Math.max(-1,Math.min(1,dy));
-    pintar();
-  }
-  function agarrar(ev){
-    if(running)return;
-    joy.setPointerCapture(ev.pointerId);
-    joy.classList.add('grab');jogActivo=true;
-    mover(ev);enviar();
-    jogTimer=setInterval(enviar,250);
-  }
-  function soltar(){
-    if(!jogActivo)return;
-    jogActivo=false;
-    clearInterval(jogTimer);jogTimer=null;
-    joy.classList.remove('grab');
-    t=0;pintar();
-    fetch('/api/focus/jog/stop',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({motor:motorSel})}).then(()=>refrescarFoco()).catch(()=>{});
-  }
-  joy.addEventListener('pointerdown',agarrar);
-  joy.addEventListener('pointermove',ev=>{if(jogActivo)mover(ev);});
-  joy.addEventListener('pointerup',soltar);
-  joy.addEventListener('pointercancel',soltar);
-  // Si la pestania pasa a segundo plano, los timers se ralentizan y el
-  // watchdog cortaria igual; soltar aca lo hace explicito.
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)soltar();});
-  window.addEventListener('blur',soltar);
-})();
+// Un toque = un paso. Mantenido mas de 400 ms = movimiento continuo
+// hasta soltar (mismo /api/focus/jog con watchdog que usaba el
+// joystick: si se corta el WiFi con el boton apretado, el motor se
+// para solo).
+function conectarBotonZ(b,dir){
+  let timer=null, mantenido=false;
+  b.addEventListener('pointerdown',ev=>{
+    if(running){toast('Timelapse en curso');return;}
+    if(ev.button!==undefined && ev.button!==0)return;
+    try{b.setPointerCapture(ev.pointerId);}catch(e){}
+    mantenido=false;
+    timer=setTimeout(()=>{mantenido=true;b.classList.add('moviendo');iniciarJog(dir);},400);
+  });
+  b.addEventListener('pointerup',()=>{
+    if(timer===null)return;
+    clearTimeout(timer);timer=null;
+    if(mantenido)detenerJog(); else pasoZ(dir);
+  });
+  b.addEventListener('pointercancel',()=>{
+    if(timer!==null){clearTimeout(timer);timer=null;}
+    if(mantenido)detenerJog();
+  });
+  // Enter/espacio con el boton enfocado (click sin puntero: detail 0)
+  b.addEventListener('click',ev=>{if(ev.detail===0)pasoZ(dir);});
+}
+async function pasoZ(dir){
+  if(running||pasoEnCurso)return;   // no apilar pedidos si se mantiene una tecla
+  pasoEnCurso=true;
+  try{
+    const r=await fetch('/api/focus/move',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({motor:motorSel,direction:dir,um:PASOS_Z[pasoSel].um,velocidad:DELAY_Z})});
+    const d=await r.json();
+    if(d.error){toast(d.error);return;}
+    pintarPosicion(d.posicion_um);
+  }catch(e){toast('Sin conexión con el motor');}
+  finally{pasoEnCurso=false;}
+}
+function iniciarJog(dir){
+  jogActivo=true;
+  const enviar=()=>fetch('/api/focus/jog',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({motor:motorSel,direction:dir,velocidad:DELAY_Z,watchdog:1.5})})
+    .then(r=>r.json()).then(d=>{
+      if(d.error){toast(d.error);detenerJog();return;}
+      pintarPosicion(d.posicion_um);
+    }).catch(()=>{});
+  enviar();
+  jogTimer=setInterval(enviar,250);
+}
+function detenerJog(){
+  if(!jogActivo)return;
+  jogActivo=false;
+  clearInterval(jogTimer);jogTimer=null;
+  document.querySelectorAll('.zbtn.moviendo').forEach(b=>b.classList.remove('moviendo'));
+  fetch('/api/focus/jog/stop',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({motor:motorSel})}).then(()=>refrescarFoco()).catch(()=>{});
+}
+// Si la pestaña pasa a segundo plano los timers se frenan y el watchdog
+// cortaria igual; soltar aca lo hace explicito.
+document.addEventListener('visibilitychange',()=>{if(document.hidden)detenerJog();});
+window.addEventListener('blur',detenerJog);
+// Flechas del teclado = un paso, salvo escribiendo en un campo.
+document.addEventListener('keydown',e=>{
+  if(e.key!=='ArrowUp' && e.key!=='ArrowDown')return;
+  if(e.altKey||e.ctrlKey||e.metaKey)return;
+  const t=e.target;
+  if(t && (t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+  e.preventDefault();
+  pasoZ(e.key==='ArrowUp'?-1:1);
+});
+renderControlFoco();
 
 const driverAvisoPrevio={0:false,1:false};
 async function refrescarFoco(){
@@ -1069,9 +1145,9 @@ async function refrescarFoco(){
       }
     }
     const m=d.motores&&d.motores[motorSel];
-    const pos=document.getElementById('s_focus_pos'), drv=document.getElementById('s_focus_drv');
-    if(!m){pos.textContent='—';drv.textContent='sin motor';return;}
-    pos.textContent=m.posicion+'  (1/'+m.microsteps+')';
+    const drv=document.getElementById('s_focus_drv');
+    if(!m){document.querySelectorAll('.zposN').forEach(e=>e.textContent='—');drv.textContent='sin motor';return;}
+    pintarPosicion(m.posicion_um);
     if(m.uart!=='ok'){drv.textContent='UART: error';drv.className='v hot';return;}
     const avisos=[];
     if(m.sobretemp_corte)avisos.push('CORTE TÉRMICO');
@@ -1081,76 +1157,64 @@ async function refrescarFoco(){
     drv.className='v'+(avisos.length?' hot':'');
     const cal=document.getElementById('s_cal'), c=m.calibracion_dpc;
     if(c){
-      cal.textContent=c.um_por_pixel.toFixed(2)+' µm/px · r²='+c.r2.toFixed(3);
+      cal.textContent='calibrado · r²='+c.r2.toFixed(3);
       cal.className='v';
     }else{
-      cal.textContent='sin calibrar — usa barrido';
-      cal.className='v hot';
+      cal.textContent='sin calibrar (usa barrido, funciona igual)';
+      cal.className='v';
     }
   }catch(e){}
 }
 
 async function autoenfocar(){
-  const btn=document.getElementById('afBtn'), cam=motorSel;
-  btn.disabled=true;btn.querySelector('.lbl').textContent='Enfocando CAM '+cam+'...';
+  const cam=motorSel, btns=[document.getElementById('afBtn'),document.getElementById('lbAfBtn')];
+  const textos=btns.map(b=>b.querySelector('.lbl').textContent);
+  btns.forEach(b=>{b.disabled=true;b.querySelector('.lbl').textContent='Enfocando...';});
+  document.getElementById('s_af').textContent='buscando…';
   try{
-    // El rango se piensa en micras, no en micropasos: cuanto mas lejos
-    // del punto donde YA enfocaste a mano puede llegar a estar el foco
-    // real. Chico a proposito -- el autofoco arranca desde tu posicion
-    // actual (no la reemplaza a ciegas), asi que no hace falta un rango
-    // grande si ya enfocaste vos primero. Sin finales de carrera (ver
-    // TODO_HW.md 1.5), mas chico tambien es menos riesgo.
-    const rangoUm=+document.getElementById('afRango').value;
+    // Rango en micras, centrado donde estas. Si no aparece el foco el
+    // servidor reintenta con el doble hasta rango_max_um, y si ni asi lo
+    // encuentra deja la plataforma donde estaba (no se va a ciegas).
+    const rangoUm=+document.getElementById('afRango').value||40;
+    const rangoMax=Math.max(rangoUm,+document.getElementById('afRangoMax').value||200);
     const r=await fetch('/api/focus/auto',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({camera:cam,rango_um:rangoUm,puntos:13,refinamientos:2})});
+      body:JSON.stringify({camera:cam,rango_um:rangoUm,rango_max_um:rangoMax,puntos:13,refinamientos:2})});
     const d=await r.json();
     if(d.error){toast(d.error);document.getElementById('s_af').textContent='error';return;}
     const um=d.desplazamiento_um, signo=um>0?'+':'';
-    document.getElementById('s_af').textContent=
-      d.metodo+': '+signo+um.toFixed(1)+' µm · '+d.segundos+'s';
-    // Si un metodo fallo y se uso otro, decirlo: si no, parece que el
-    // autofoco hace cosas distintas cada vez sin razon.
-    const aviso=d.aviso?' · '+d.aviso:'';
-    if(d.fuera_de_rango){
-      toast('El foco quedó fuera del rango ('+signo+um.toFixed(1)+' µm hasta el borde) — repetí el autofoco o ampliá el rango'+aviso);
-    }else if(d.fino && d.fino.en_borde){
-      toast('Enfocado ('+signo+um.toFixed(1)+' µm) pero el ajuste fino quedó en el borde — repetí');
+    const ampliado=d.ampliado?' · buscó ±'+(d.rango_um/2).toFixed(0)+' µm':'';
+    if(d.encontrado===false){
+      document.getElementById('s_af').textContent='no lo encontró'+ampliado;
+      toast('No encontré el foco (busqué ±'+(d.rango_um/2).toFixed(0)+' µm). Me quedé donde estaba: acércate un poco a mano y vuelve a intentar.');
     }else{
-      // DPC y barrido por corrimiento informan el corrimiento residual
-      // entre las dos medias aperturas; el barrido por nitidez
-      // (metrica dpc/bruta), la nitidez del maximo.
-      const detalle=(d.corrimiento_px!=null)
-        ? 'resto '+d.corrimiento_px.toFixed(2)+' px'
-        : (d.nitidez!=null ? 'nitidez '+d.nitidez.toFixed(0) : '');
-      toast('Enfocado por '+d.metodo+': '+signo+um.toFixed(1)+' µm ('+detalle+')'+aviso);
+      document.getElementById('s_af').textContent=signo+um.toFixed(1)+' µm · '+d.segundos+' s'+ampliado;
+      toast('Enfocado: '+signo+um.toFixed(1)+' µm'+(d.aviso?' · '+d.aviso:''));
     }
     refrescarFoco();
   }catch(e){toast('Error de autofoco');}
-  finally{btn.disabled=false;btn.querySelector('.lbl').textContent='Autofoco de CAM '+cam;}
+  finally{btns.forEach((b,i)=>{b.disabled=running;b.querySelector('.lbl').textContent=textos[i];});}
 }
 async function calibrarDpc(){
   const btn=document.getElementById('calBtn'), cam=motorSel;
-  if(!confirm('Calibrar el autofoco DPC de CAM '+cam+'.\n\nVa a mover la '
-    +'plataforma ±125 µm alrededor de la posición actual midiendo el '
-    +'corrimiento entre las dos medias iluminaciones.\n\nEnfocá a ojo ANTES: '
-    +'la relación es lineal solo cerca del foco, y calibrar lejos sesga la '
-    +'ganancia. La muestra tiene que tener estructura visible.'))return;
-  btn.disabled=true;btn.querySelector('.lbl').textContent='Calibrando CAM '+cam+'...';
+  if(!confirm('Calibrar el autofoco rápido de la cámara '+cam+'.\n\nPrimero busca el foco, '
+    +'luego mueve la plataforma ±12 µm alrededor y mide cuánto se corre la imagen.\n\n'
+    +'Tarda menos de un minuto. La muestra tiene que tener células o estructura visible.'))return;
+  btn.disabled=true;btn.querySelector('.lbl').textContent='Calibrando cámara '+cam+'...';
   try{
     const r=await fetch('/api/focus/calibrar',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({camera:cam,amplitud:1200,puntos:5,eje:'lr'})});
+      body:JSON.stringify({camera:cam,eje:'lr'})});
     const d=await r.json();
     if(d.error){toast(d.error);return;}
     toast(d.confiable
-      ? 'Calibrado: '+d.calibracion.um_por_pixel.toFixed(2)+' µm/px (r²='+d.r2.toFixed(3)+')'
-      : 'Ajuste pobre (r²='+d.r2.toFixed(3)+'), NO se guardó — campo vacío, o rango de calibración fuera del régimen lineal');
+      ? 'Listo: autofoco rápido calibrado (r²='+d.r2.toFixed(3)+')'
+      : 'No salió bien (r²='+d.r2.toFixed(2)+', '+d.puntos_usados+' de '+d.puntos+' puntos útiles), no se guardó. El autofoco sigue funcionando igual.');
     refrescarFoco();
   }catch(e){toast('Error de calibración');}
-  finally{btn.disabled=false;btn.querySelector('.lbl').textContent='Calibrar autofoco DPC';}
+  finally{btn.disabled=running;btn.querySelector('.lbl').textContent='Calibrar autofoco rápido';}
 }
 function tlAfChange(){
   document.getElementById('tlAfOpts').style.display=
-    document.getElementById('tlAf').checked?'grid':'none';
+    document.getElementById('tlAf').checked?'block':'none';
 }
 function tlCntChange(){
   document.getElementById('tlCntOpts').style.display=
@@ -1305,7 +1369,8 @@ async function iniciar(){
   const body={modo:document.getElementById('modo').value,interval:+document.getElementById('intv').value,duration:+document.getElementById('dur').value,nombre:document.getElementById('nombre').value,camaras:[0,1],
     autofocus:document.getElementById('tlAf').checked,
     autofocus_cada:+document.getElementById('tlAfCada').value,
-    autofocus_rango:+document.getElementById('tlAfRango').value,
+    autofocus_rango_um:+document.getElementById('tlAfRango').value||40,
+    autofocus_rango_max_um:200,
     contar:document.getElementById('tlCnt').checked,
     contar_cada:+document.getElementById('tlCntCada').value,
     contar_overlay:document.getElementById('tlCntOverlay').checked};
@@ -1325,7 +1390,8 @@ function setRunning(on){
   document.getElementById('dot').className='dot '+(on?'run':'idle');
   document.getElementById('state').textContent=on?'RUNNING':'IDLE';
   document.getElementById('s_state').textContent=on?'RUNNING':'IDLE';
-  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn','afBtn','calBtn','cntFotoBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  ['liveBtn0','liveBtn1','refresh','snap','start','lightBtn','lightOffBtn','afBtn','lbAfBtn','calBtn','cntFotoBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  document.querySelectorAll('.zbtn,[data-paso]').forEach(b=>b.disabled=on);
   document.getElementById('stop').disabled=!on;
   if(on){
     [0,1].forEach(n=>{
@@ -1608,7 +1674,7 @@ setInterval(pollNas,2000);pollNas();
 setInterval(pollUsb,2000);pollUsb();
 
 setInterval(poll,2000);poll();refrescarAmbas();
-setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();
+setInterval(()=>{if(!jogActivo)refrescarFoco();},3000);refrescarFoco();aplicarResolucion(false);
 // Mas rapido que el resto de los sondeos: el conteo en vivo se refresca
 // varias veces por segundo del lado del servidor y el numero tiene que
 // acompaniar a lo que se ve dibujado en el stream.
