@@ -34,6 +34,7 @@ from core import experimentos as exp_mod
 from core import marca_agua
 from core import metadatos as metadatos_mod
 from core.optica import Optica, OBJETIVOS
+from core.actualizar import Actualizador, ErrorActualizar, reiniciar
 
 # ===============================
 # Galeria de archivos: solo lectura, con nombres validados por regex
@@ -338,7 +339,8 @@ class CalibrarDpcReq(BaseModel):
 
 def create_app(camera, illuminations, timelapse, motores=None,
                autofocus=None, motor=None, conteo=None, usb=None,
-               enviador=None, respaldo_nas=None, experimentos=None, optica=None):
+               enviador=None, respaldo_nas=None, experimentos=None, optica=None,
+               actualizador=None):
     """motores: {numero_de_camara: FocusMotorController}. `motor` se
     acepta todavia como un solo eje suelto (compatibilidad con la
     version de un motor) y se mapea a la camara 0.
@@ -347,6 +349,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
     conteo de celulas."""
     experimentos = experimentos or Experimentos()
     optica = optica or Optica()
+    actualizador = actualizador or Actualizador()
 
     app = FastAPI()
     if motores is None:
@@ -1528,6 +1531,43 @@ def create_app(camera, illuminations, timelapse, motores=None,
         except OSError:
             pass
         return datos
+
+    # ===============================
+    # Actualizar el programa desde GitHub (ver core/actualizar.py)
+    # ===============================
+    @app.get("/api/version")
+    def version():
+        return actualizador.version()
+
+    @app.get("/api/actualizacion")
+    def actualizacion(forzar: bool = False):
+        return actualizador.revisar(forzar=forzar)
+
+    def _apagar_hardware():
+        for luz in illuminations.values():
+            if luz is not None:
+                luz.off()
+        for m in motores.values():
+            if m is not None:
+                try:
+                    m.close()
+                except Exception:
+                    pass
+        camera.stop()
+
+    @app.post("/api/actualizar")
+    def actualizar():
+        if timelapse.is_running():
+            return {"error": "Hay un timelapse en curso. Actualiza cuando termine."}
+        if autofocus_lock.locked():
+            return {"error": "Autofoco en curso, espera a que termine"}
+        try:
+            r = actualizador.actualizar()
+        except ErrorActualizar as e:
+            return {"error": str(e)}
+        if r.get("actualizado"):
+            reiniciar(_apagar_hardware)
+        return r
 
     @app.get("/api/experimentos")
     def exp_listar():

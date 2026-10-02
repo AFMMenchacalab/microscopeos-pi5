@@ -339,6 +339,23 @@
   .incu .iv.aviso b{color:var(--amber)}
   .incu .iv.mal b{color:var(--red)}
   @media(max-width:560px){.incu{gap:9px;padding:6px 10px;font-size:12px}.incu .co2{display:none}}
+
+  /* ---------- actualizaciones ---------- */
+  .nueva{display:inline-flex;align-items:center;gap:7px;min-height:42px;padding:6px 14px;border-radius:21px;
+    background:var(--green-soft);color:var(--green);border:1px solid var(--green);font-weight:600;font-size:13px}
+  .nueva[hidden]{display:none}
+  .nueva .ic{width:16px;height:16px}
+  .act-estado{font-size:13.5px;margin:4px 0 10px}
+  .act-lista{margin:0 0 12px;padding-left:18px;font-size:13px;max-height:180px;overflow:auto}
+  .act-lista li{margin:3px 0}
+  .act-lista .f{color:var(--dim);font-family:var(--font-mono);font-size:11.5px;margin-right:6px}
+  .act-botones{display:flex;gap:8px;flex-wrap:wrap}
+  .act-botones button{flex:1 1 180px}
+  .actualizando{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:12px;background:var(--bg);color:var(--text);text-align:center;padding:24px}
+  .actualizando[hidden]{display:none}
+  .actualizando h2{margin:0;font-size:22px}
+  .actualizando p{margin:0;color:var(--dim);max-width:420px}
   .ajustes-hoja{width:min(760px,100%)}
   .ajustes-hoja details.panel{margin-bottom:10px;background:var(--panel2)}
   .ajustes-hoja h3.grupo{margin:18px 2px 10px}
@@ -519,6 +536,9 @@
       <span class="iv" id="incuT"><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg><b>--</b> °C</span>
       <span class="iv" id="incuH"><svg class="ic" aria-hidden="true"><use href="#i-droplet"/></svg><b>--</b> %</span>
       <span class="iv" id="incuC"><b class="co2">CO₂</b><b>--</b> %</span>
+    </button>
+    <button class="nueva" id="nuevaChip" hidden onclick="abrirAjustes('actPanel')" title="Hay una versión nueva del programa">
+      <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Actualización disponible
     </button>
     <button class="icon-only" id="ajustesBtn" onclick="abrirAjustes()" aria-label="Ajustes" title="Ajustes">
       <svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg>
@@ -975,7 +995,26 @@
       <div class="stat"><span class="k">Carpeta</span><span class="v" id="s_folder" style="font-size:10px">—</span></div>
       </div>
     </details>
+    <details class="panel" id="actPanel">
+      <summary><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg><span class="stitle">Actualizar el programa</span><span class="mini" id="actMini"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+      <div class="body">
+      <div class="stat"><span class="k">Versión instalada</span><span class="v" id="actVersion">—</span></div>
+      <p class="act-estado" id="actEstado">Revisando…</p>
+      <ul class="act-lista" id="actLista" hidden></ul>
+      <div class="act-botones">
+        <button id="actRevisar" onclick="revisarActualizacion(true)">Buscar actualizaciones</button>
+        <button class="primary" id="actBoton" hidden onclick="actualizarPrograma()">Actualizar ahora</button>
+      </div>
+      <p class="hint" style="margin-top:10px">Tus fotos y tus ajustes no se tocan. El programa se reinicia solo y la página vuelve en unos segundos.</p>
+      </div>
+    </details>
   </div>
+</div>
+
+<div class="actualizando" id="actualizando" hidden role="alert">
+  <svg class="ic ic-lg" aria-hidden="true"><use href="#i-refresh"/></svg>
+  <h2 id="actualizandoTit">Actualizando…</h2>
+  <p id="actualizandoTxt">No apagues el microscopio. Tarda menos de un minuto.</p>
 </div>
 
 <div class="lightbox" id="expVista" hidden role="dialog" aria-modal="true" aria-labelledby="expTitulo" onclick="if(event.target===this)cerrarExp()">
@@ -1810,6 +1849,61 @@ async function borrarCalibracion(){
   toast('Calibración quitada');cargarCalibracion();
 }
 cargarCalibracion();
+// ===== Actualizar el programa (GitHub) =====
+function fechaCorta(iso){
+  try{return new Date(iso).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});}catch(e){return iso||'';}
+}
+let versionActual=null;
+async function revisarActualizacion(forzar){
+  const est=document.getElementById('actEstado'),lista=document.getElementById('actLista'),
+        btn=document.getElementById('actBoton'),rev=document.getElementById('actRevisar');
+  if(forzar){rev.disabled=true;est.textContent='Buscando en internet…';}
+  try{
+    const d=await (await fetch('/api/actualizacion'+(forzar?'?forzar=true':''))).json();
+    if(d.commit){versionActual=d.commit;
+      document.getElementById('actVersion').textContent=fechaCorta(d.fecha)+' · '+d.commit;}
+    const hay=!!d.hay_nueva;
+    document.getElementById('nuevaChip').hidden=!hay;
+    document.getElementById('actMini').textContent=hay?'Nueva versión':'';
+    btn.hidden=!hay;
+    lista.hidden=!hay;
+    if(d.error){est.textContent=d.error;}
+    else if(hay){
+      est.textContent=d.n_nuevos===1?'Hay una versión nueva con este cambio:':'Hay una versión nueva con '+d.n_nuevos+' cambios:';
+      lista.innerHTML='';
+      (d.nuevos||[]).forEach(c=>{const li=document.createElement('li');
+        const f=document.createElement('span');f.className='f';f.textContent=fechaCorta(c.fecha);
+        li.append(f,document.createTextNode(c.titulo));lista.append(li);});
+    }else est.textContent='Tienes la versión más nueva.';
+  }catch(e){est.textContent='No se pudo revisar.';}
+  finally{rev.disabled=false;}
+}
+async function actualizarPrograma(){
+  if(!confirm('¿Actualizar ahora? El programa se reinicia y la página vuelve sola en unos segundos.'))return;
+  const btn=document.getElementById('actBoton');btn.disabled=true;btn.textContent='Descargando…';
+  try{
+    const d=await (await fetch('/api/actualizar',{method:'POST'})).json();
+    if(d.error){toast(d.error);return;}
+    if(!d.actualizado){toast(d.mensaje||'Ya tienes la versión más nueva');revisarActualizacion(true);return;}
+    const ov=document.getElementById('actualizando');
+    if(d.notas&&d.notas.length)document.getElementById('actualizandoTxt').textContent=d.notas.join(' ')+' Reiniciando…';
+    ov.hidden=false;
+    // Esperar a que el servidor vuelva con la version nueva y recargar.
+    const nuevo=d.commit,t0=Date.now();
+    const esperar=async()=>{
+      try{const v=await (await fetch('/api/version',{cache:'no-store'})).json();
+        if(v.commit===nuevo){document.getElementById('actualizandoTit').textContent='¡Listo!';setTimeout(()=>location.reload(),600);return;}}
+      catch(e){}
+      if(Date.now()-t0>180000){document.getElementById('actualizandoTit').textContent='Tarda más de lo normal';
+        document.getElementById('actualizandoTxt').textContent='Espera un poco y recarga la página. Si no vuelve, reinicia el microscopio.';}
+      setTimeout(esperar,2000);
+    };
+    setTimeout(esperar,3000);
+  }catch(e){toast('Error: '+e);}
+  finally{btn.disabled=false;btn.textContent='Actualizar ahora';}
+}
+revisarActualizacion(false);
+setInterval(()=>revisarActualizacion(false),60*60*1000);
 async function iniciar(){
   await Promise.all([0,1].filter(n=>live[n]).map(n=>toggleLive(n)));
   const body={modo:document.getElementById('modo').value,

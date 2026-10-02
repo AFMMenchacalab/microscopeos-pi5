@@ -6,9 +6,19 @@ capturas_unicas/
 test_capturas/
 venv/
 
+# "**/" para que valga tambien en codigo/MicroscopeOS/profiles/, que es
+# donde los escribe el programa.
 # Configuracion de envio a la PC: contiene la clave compartida
-profiles/envio_pc.json
+**/profiles/envio_pc.json
 # Configuracion del NAS: contiene usuario y contraseña
-profiles/respaldo_nas.json
-# Preferencia de color DPC (se crea al usar la interfaz)
-profiles/iluminacion.json
+**/profiles/respaldo_nas.json
+# Ajustes que crea la interfaz al usarla (colores de luz, optica, marca
+# de agua, logo propio, calibracion de imagen)
+**/profiles/iluminacion.json
+**/profiles/optica.json
+**/profiles/marca_agua.json
+**/profiles/logo.png
+**/profiles/calibracion_imagen.json
+**/profiles/flat_cam*.npy
+# Fotos y experimentos
+codigo/MicroscopeOS/datos/

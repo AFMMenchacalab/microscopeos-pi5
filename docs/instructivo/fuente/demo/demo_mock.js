@@ -342,6 +342,9 @@
     if(ruta==='/api/envio/estado')return json({url:'',pendientes:0,enviados:0});
     if(ruta==='/api/nas/estado')return json({modo:'smb',pendientes:0,enviados:0,activo:false,subcarpeta:'microscopio'});
     if(ruta==='/api/envio/buscar')return json({pcs:[]});
+    if(ruta==='/api/version')return json({git:true,rama:'master',commit:'b5b1810',fecha:'2026-10-02T03:21:20+00:00',titulo:'Demo'});
+    if(ruta==='/api/actualizacion')return json({git:true,rama:'master',commit:'b5b1810',fecha:'2026-10-02T03:21:20+00:00',hay_nueva:false,nuevos:[],n_nuevos:0});
+    if(ruta==='/camera/calibracion')return json({calibrada:false});
     if(ruta==='/api/nas/buscar')return json({equipos:[]});
     return json({ok:true,status:'ok'});
   };

@@ -193,6 +193,17 @@ sudo cp configs/systemd/microscopeos.service /etc/systemd/system/
 sudo systemctl enable --now microscopeos
 ```
 
+### Actualizar
+
+Desde la página: **Ajustes › Actualizar el programa**. Cuando GitHub
+tiene una versión nueva en `master`, el encabezado muestra
+«Actualización disponible» (se revisa al abrir la página y cada hora).
+El botón trae la versión nueva y reinicia el servidor (con systemd:
+`Restart=on-failure` lo vuelve a levantar). No toca fotos (`datos/`) ni
+ajustes; el código cambiado a mano en la Pi queda en `git stash` y los
+commits locales en una rama `respaldo/…`. Si la versión nueva no
+compila, se queda la anterior. Otra rama: variable `MICROSCOPEOS_RAMA`.
+
 ### API
 
 | Método | Endpoint | Descripción |
