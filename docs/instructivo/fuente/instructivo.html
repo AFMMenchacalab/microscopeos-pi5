@@ -147,7 +147,7 @@
         <li><span>Una computadora, tableta o celular <b>conectado a la misma red</b> que el microscopio.</span></li>
         <li><span>La dirección de la página del microscopio. Pídesela a la persona responsable y anótala aquí:</span></li>
       </ol>
-      <p style="margin-left:9.5mm;white-space:nowrap">http:// <span class="linea-llenar" style="min-width:50mm"></span> :8000/ui</p>
+      <p style="margin-left:9.5mm;white-space:nowrap">http:// <span class="linea-llenar" style="min-width:50mm"></span> :8000</p>
       <h3>Cómo abrir la página</h3>
       <ol class="pasos">
         <li><span>Abre el navegador (Chrome, Firefox, Edge o Safari).</span></li>
@@ -204,28 +204,32 @@
   <p>La página está ordenada en el mismo orden en que se usa. Los círculos verdes con números son los pasos;
   sigue el 1, luego el 2, el 3 y el 4.</p>
   <figure class="anotada">
-    <img class="captura" src="img/pagina.png" alt="Captura de la página del microscopio" style="max-height:120mm;width:auto">
+    <img class="captura" src="img/pagina.png" alt="Captura de la página del microscopio" style="max-height:98mm;width:auto">
     <span class="m" style="left:3.5%;top:8.6%">A</span>
     <span class="m" style="left:1.5%;top:18.5%">1</span>
     <span class="m" style="left:1.5%;top:70.4%">2</span>
     <span class="m" style="left:69.8%;top:18.5%">3</span>
+    <span class="m" style="left:1.5%;top:99%">4</span>
     <span class="m" style="left:73.5%;top:9.8%">C</span>
     <span class="m" style="left:85.3%;top:9.8%">D</span>
     <span class="m" style="left:96%;top:9.8%">B</span>
   </figure>
   <div class="leyenda">
-    <span class="m">A</span><span><b>Guía «Cómo se usa».</b> Toca un paso para ir directo a esa parte.</span>
+    <span class="m">A</span><span><b>Guía «Cómo se usa»:</b> los 4 pasos, en orden. Si tocas uno, la página baja
+    sola hasta esa sección.</span>
     <span class="m">1</span><span><b>Enciende la luz.</b> Elige el tipo de luz y el brillo.</span>
     <span class="m">2</span><span><b>Mira la muestra.</b> Las imágenes de las dos cámaras.</span>
     <span class="m">3</span><span><b>Enfoca.</b> Botones para subir y bajar, y el enfoque automático.</span>
+    <span class="m">4</span><span><b>Toma una foto o un timelapse</b>, y tus fotos guardadas. Están más abajo en la página
+    (en la imagen no alcanzan a verse): baja con la rueda del ratón o deslizando el dedo.</span>
     <span class="m">C</span><span><b>Incubadora.</b> Temperatura, humedad y CO<sub>2</sub>, cuando está conectada. En ámbar o rojo
     si se aleja de lo pedido. Tócala para cambiar los valores.</span>
     <span class="m">D</span><span><b>Ajustes</b> (el engrane): lo que casi nunca hace falta tocar.</span>
     <span class="m">B</span><span><b>Estado.</b> «Listo» = puedes usarlo. «Timelapse en curso» = está tomando fotos solo.</span>
   </div>
-  <p style="margin-top:4mm">Más abajo están el paso <b>4</b> (tomar una foto y el timelapse) y tus fotos guardadas.</p>
-  <div class="nota"><b>No puedes romper nada desde la página.</b>
-  Si un botón no está disponible, aparece apagado o te sale un mensaje que explica por qué.</div>
+  <div class="nota"><b>Puedes explorar con tranquilidad</b>Si algo no se puede hacer en ese momento (por ejemplo,
+  mover el foco durante un timelapse), el botón se ve gris o un mensaje explica por qué. Borrar fotos siempre pide
+  confirmar.</div>
 </section>
 
 <!-- ========== PASO 1 y 2 ========== -->
@@ -594,8 +598,9 @@
 
 <!-- ========== TARJETA ========== -->
 <section class="pagina">
+  <p class="mini" style="margin-bottom:3mm">✂ Recorta por la línea punteada y pega la tarjeta junto al microscopio.</p>
   <div class="tarjeta">
-    <h2>MicroscopeOS · Guía rápida <span class="mini" style="font-weight:400;margin-left:auto">recorta y pega junto al microscopio ✂</span></h2>
+    <h2>MicroscopeOS · Guía rápida</h2>
     <div class="grid4">
       <div><span class="paso">1</span><br><b>Enciende la luz</b><br>Tipo «Normal» → <span class="boton">Encender luz</span>.
         Células transparentes: «Relieve».</div>
@@ -607,7 +612,9 @@
         minutos, horas, Iniciar.</div>
     </div>
     <div class="dos" style="grid-template-columns:1fr 1fr;gap:6mm">
-      <table class="tecla-tabla">
+      <div>
+      <p style="font-weight:700;font-size:10.5pt;margin-bottom:1.5mm">Teclas para enfocar (en una computadora)</p>
+      <table class="tecla-tabla" style="margin-top:0">
         <tr><td><kbd>W</kbd> <kbd>↑</kbd></td><td>Subir</td></tr>
         <tr><td><kbd>S</kbd> <kbd>↓</kbd></td><td>Bajar</td></tr>
         <tr><td><kbd>A</kbd> <kbd>←</kbd></td><td>Paso más fino</td></tr>
@@ -615,8 +622,9 @@
         <tr><td><kbd>F</kbd></td><td>Enfocar automáticamente</td></tr>
         <tr><td><kbd>1</kbd> <kbd>2</kbd></td><td>Cámara 0 / 1</td></tr>
       </table>
-      <div style="font-size:10.3pt;display:grid;gap:2mm">
-        <div><b>Dirección:</b> http:// <span class="linea-llenar" style="min-width:45mm"></span> :8000/ui</div>
+      </div>
+      <div style="font-size:10.3pt;display:grid;gap:2mm;align-content:start">
+        <div><b>Dirección:</b> http:// <span class="linea-llenar" style="min-width:45mm"></span> :8000</div>
         <div><b>Tocar</b> Subir/Bajar = un paso · <b>mantener</b> = sigue hasta soltar.</div>
         <div><b>1000 µm = 1 mm.</b> Una célula mide 10–30 µm.</div>
         <div>Arriba a la derecha: la <b>incubadora</b> (tócala para cambiarla) y <b>Listo</b> = libre ·
