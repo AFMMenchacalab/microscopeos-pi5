@@ -172,6 +172,8 @@ from fastapi.testclient import TestClient
 from core.camera import CameraController
 from core.timelapse import TimelapseManager
 from server.api import create_app
+import server.api as _api
+_api.ARCHIVO_ILUM = tmp / "iluminacion.json"     # no tocar profiles/ del repo
 
 class Luz:
     def __init__(self):
@@ -187,7 +189,16 @@ class Luz:
     def ring(self): self._p("RING")
     def rheinberg(self, *a): self._p("RHEINBERG")
     def set_brightness(self, p): self.brightness_percent = p
-    def set_color_dpc(self, c): self.color_dpc = c
+    @staticmethod
+    def _hex(c):
+        import re as _re
+        if not _re.fullmatch(r"[0-9A-Fa-f]{6}", c or ""):
+            raise ValueError(f"color invalido: {c!r}")
+        return None if c.upper() == "FFFFFF" else c.upper()
+    def set_color_dpc(self, c): self.color_dpc = self._hex(c)
+    color_campo = None
+    _rheinberg_colors = ("0000FF", "FF6A00")
+    def set_color_campo(self, c): self.color_campo = self._hex(c)
 
 raiz_api = tmp / "api"
 MA.ARCHIVO = raiz_api / "marca.json"     # no tocar profiles/ del repo
@@ -238,6 +249,16 @@ check("renombrar desde la API", nuevo_id.endswith("_Muestra_B_tincion"), nuevo_i
 check("renombrar con un nombre vacio avisa", "error" in cl.post(f"/api/exp/{nuevo_id}/renombrar", json={"nombre": "  "}).json())
 codigo = cl.post(f"/api/exp/{nuevo_id}/borrar").json()["codigo"]
 check("borrar y deshacer", cl.post("/api/papelera/restaurar", json={"codigo": codigo}).json()["id"] == nuevo_id)
+
+print("\n=== API: colores de la luz por camara ===")
+import core.experimentos  # noqa
+from server import api as api_mod
+est = cl.post("/light/colores", json={"camaras": [1], "campo": "FF0000"}).json()["matrices"]
+check("campo claro rojo solo en la camara 1", est["1"]["color_campo"] == "FF0000" and est["0"]["color_campo"] == "FFFFFF")
+est = cl.post("/light/colores", json={"camaras": [0, 1], "dpc": "0000FF"}).json()["matrices"]
+check("relieve azul en las dos", est["0"]["color_dpc"] == "0000FF" and est["1"]["color_dpc"] == "0000FF")
+check("un color invalido avisa", "error" in cl.post("/light/colores", json={"camaras": [0], "dpc": "verde"}).json())
+cl.post("/light/colores", json={"camaras": [0, 1], "dpc": "00FF00", "campo": "FFFFFF"})
 
 print("\n=== API: optica y marca de agua ===")
 o = cl.post("/api/optica", json={"camara": 1, "objetivo": "10x"}).json()["camara"]

@@ -15,7 +15,7 @@ class MatrizESP32Fake:
 
     def __init__(self, mac="A0:F2:62:EB:21:A4", rot=90, fx=0, fy=1):
         self.mac, self.rot, self.fx, self.fy = mac, rot, fx, fy
-        self.patron, self.brillo = "OFF", 0
+        self.patron, self.brillo, self.color = "OFF", 0, None
         self.recibidos = []          # historial de lineas crudas
         self.resets = 0              # cuantas veces DTR+RTS reinicio la placa
 
@@ -29,8 +29,14 @@ class MatrizESP32Fake:
         if ":" not in t:
             return f"ERR:BAD_FORMAT:{t}"
         campos = t.split(":")
-        if len(campos) != 2 or not campos[0].strip() or not campos[1].strip():
+        # PATRON:brillo o PATRON:brillo:RRGGBB (color opcional, README)
+        if len(campos) not in (2, 3) or not all(c.strip() for c in campos):
             return f"ERR:BAD_FORMAT:{t}"
+        color = None
+        if len(campos) == 3:
+            color = campos[2].strip().upper()
+            if len(color) != 6 or any(ch not in "0123456789ABCDEF" for ch in color):
+                return f"ERR:BAD_COLOR:{campos[2].strip()}"
         pat, bri = campos[0].strip().upper(), campos[1].strip()
         if pat not in PATRONES:
             return f"ERR:UNKNOWN_PATTERN:{pat}"
@@ -40,8 +46,8 @@ class MatrizESP32Fake:
             return f"ERR:BAD_BRIGHTNESS:{bri}"
         if not (0 <= n <= 255):
             return f"ERR:BAD_BRIGHTNESS:{bri}"
-        self.patron, self.brillo = pat, n
-        return f"OK:{pat}:{n}"
+        self.patron, self.brillo, self.color = pat, n, color
+        return f"OK:{pat}:{n}" + (f":{color}" if color else "")
 
 
 class TMC2209Fake:

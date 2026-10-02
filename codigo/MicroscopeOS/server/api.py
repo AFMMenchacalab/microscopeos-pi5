@@ -43,6 +43,7 @@ from core.optica import Optica, OBJETIVOS
 _FOLDER_RE = re.compile(r'^timelapse_\d{8}_\d{6}$')
 _FILE_RE = re.compile(r'^[A-Za-z0-9_.\-]+\.tif$')
 _PERFIL_RE = re.compile(r'^[A-Za-z0-9 _\-]{1,40}$')
+ARCHIVO_ILUM = BASE_DIR / "profiles" / "iluminacion.json"
 
 
 def _ruta_captura(filename):
@@ -127,6 +128,11 @@ class MarcaReq(BaseModel):
 
 class LogoReq(BaseModel):
     png_base64: str
+
+class ColoresReq(BaseModel):
+    camaras: list = [0, 1]
+    campo: str | None = None      # RRGGBB del campo claro ("FFFFFF" = blanco)
+    dpc: str | None = None        # RRGGBB del relieve DPC
 
 class LightOffReq(BaseModel):
     camaras: list | None = None   # None = todas
@@ -480,17 +486,56 @@ def create_app(camera, illuminations, timelapse, motores=None,
         for cam in req.camaras:
             _luz_aplicar(cam, req.modo, req.percent,
                          req.color_centro, req.color_anillo)
+        if req.modo == "rheinberg":
+            _guardar_colores()      # los colores de Rheinberg tambien se recuerdan
         return {"status": "ok", "modo": req.modo}
 
-    # Color de los patrones DPC (L/R/T/B), para todas las matrices. Se guarda
-    # en profiles/iluminacion.json para que sobreviva a un reinicio.
-    ARCHIVO_ILUM = BASE_DIR / "profiles" / "iluminacion.json"
+    # Colores de cada matriz: se guardan en profiles/iluminacion.json
+    # (ARCHIVO_ILUM, a nivel de modulo) para que sobrevivan a un reinicio.
 
     def _color_dpc_actual():
         for luz in illuminations.values():
             if luz is not None:
                 return getattr(luz, "color_dpc", None) or "FFFFFF"
         return None
+
+    def _guardar_colores():
+        """profiles/iluminacion.json: colores de cada matriz. "color_dpc"
+        queda por compatibilidad con versiones anteriores (un solo color)."""
+        datos = {"color_dpc": _color_dpc_actual(), "camaras": {}}
+        for cam, luz in illuminations.items():
+            if luz is not None:
+                datos["camaras"][str(cam)] = {
+                    "dpc": getattr(luz, "color_dpc", None) or "FFFFFF",
+                    "campo": getattr(luz, "color_campo", None) or "FFFFFF",
+                    "rheinberg": list(getattr(luz, "_rheinberg_colors", ("0000FF", "FF6A00")))}
+        try:
+            ARCHIVO_ILUM.parent.mkdir(parents=True, exist_ok=True)
+            ARCHIVO_ILUM.write_text(json.dumps(datos, indent=2))
+        except OSError:
+            pass
+
+    @app.post("/light/colores")
+    def light_colores(req: ColoresReq):
+        """Color del campo claro y/o del relieve DPC de las matrices
+        indicadas (cada camara puede tener los suyos). Si la matriz esta
+        encendida en ese modo, cambia al momento."""
+        if timelapse.is_running():
+            return {"error": "Timelapse en curso"}
+        try:
+            with luz_lock:
+                for cam in req.camaras:
+                    luz = illuminations.get(cam)
+                    if luz is None:
+                        continue
+                    if req.campo is not None and hasattr(luz, "set_color_campo"):
+                        luz.set_color_campo(req.campo)
+                    if req.dpc is not None:
+                        luz.set_color_dpc(req.dpc)
+        except ValueError as e:
+            return {"error": str(e)}
+        _guardar_colores()
+        return light_estado()
 
     @app.get("/light/color_dpc")
     def color_dpc_get():
@@ -506,11 +551,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
                     luz.set_color_dpc(req.color)
         except ValueError as e:
             return {"error": str(e)}
-        try:
-            ARCHIVO_ILUM.parent.mkdir(parents=True, exist_ok=True)
-            ARCHIVO_ILUM.write_text(json.dumps({"color_dpc": _color_dpc_actual()}))
-        except OSError:
-            pass
+        _guardar_colores()
         return {"color": _color_dpc_actual()}
 
     @app.post("/light/on")
@@ -541,6 +582,9 @@ def create_app(camera, illuminations, timelapse, motores=None,
                 "modo": (e.get("modo") if e.get("modo") not in (None, "off")
                          else e.get("modo_previo") or "full"),
                 "percent": getattr(luz, "brightness_percent", e.get("percent")),
+                "color_campo": getattr(luz, "color_campo", None) or "FFFFFF",
+                "color_dpc": getattr(luz, "color_dpc", None) or "FFFFFF",
+                "rheinberg": list(getattr(luz, "_rheinberg_colors", ("0000FF", "FF6A00"))),
             }
         return {"matrices": out}
 

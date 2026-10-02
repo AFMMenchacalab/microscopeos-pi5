@@ -28,6 +28,11 @@ check("on() manda FULL, no ON", m.patron == "FULL", m.recibidos[-1])
 check("80% -> 204/255", m.brillo == 204, f"brillo={m.brillo}")
 check("sin error en la respuesta", luz.last_error is None, luz.last_error)
 
+luz.set_color_campo("FF0000")
+check("campo claro con color: FULL:brillo:RRGGBB", m.patron == "FULL" and m.color == "FF0000",
+      m.recibidos[-1])
+luz.set_color_campo("FFFFFF"); luz.on()
+check("blanco = sin color en el comando", m.color is None and m.recibidos[-1].count(":") == 1, m.recibidos[-1])
 luz.left();   check("left() -> LEFT",     m.patron == "LEFT")
 luz.right();  check("right() -> RIGHT",   m.patron == "RIGHT")
 luz.top();    check("top() -> TOP",       m.patron == "TOP")

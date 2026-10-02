@@ -40,16 +40,23 @@ illuminations = {0: luz_cam0, 1: luz_cam1}
 luz_cam0.set_brightness(80)
 luz_cam1.set_brightness(80)
 
-# Color de los patrones DPC: verde por defecto (ver core/illumination.py);
-# se cambia desde la interfaz y queda guardado en profiles/iluminacion.json.
+# Colores de la luz: verde por defecto en relieve DPC (ver
+# core/illumination.py), blanco en campo claro. Se cambian desde la
+# interfaz y quedan en profiles/iluminacion.json.
+# Cada matriz tiene sus colores (campo claro, relieve DPC, Rheinberg);
+# versiones anteriores guardaban un solo "color_dpc" para las dos.
 try:
     import json as _json
-    _color = _json.loads((Path(__file__).resolve().parent / "profiles" /
-                          "iluminacion.json").read_text()).get("color_dpc", "00FF00")
+    _ilum = _json.loads((Path(__file__).resolve().parent / "profiles" /
+                         "iluminacion.json").read_text())
 except (OSError, ValueError):
-    _color = "00FF00"
-for _l in (luz_cam0, luz_cam1):
-    _l.set_color_dpc(_color)
+    _ilum = {}
+for _n, _l in illuminations.items():
+    _c = (_ilum.get("camaras") or {}).get(str(_n), {})
+    _l.set_color_dpc(_c.get("dpc", _ilum.get("color_dpc", "00FF00")))
+    _l.set_color_campo(_c.get("campo", "FFFFFF"))
+    if _c.get("rheinberg"):
+        _l._rheinberg_colors = tuple(_c["rheinberg"])
 
 # Un motor de enfoque por camara, los dos en el mismo bus UART con
 # direcciones distintas (ver el docstring de core/motor_focus.py).

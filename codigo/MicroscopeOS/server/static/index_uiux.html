@@ -242,6 +242,15 @@
   @media(max-width:600px){.luzdos{grid-template-columns:1fr}}
   .luzdos .luzbloque{border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
   .luztit{font-size:12.5px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .colores{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .colores button{width:34px;height:34px;min-height:0;padding:0;border-radius:50%;border:2px solid var(--line-strong)}
+  .colores button.active{border-color:var(--green);box-shadow:0 0 0 2px var(--green-soft)}
+  .colores input[type=color]{width:34px;height:34px;padding:0;border:2px solid var(--line-strong);border-radius:50%;
+    background:none;cursor:pointer}
+  .colores input[type=color].active{border-color:var(--green)}
+  .colores .nota-c{font-size:11.5px;color:var(--dim)}
+  .rhein{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .rhein label{font-size:11.5px;color:var(--dim);display:flex;align-items:center;gap:8px}
   .luz-sync{width:100%;min-height:38px;font-size:12.5px;color:var(--dim);background:transparent;
     border-style:dashed}
 
@@ -501,10 +510,6 @@
       <p class="hint">Sin luz la imagen se ve negra. «Normal» sirve para casi todo; «Relieve» hace
       visibles las células sin teñir. Todo se aplica al momento, sin botón de aplicar.</p>
       <div id="luzCtl"></div>
-      <div class="row" id="rheinbergColors" style="display:none">
-        <div class="field"><label for="colorCentro">Color del centro</label><input type="color" id="colorCentro" value="#0000ff" onchange="cambioColorRheinberg()"></div>
-        <div class="field"><label for="colorAnillo">Color del anillo</label><input type="color" id="colorAnillo" value="#ff6a00" onchange="cambioColorRheinberg()"></div>
-      </div>
       <button id="luzSync" class="luz-sync" onclick="alternarSyncLuz()"></button>
     </section>
 
@@ -800,15 +805,6 @@
     <details class="panel">
       <summary><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><span class="stitle">Ajustes de imagen</span><svg class="ic chev" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
       <div class="body">
-      <div class="field">
-        <label for="colorDpc">Color de la luz de relieve (DPC)</label>
-        <select id="colorDpc" onchange="cambiarColorDpc()">
-          <option value="00FF00">Verde (recomendado)</option>
-          <option value="FFFFFF">Blanco</option>
-          <option value="FF0000">Rojo</option>
-          <option value="0000FF">Azul</option>
-        </select>
-      </div>
       <div class="row">
         <div class="field"><label for="exp">Exposición (<span class="unid">µs</span>)</label><input type="number" id="exp" value="12000"></div>
         <div class="field"><label for="gain">Ganancia</label><input type="number" step="0.1" id="gain" value="1.2"></div>
@@ -1094,7 +1090,13 @@ const MODOS_LUZ=[
   ['ring','Fondo negro (campo oscuro)'],
   ['rheinberg','De colores (Rheinberg)'],
 ];
-const luz={sync:true,cams:{0:{on:false,modo:'full',percent:80},1:{on:false,modo:'full',percent:80}}};
+const luz={sync:true,cams:{
+  0:{on:false,modo:'full',percent:80,campo:'FFFFFF',dpc:'00FF00',rhein:['0000FF','FF6A00']},
+  1:{on:false,modo:'full',percent:80,campo:'FFFFFF',dpc:'00FF00',rhein:['0000FF','FF6A00']}}};
+// Colores rapidos. Verde es el recomendado para el relieve: la fase
+// depende del color y el objetivo esta mejor corregido en verde.
+const COLORES_LUZ=[['FFFFFF','Blanco'],['00FF00','Verde'],['FF0000','Rojo'],['0000FF','Azul']];
+const ES_DPC=m=>['left','right','top','bottom'].includes(m);
 try{if(localStorage.getItem('microscopeos_luz_sync')==='0')luz.sync=false;}catch(e){}
 let ultimaEdicionLuz=0;
 const envioLuz={};
@@ -1106,8 +1108,9 @@ function bloqueLuz(clave,titulo){
     +'<button class="luzon" data-acc="on"><span class="fila"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg><span class="lbl"></span></span><span class="sub"></span></button>'
     +'<div class="field"><label for="'+id+'_modo">Tipo de luz</label><select id="'+id+'_modo" data-acc="modo">'
     +MODOS_LUZ.map(m=>'<option value="'+m[0]+'">'+m[1]+'</option>').join('')+'</select></div>'
-    +'<div class="field" style="margin-bottom:0"><label for="'+id+'_brillo">Brillo</label><div class="slider">'
+    +'<div class="field"><label for="'+id+'_brillo">Brillo</label><div class="slider">'
     +'<input type="range" id="'+id+'_brillo" min="0" max="100" data-acc="brillo"><span class="val"></span></div></div>'
+    +'<div class="field" style="margin-bottom:0" data-color-campo><label>Color</label><div class="colores" data-zona="campo"></div></div>'
     +'</div>';
 }
 function camsDe(b){return b.dataset.luz==='ambas'?[0,1]:[+b.dataset.luz];}
@@ -1150,9 +1153,49 @@ function pintarLuz(){
     const rg=b.querySelector('[data-acc=brillo]');
     if(document.activeElement!==rg)rg.value=st.percent;
     b.querySelector('.val').textContent=st.percent+'%';
+    pintarColores(b,camsDe(b));
   });
-  document.getElementById('rheinbergColors').style.display=
-    [0,1].some(c=>luz.cams[c].modo==='rheinberg')?'grid':'none';
+}
+// La fila de color cambia con el tipo de luz: campo claro y relieve DPC
+// tienen cada uno su color (se recuerdan por separado); Rheinberg, dos;
+// fondo negro no lleva color.
+function pintarColores(b,cams){
+  const st=luz.cams[cams[0]], caja=b.querySelector('[data-color-campo]'), zona=caja.querySelector('.colores');
+  const tipo=st.modo==='full'?'campo':ES_DPC(st.modo)?'dpc':st.modo==='rheinberg'?'rhein':null;
+  caja.style.display=tipo?'':'none';
+  if(!tipo||zona.dataset.pintado===tipo+JSON.stringify([st.campo,st.dpc,st.rhein]))return;
+  zona.dataset.pintado=tipo+JSON.stringify([st.campo,st.dpc,st.rhein]);
+  caja.querySelector('label').textContent=tipo==='campo'?'Color de la luz':tipo==='dpc'?'Color del relieve':'Colores (centro y anillo)';
+  if(tipo==='rhein'){
+    zona.className='rhein';
+    zona.innerHTML='<label>Centro <input type="color" data-rh="0" value="#'+st.rhein[0]+'"></label>'
+      +'<label>Anillo <input type="color" data-rh="1" value="#'+st.rhein[1]+'"></label>';
+    zona.querySelectorAll('[data-rh]').forEach(inp=>inp.onchange=()=>{
+      cams.forEach(c=>{luz.cams[c].rhein=[...luz.cams[c].rhein];luz.cams[c].rhein[+inp.dataset.rh]=inp.value.slice(1).toUpperCase();});
+      if(st.on)enviarLuz(cams);
+    });
+    return;
+  }
+  const actual=st[tipo];
+  const propio=!COLORES_LUZ.some(c=>c[0]===actual);
+  zona.className='colores';
+  zona.innerHTML=COLORES_LUZ.map(c=>'<button data-c="'+c[0]+'" class="'+(c[0]===actual?'active':'')
+      +'" style="background:#'+c[0]+'" title="'+c[1]+'" aria-label="'+c[1]+'"></button>').join('')
+    +'<input type="color" title="Otro color" aria-label="Otro color" class="'+(propio?'active':'')+'" value="#'+(propio?actual:'FFAA00')+'">'
+    +'<span class="nota-c">'+(COLORES_LUZ.find(c=>c[0]===actual)||['','otro'])[1]
+    +(tipo==='dpc'&&actual==='00FF00'?' (recomendado)':'')+'</span>';
+  const elegir=hex=>cambiarColorLuz(cams,tipo,hex);
+  zona.querySelectorAll('[data-c]').forEach(x=>x.onclick=()=>elegir(x.dataset.c));
+  zona.querySelector('input[type=color]').onchange=e=>elegir(e.target.value.slice(1).toUpperCase());
+}
+async function cambiarColorLuz(cams,tipo,hex){
+  cams.forEach(c=>luz.cams[c][tipo]=hex);
+  pintarLuz();ultimaEdicionLuz=Date.now();
+  try{
+    const d=await (await fetch('/light/colores',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camaras:cams,[tipo]:hex})})).json();
+    if(d.error){toast(d.error);return;}
+  }catch(e){toast('Sin conexión con la luz');}
 }
 function deshabilitarLuz(on){
   document.querySelectorAll('#luzCtl button,#luzCtl select,#luzCtl input,#luzSync').forEach(e=>e.disabled=on);
@@ -1174,8 +1217,8 @@ async function enviarGrupoLuz(cams){
     if(st.on){
       const body={modo:st.modo,percent:st.percent,camaras:cams};
       if(st.modo==='rheinberg'){
-        body.color_centro=document.getElementById('colorCentro').value.slice(1).toUpperCase();
-        body.color_anillo=document.getElementById('colorAnillo').value.slice(1).toUpperCase();
+        body.color_centro=st.rhein[0];
+        body.color_anillo=st.rhein[1];
       }
       r=await fetch('/light/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     }else{
@@ -1194,15 +1237,13 @@ function alternarSyncLuz(){
   try{localStorage.setItem('microscopeos_luz_sync',luz.sync?'1':'0');}catch(e){}
   if(luz.sync){
     // Al volver a juntarlas, la cámara 1 copia lo de la 0.
-    Object.assign(luz.cams[1],luz.cams[0]);
+    Object.assign(luz.cams[1],luz.cams[0],{rhein:[...luz.cams[0].rhein]});
+    fetch('/light/colores',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camaras:[1],campo:luz.cams[0].campo,dpc:luz.cams[0].dpc})}).catch(()=>{});
     enviarLuz([0,1]);
     toast('Las dos cámaras tienen la misma luz');
   }else toast('Ahora cada cámara tiene su propia luz');
   renderLuz();
-}
-function cambioColorRheinberg(){
-  [0,1].filter(c=>luz.cams[c].on&&luz.cams[c].modo==='rheinberg')
-    .forEach(c=>enviarLuz(luz.sync?[0,1]:[c]));
 }
 // Lee como quedaron las matrices (otra persona, una captura o un conteo
 // pueden haberlas cambiado). No pisa lo que el usuario esta moviendo.
@@ -1216,9 +1257,13 @@ async function cargarLuz(forzar){
       luz.cams[c].on=!!x.encendida;
       if(x.modo&&MODOS_LUZ.some(mm=>mm[0]===x.modo))luz.cams[c].modo=x.modo;
       if(x.percent!=null)luz.cams[c].percent=Math.round(x.percent);
+      if(x.color_campo)luz.cams[c].campo=x.color_campo;
+      if(x.color_dpc)luz.cams[c].dpc=x.color_dpc;
+      if(x.rheinberg)luz.cams[c].rhein=x.rheinberg;
     }
     const a=luz.cams[0],b=luz.cams[1];
-    const distintas=a.on!==b.on||a.modo!==b.modo||a.percent!==b.percent;
+    const distintas=a.on!==b.on||a.modo!==b.modo||a.percent!==b.percent
+      ||a.campo!==b.campo||a.dpc!==b.dpc||a.rhein.join()!==b.rhein.join();
     if(luz.sync&&distintas&&m[0]&&m[1]){luz.sync=false;renderLuz();}
     else pintarLuz();
   }catch(e){}
@@ -2280,17 +2325,6 @@ async function probarNas(){
   const d=await (await fetch('/api/nas/probar',{method:'POST'})).json();
   toast(d.ok?('El NAS acepta archivos: '+d.destino):('No se pudo escribir: '+(d.error||'?')));
 }
-// --- color de los patrones DPC (vivo, capturas, timelapse y autofoco) ---
-async function cargarColorDpc(){
-  try{const d=await (await fetch('/light/color_dpc')).json();if(d.color)$v('colorDpc').value=d.color;}catch(e){}
-}
-async function cambiarColorDpc(){
-  const color=$v('colorDpc').value;
-  const d=await (await fetch('/light/color_dpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({color})})).json();
-  if(d.error){toast(d.error);cargarColorDpc();return;}
-  toast('DPC en '+$v('colorDpc').selectedOptions[0].text.replace(' (recomendado)','').toLowerCase());
-}
-cargarColorDpc();
 setInterval(pollNas,2000);pollNas();
 setInterval(pollUsb,2000);pollUsb();
 

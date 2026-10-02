@@ -82,6 +82,9 @@ class IlluminationController:
         # tres contrastes distintos sumados; el objetivo acromatico esta
         # mejor corregido en verde y el sensor tiene mas pixeles verdes.
         self.color_dpc = None
+        # Color del campo claro (FULL), RRGGBB o None = blanco. El firmware
+        # acepta color en cualquier patron simple (PATRON:brillo:RRGGBB).
+        self.color_campo = None
         self.last_error = None
 
         # El baudrate es virtual (USB-CDC nativo lo ignora), pero pyserial
@@ -171,8 +174,21 @@ class IlluminationController:
     # BLANCO / GENERAL
     # =============================
     def on(self):
-        """Enciende la matriz completa. 'FULL' en el firmware ESP32-S3."""
-        self._patron("FULL")
+        """Enciende la matriz completa. 'FULL' en el firmware ESP32-S3,
+        con el color de campo claro elegido (blanco si no hay)."""
+        self._patron("FULL", self.color_campo)
+
+    def set_color_campo(self, color):
+        """Color del campo claro: RRGGBB o None/"FFFFFF" para blanco. Si la
+        matriz esta en campo claro, el cambio se ve al momento."""
+        if color and color.upper() != "FFFFFF":
+            if not _HEX.match(color):
+                raise ValueError(f"color invalido: {color!r} (usar RRGGBB)")
+            self.color_campo = color.upper()
+        else:
+            self.color_campo = None
+        if self.state and self.current_pattern == "FULL":
+            self._patron("FULL", self.color_campo)
 
     def off(self):
         # El firmware acepta cualquier brillo en OFF; se manda 0 por claridad.
