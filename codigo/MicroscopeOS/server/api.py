@@ -660,7 +660,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
         if timelapse.is_running():
             return "Timelapse en curso"
         if autofocus_lock.locked():
-            return "Autofoco en curso, esperá a que termine"
+            return "Autofoco en curso, espera a que termine"
         return None
 
     @app.post("/api/focus/move")

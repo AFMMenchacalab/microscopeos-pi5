@@ -247,9 +247,15 @@
   .zpasos button b{font-size:14px;font-family:var(--font-mono)}
   .zpasos button small{font-size:10.5px;color:var(--dim);font-weight:400}
   .zpasos button.active small{color:var(--green)}
-  .zayuda{font-size:11.5px;color:var(--dim);text-align:center;margin:2px 0 var(--sp-3)}
+  .zayuda{font-size:11.5px;color:var(--dim);text-align:center;margin:2px 0 6px}
   kbd{font-family:var(--font-mono);font-size:11px;border:1px solid var(--line-strong);border-radius:4px;
-    padding:0 5px;background:var(--panel2)}
+    padding:0 5px;background:var(--panel2);transition:background .1s,color .1s,border-color .1s}
+  kbd.pulsada{background:var(--green);color:#04130a;border-color:var(--green)}
+  .zteclas{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center;
+    font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:8px;margin-bottom:var(--sp-3)}
+  .zteclas .ks{display:flex;gap:3px;justify-content:flex-end}
+  .zteclas kbd{min-width:22px;text-align:center;font-size:12px;padding:1px 5px}
+  @media(hover:none){.zteclas{display:none}}
   .afbtn{width:100%;min-height:52px;font-size:15px}
   details.sub{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-top:var(--sp-3)}
   details.panel details.sub summary{display:list-item;cursor:pointer;padding:2px 0;font-size:12.5px;
@@ -1000,6 +1006,17 @@ try{
   if(g!==null && PASOS_Z[+g])pasoSel=+g;
 }catch(e){}
 
+// Teclado (por posicion fisica de la tecla, asi WASD sirve con
+// cualquier distribucion). Se ignora mientras se escribe en un campo.
+const TECLAS_Z=[
+  {ver:['W','↑'], codes:['KeyW','ArrowUp'],    txt:'Subir un paso (mantén para seguir)'},
+  {ver:['S','↓'], codes:['KeyS','ArrowDown'],  txt:'Bajar un paso'},
+  {ver:['A','←'], codes:['KeyA','ArrowLeft'],  txt:'Paso más fino'},
+  {ver:['D','→'], codes:['KeyD','ArrowRight'], txt:'Paso más grueso'},
+  {ver:['F'],     codes:['KeyF'],              txt:'Enfocar solo'},
+  {ver:['1','2'], codes:['Digit1','Digit2'],   txt:'Elegir cámara'},
+];
+
 // El bloque de control se dibuja igual en el panel y en la vista
 // ampliada: los dos manejan el mismo eje (motorSel).
 function renderControlFoco(){
@@ -1011,7 +1028,10 @@ function renderControlFoco(){
       +PASOS_Z.map((p,i)=>'<button role="radio" data-paso="'+i+'"><b>'+p.um+' µm</b><small>'+p.nombre+'</small></button>').join('')
       +'</div>'
       +'<button class="zbtn" data-dir="1"><svg class="ic" aria-hidden="true"><use href="#i-chev-down"/></svg>Bajar</button>'
-      +'<p class="zayuda">Toca: un paso · mantén apretado: sigue moviendo · teclado <kbd>↑</kbd> <kbd>↓</kbd></p>';
+      +'<p class="zayuda">Toca: un paso · mantén apretado: sigue moviendo</p>'
+      +'<div class="zteclas" aria-label="Atajos de teclado">'
+      +TECLAS_Z.map(t=>'<span class="ks">'+t.ver.map(k=>'<kbd data-tecla="'+k+'">'+k+'</kbd>').join('')+'</span><span>'+t.txt+'</span>').join('')
+      +'</div>';
     el.querySelectorAll('[data-paso]').forEach(b=>b.onclick=()=>elegirPaso(+b.dataset.paso));
     el.querySelectorAll('.zbtn').forEach(b=>conectarBotonZ(b,+b.dataset.dir));
   });
@@ -1116,14 +1136,32 @@ function detenerJog(){
 // cortaria igual; soltar aca lo hace explicito.
 document.addEventListener('visibilitychange',()=>{if(document.hidden)detenerJog();});
 window.addEventListener('blur',detenerJog);
-// Flechas del teclado = un paso, salvo escribiendo en un campo.
+function marcarTecla(ver){
+  document.querySelectorAll('kbd[data-tecla="'+ver+'"]').forEach(k=>{
+    k.classList.add('pulsada');setTimeout(()=>k.classList.remove('pulsada'),160);
+  });
+}
 document.addEventListener('keydown',e=>{
-  if(e.key!=='ArrowUp' && e.key!=='ArrowDown')return;
   if(e.altKey||e.ctrlKey||e.metaKey)return;
   const t=e.target;
   if(t && (t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+  const fila=TECLAS_Z.find(f=>f.codes.includes(e.code));
+  if(!fila)return;
   e.preventDefault();
-  pasoZ(e.key==='ArrowUp'?-1:1);
+  marcarTecla(fila.ver[fila.codes.indexOf(e.code)]);
+  switch(e.code){
+    case 'KeyW':case 'ArrowUp':pasoZ(-1);break;          // se repite sola al mantener
+    case 'KeyS':case 'ArrowDown':pasoZ(1);break;
+    case 'KeyA':case 'ArrowLeft':if(!e.repeat&&pasoSel>0)elegirPaso(pasoSel-1);break;
+    case 'KeyD':case 'ArrowRight':if(!e.repeat&&pasoSel<PASOS_Z.length-1)elegirPaso(pasoSel+1);break;
+    case 'KeyF':if(!e.repeat&&!running&&!document.getElementById('afBtn').disabled)autoenfocar();break;
+    case 'Digit1':case 'Digit2':{
+      const n=e.code==='Digit1'?0:1;
+      if(e.repeat||n===motorSel)break;
+      // Con una camara ampliada, cambiar de eje cambia tambien la imagen.
+      if(expandedCam===0||expandedCam===1)toggleExpand(n); else selMotor(n);
+      break;}
+  }
 });
 renderControlFoco();
 
