@@ -15,7 +15,8 @@ Los números que citan los comentarios del código (`TODO_HW 1.5`,
 - Las dos cámaras detectadas, cada una con su matriz (3.1, 2.3).
 - Matrices: abrir el puerto no las reinicia; udev y permisos bien (1.4, 4.1, 4.2).
 - Los dos motores de enfoque, el UART compartido y los GPIO (1.6, 3.2–3.4).
-- Autofoco DPC dentro del timelapse, con la incubadora encendida (2.4, 2.5).
+- Autofoco DPC dentro del timelapse, con la incubadora encendida (2.4, 2.5),
+  y termina donde uno enfocaría a ojo.
 - El firmware `dpc_matrix` ya está en el repo (4.4).
 
 ## Pendiente
@@ -33,21 +34,19 @@ avisar; lo de abajo es afinar.
       detecta solo cuándo choca) en la rama `experimental/homing-stallguard`:
       bajar el objetivo con cuidado hasta el piso del microscopio y usar
       ese punto como cero. Si funciona, agregar límites por software.
-- [ ] **Autofoco contra el foco visual.** Comprobar que donde el autofoco
-      termina es donde uno enfocaría a ojo. Si siempre queda corrido
-      hacia el mismo lado, agregar un desfase fijo. Revisar también que
-      las fotos en campo oscuro y Rheinberg salgan enfocadas.
-- [ ] **Diafonía entre los dos canales.** Solo si se quiere usar la
-      captura simultánea (`simultaneo=True`): encender una sola matriz y
-      ver si la otra cámara recibe luz.
-- [ ] **Conteo de células con muestra real.**
-  - Ajustar `diametro_px` (`core/analisis.py`): si cada célula sale
-    con dos marcas, subirlo; si varias caen en una, bajarlo.
-  - Confirmar que con la tapa puesta da "campo vacío" y que un pozo
-    confluente no.
-- [ ] **Tiempos por ciclo.** Mirar en `timelapse.log` cuánto tarda el
-      autofoco y el conteo en cada ciclo; si no entran en el intervalo,
-      espaciarlos (`autofocus_cada`, `contar_cada`).
+- [ ] **Diafonía entre los dos canales.** Encender una sola matriz y ver
+      si a la otra cámara le entra luz. Si no le entra, se puede usar la
+      captura simultánea (`simultaneo=True`).
+- [ ] **Tiempos por ciclo.** Al terminar el experimento en curso, sacar
+      de `timelapse.log` cuánto tarda el autofoco en cada ciclo. Si no
+      entra en el intervalo, espaciarlo (`autofocus_cada`).
+
+### Muy baja prioridad
+
+- [ ] **Conteo de células.** Hoy no funciona del todo bien. Si se retoma:
+      ajustar `diametro_px` (`core/analisis.py`) con una muestra real y
+      confirmar que con la tapa puesta da "campo vacío" y que un pozo
+      confluente no.
 - [ ] *(Opcional)* **Autofoco aprendido.** No hay modelo: grabar pilas
       de foco (`/api/focus/pila`) y entrenar con
       `extras/ia/entrenar_autofoco.py`.
