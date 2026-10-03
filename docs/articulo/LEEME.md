@@ -6,6 +6,10 @@ contexto, descripción, archivos de diseño, lista de materiales, armado,
 operación y validación. `hardwarex.pdf` es la versión compilada, para
 leerla sin LaTeX.
 
+`hardwarex_es.tex` / `hardwarex_es.pdf` es la **misma versión en español**,
+para revisarla. La que se envía es la de inglés: si se corrige algo en una,
+hay que pasarlo a la otra.
+
 El análisis de migración celular **no** está aquí: va en otro artículo,
 con [pipeline-migracion-celular](https://github.com/AFMMenchacalab/pipeline-migracion-celular).
 
@@ -25,6 +29,8 @@ con [pipeline-migracion-celular](https://github.com/AFMMenchacalab/pipeline-migr
 ```bash
 cd docs/articulo
 pdflatex hardwarex && bibtex hardwarex && pdflatex hardwarex && pdflatex hardwarex
+# versión en español (requiere texlive-lang-spanish)
+pdflatex hardwarex_es && bibtex hardwarex_es && pdflatex hardwarex_es && pdflatex hardwarex_es
 ```
 
 Requiere la clase `elsarticle` (en TeX Live: `texlive-publishers`). También
