@@ -1,0 +1,18 @@
+# Túnel de Cloudflare para el acceso remoto a MicroscopeOS.
+# Ver docs/ACCESO_REMOTO.md.
+#
+# Copiar a ~/.cloudflared/config.yml (o /etc/cloudflared/config.yml si se
+# instala como servicio) y reemplazar <ID-del-tunel> y la ruta del
+# usuario. El .json de credenciales NO va en el repositorio.
+
+tunnel: <ID-del-tunel>                     # túnel lmi-gateway
+credentials-file: /home/<usuario>/.cloudflared/<ID-del-tunel>.json
+protocol: quic                             # salida por UDP 7844
+
+ingress:
+  # La protección (login por correo) la pone Cloudflare Access sobre este
+  # hostname, no este archivo: sin la app de Access el sitio quedaría
+  # abierto a cualquiera.
+  - hostname: microscopio.lmimenchacalab.com
+    service: http://localhost:8000
+  - service: http_status:404
