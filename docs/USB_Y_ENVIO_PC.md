@@ -63,7 +63,7 @@ otro usuario, cambiarlo en el archivo.
 No hay dependencias nuevas de Python: la detección lee `/proc/mounts` y
 `/sys`, y el envío usa `urllib` de la biblioteca estándar.
 
-## Instalación en la PC (repositorio `pipeline-migracion-celular`)
+## Instalación en la PC (repositorio [`pipeline-migracion-celular`](https://github.com/AFMMenchacalab/pipeline-migracion-celular))
 
 Lo más simple es la **interfaz gráfica** (rama `experimental/interfaz-cuda`
 del pipeline, ver su `INSTALAR.md`): `./iniciar_interfaz.sh` y *Iniciar
