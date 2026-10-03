@@ -64,7 +64,7 @@ se puede subir la carpeta a Overleaf junto con `../capturas/web_pagina.png`.
 - [ ] Viabilidad celular dentro del equipo contra un control en incubadora.
 - [ ] Diafonía entre los dos canales.
 - [ ] Ejemplo de aplicación: timelapse de 48 h con segmentación.
-- [ ] Cerrar o actualizar `TODO_HW.md` (casi todo figura como pendiente).
+- [ ] Completar los pendientes de `TODO_HW.md`.
 
 **Texto**
 
