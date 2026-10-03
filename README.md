@@ -28,7 +28,7 @@ automático en la Pi.
 - [Por qué DPC](#por-qué-dpc)
 - [Instalación](#instalación) · [Uso](#uso) · [API](#api)
 - [Dónde se guardan las fotos](#dónde-se-guardan-las-fotos)
-- [Estructura](#estructura) · [Tests](#tests) · [Hardware](#hardware) · [Estado](#estado)
+- [Estructura](#estructura) · [Tests](#tests) · [Hardware](#hardware) · [Estado](#estado) · [Proyectos relacionados](#proyectos-relacionados)
 
 ## Un sistema IoT de laboratorio
 
@@ -61,6 +61,7 @@ El microscopio es un sistema IoT completo, de los sensores a la nube:
 | **Actuación** | Matrices LED de iluminación, motores de enfoque, calefactor, válvula de CO₂ |
 | **Nodos embebidos** | 2× ESP32-S3 (iluminación) y un Arduino con el PID de la incubadora, independiente del timing de la Pi |
 | **Borde (edge)** | La Pi adquiere, enfoca, cuenta células y calcula el DPC de cada ciclo; lo pesado (segmentación) se manda a la PC |
+| **Procesamiento en la PC** | Segmentación con Cellpose-SAM y seguimiento de la migración celular en [pipeline-migracion-celular](https://github.com/AFMMenchacalab/pipeline-migracion-celular) |
 | **Conectividad** | HTTP/SSE en la red local, descubrimiento de la PC por difusión UDP, SMB al NAS, túnel de Cloudflare a internet |
 | **Aplicación** | Página web con video en vivo, control y telemetría, accesible desde la página del laboratorio |
 | **Seguridad** | Cloudflare Access con código por correo y lista cerrada de miembros; HTTPS de punta a punta |
@@ -218,7 +219,7 @@ Cómo regenerarlo si cambia la interfaz: [docs/instructivo/LEEME.md](docs/instru
   y expulsarla de forma segura. Ver [docs/USB_Y_ENVIO_PC.md](docs/USB_Y_ENVIO_PC.md).
 - **Envío a la computadora**: cada imagen se manda a la PC al guardarse,
   donde se segmenta en vivo con Cellpose-SAM (receptor y segmentador en
-  el repositorio `pipeline-migracion-celular`). La PC se encuentra sola
+  [pipeline-migracion-celular](https://github.com/AFMMenchacalab/pipeline-migracion-celular)). La PC se encuentra sola
   en la red y se empareja con un código de 6 dígitos; con cola y
   reintentos, un corte de red no frena ni pierde el timelapse.
 - **Respaldo en un NAS** por SMB (`core/respaldo_nas.py`), en paralelo
@@ -431,3 +432,12 @@ mueven limpio con UART y motor probados de punta a punta, y el acceso
 remoto por el túnel funciona con el login por correo (probado también sin
 sesión iniciada: todo redirige al login). El detalle de qué falta validar
 y por qué está en **[TODO_HW.md](TODO_HW.md)**.
+
+## Proyectos relacionados
+
+- **[pipeline-migracion-celular](https://github.com/AFMMenchacalab/pipeline-migracion-celular)**:
+  el análisis que corre en la PC con las imágenes que manda el
+  microscopio. Segmenta con Cellpose-SAM, sigue cada célula con laptrack
+  y mide la persistencia de la migración (células MDA-MB-231). Ahí están
+  el receptor (`31_receptor_microscopio.py`) y el segmentador en vivo
+  (`32_segmentar_en_vivo.py`) del [envío a la PC](docs/USB_Y_ENVIO_PC.md).
