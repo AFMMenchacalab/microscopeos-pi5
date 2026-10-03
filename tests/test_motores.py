@@ -756,6 +756,82 @@ log2 = open(os.path.join(tl2.base_folder, "timelapse.log")).read()
 check("si piden autofoco sin motores, avisa y sigue en vez de romperse",
       "no hay motores de enfoque" in log2 and "autofoco=no" in log2)
 
+print("\n=== HOMING SIN SENSOR (StallGuard, experimental) ===")
+motores3, bus3 = mf.crear_motores(camaras=(0,), max_current_ma=550, microsteps=16)
+m = motores3[0]
+m.set_current(irun_ma=450)
+corriente_antes = m._corriente_pedida
+escr3 = bus3.ser.tmc.escrituras
+
+
+def stallguard_simulado(m, piso_um, libre=300, frenado=15):
+    """SG_RESULT como el del chip: estable con el motor libre y hundido
+    una vez que el eje paso el piso (el motor real se frena ahi)."""
+    rng = np.random.default_rng(3)
+    inicio = m.posicion_um
+
+    def leer():
+        recorrido = abs(m.posicion_um - inicio)
+        if recorrido >= piso_um:
+            return int(frenado + rng.integers(0, 5))
+        return int(libre + rng.integers(-20, 20))
+    return leer
+
+
+m.leer_stallguard = stallguard_simulado(m, piso_um=1500)
+gpio.reset_pulsos()
+n0 = len(escr3)
+r = m.homing(direction=1, velocidad_um_s=2000, retroceso_um=200)
+check("homing: encuentra el tope", r["ok"] and r["motivo"].startswith("tope"), r["motivo"])
+check("homing: para poco despues del piso (< 150 um de mas)",
+      1500 <= r["recorrido_um"] < 1650, f"{r['recorrido_um']} um")
+check("homing: umbral automatico = mitad de la linea base",
+      r["linea_base"] is not None and abs(r["umbral"] - r["linea_base"] / 2) < 1,
+      f"base {r['linea_base']}, umbral {r['umbral']}")
+check("homing: queda referenciado, 200 um del lado contrario al tope",
+      m.referenciado and abs(m.posicion_um + 200) < 1, f"{m.posicion_um} um")
+check("homing: vuelve a la resolucion y corriente de antes",
+      m.microsteps == 16 and m._corriente_pedida == corriente_antes,
+      f"{m.microsteps}, {m._corriente_pedida}")
+check("homing: activa StallGuard (TCOOLTHRS) y lo apaga al terminar",
+      (0, mf.REG_TCOOLTHRS, 0xFFFFF) in escr3[n0:]
+      and [e for e in escr3[n0:] if e[1] == mf.REG_TCOOLTHRS][-1] == (0, mf.REG_TCOOLTHRS, 0))
+
+# Sin piso dentro del recorrido maximo: se rinde y no toca la referencia.
+m.referenciado = False
+m.leer_stallguard = stallguard_simulado(m, piso_um=10_000)
+antes = m.posicion_um
+r = m.homing(direction=1, velocidad_um_s=4000, recorrido_max_um=600)
+check("homing: sin tope en el recorrido maximo, falla sin referenciar",
+      not r["ok"] and not m.referenciado and "no detecto" in r["motivo"], r["motivo"])
+check("homing: en ese caso la posicion sigue siendo la relativa de antes",
+      abs(m.posicion_um - (antes + 600)) < 1, f"{antes} -> {m.posicion_um}")
+
+# solo_medir: recorre y devuelve las lecturas del motor libre.
+m.leer_stallguard = stallguard_simulado(m, piso_um=10_000)
+r = m.homing(direction=-1, velocidad_um_s=4000, recorrido_max_um=600, solo_medir=True)
+check("homing: modo medir devuelve SG_RESULT del motor libre",
+      r["ok"] and r["sg_min"] is not None and r["sg_min"] > 250, str(r["sg_min"]))
+
+# Un fallo de UART a mitad de camino detiene el motor.
+lecturas_hechas = [0]
+
+
+def uart_que_falla():
+    lecturas_hechas[0] += 1
+    if lecturas_hechas[0] > 5:
+        raise mf.TMCUartError("sin respuesta (simulado)")
+    return 300
+
+
+m.leer_stallguard = uart_que_falla
+r = m.homing(direction=1, velocidad_um_s=2000, recorrido_max_um=5000)
+check("homing: un error de UART lo detiene antes del maximo",
+      not r["ok"] and "UART" in r["motivo"] and r["recorrido_um"] < 5000,
+      f"{r['motivo']} ({r['recorrido_um']} um)")
+for mm in motores3.values():
+    mm.close()
+
 print("\n" + "=" * 50)
 print(f"PASS: {ok}   FAIL: {fail}")
 print("=" * 50)

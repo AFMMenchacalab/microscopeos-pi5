@@ -102,6 +102,10 @@ except ImportError:  # permite importar el modulo para pruebas sin hardware
 REG_GCONF = 0x00
 REG_IHOLD_IRUN = 0x10
 REG_TPOWERDOWN = 0x11
+REG_TSTEP = 0x12
+REG_TCOOLTHRS = 0x14
+REG_SGTHRS = 0x40
+REG_SG_RESULT = 0x41
 REG_CHOPCONF = 0x6C
 REG_DRV_STATUS = 0x6F
 
@@ -336,6 +340,9 @@ class FocusMotorController:
         # resolucion actual: asi cambiar de resolucion ida y vuelta (lo
         # hace cada autofoco) no acumula redondeos.
         self._pos256 = 0
+        # True despues de un homing() exitoso: desde ahi el cero de
+        # `position` es el tope mecanico, no el arranque. EXPERIMENTAL.
+        self.referenciado = False
 
         self._lock = threading.RLock()
         self._jog_thread = None
@@ -481,6 +488,9 @@ class FocusMotorController:
                 ihold_ma = irun_ma // 3
         ihold_ma = min(ihold_ma, irun_ma)
         ihold_ma = max(0, min(ihold_ma, self.max_current_ma))
+        # IHOLD_IRUN es de solo escritura en el chip: se recuerda lo pedido
+        # para poder volver a ello (lo usa homing() al terminar).
+        self._corriente_pedida = (irun_ma, ihold_ma, iholddelay)
 
         cs_irun = _corriente_a_cs(irun_ma / 1000, self.rsense)
         cs_ihold = _corriente_a_cs(ihold_ma / 1000, self.rsense)
@@ -670,6 +680,195 @@ class FocusMotorController:
                 if not mantener:
                     self.reposo()
             return self.position
+
+    # =============================
+    # HOMING SIN SENSOR (StallGuard4) -- EXPERIMENTAL
+    # =============================
+    # Lo mismo que hacen las impresoras 3D sin finales de carrera. El
+    # TMC2209 no mide "si el motor se movio": mide la CARGA. Mientras el
+    # rotor gira, el motor genera una contra-tension (fuerza
+    # contraelectromotriz) y el driver compara lo que pide con lo que
+    # vuelve en las bobinas. Ese resultado sale en SG_RESULT: alto con el
+    # motor libre, cae cuando algo lo frena. Contra el tope mecanico el
+    # rotor deja de avanzar, la carga se dispara y SG_RESULT se hunde.
+    #
+    # Condiciones del chip (datasheet TMC2209, StallGuard4):
+    # - solo funciona en StealthChop (el modo que ya usamos: GCONF no
+    #   activa en_SpreadCycle);
+    # - solo con el motor girando a una velocidad minima: por debajo la
+    #   contra-tension es tan chica que SG_RESULT es ruido. Por eso el
+    #   homing va bastante mas rapido que los movimientos normales;
+    # - TCOOLTHRS tiene que permitir esa velocidad (se pone al maximo
+    #   durante el homing y se vuelve a 0 al terminar).
+    #
+    # El pin DIAG no esta cableado, asi que SG_RESULT se lee por UART en
+    # un hilo aparte mientras otro genera los pulsos de STEP.
+    #
+    # Nada de esto esta probado en el microscopio: los valores por
+    # defecto son un punto de partida. Ver homing_prueba.py.
+
+    def leer_stallguard(self):
+        """SG_RESULT (0-510): carga medida por el driver. Alto = motor
+        libre; baja cuando algo lo frena. Solo tiene sentido con el motor
+        girando en StealthChop y por encima de TCOOLTHRS."""
+        return self._uart.read(REG_SG_RESULT) & 0x3FF
+
+    def homing(self, direction=1, velocidad_um_s=1000.0, microsteps=8,
+               irun_ma=250, umbral=None, fraccion_umbral=0.5,
+               ignorar_um=150.0, recorrido_max_um=15000.0,
+               confirmaciones=3, retroceso_um=200.0, solo_medir=False,
+               intervalo_s=0.01):
+        """Busca el tope mecanico avanzando hasta que el driver detecta
+        que el motor se frena, y lo toma como cero. EXPERIMENTAL.
+
+        direction: 1 = sentido + (la plataforma BAJA, ver move_steps).
+          Confirmar en el montaje que ese es el lado del piso del
+          microscopio y no el de la muestra.
+        velocidad_um_s: rapidez del avance. StallGuard necesita que el
+          motor gire lo bastante rapido; 1000 um/s son 1 vuelta/s con el
+          husillo T6x1. Python no clava el tiempo, la real se devuelve.
+        microsteps: resolucion durante el homing (menos pulsos por vuelta
+          = mas facil sostener la velocidad desde Python).
+        irun_ma: corriente durante el homing. Baja a proposito: es la
+          fuerza con la que el objetivo empuja contra el tope.
+        umbral: SG_RESULT por debajo del cual se considera frenado. Si es
+          None se calcula solo: la mediana de las primeras 10 lecturas
+          (ya en movimiento) por `fraccion_umbral`. Por eso conviene
+          arrancar al menos 1 mm antes del tope.
+        ignorar_um: las lecturas del arranque no sirven (el motor
+          acelera); se ignoran hasta recorrer esto.
+        recorrido_max_um: si recorre esto sin detectar el tope, se
+          detiene y no toca la referencia.
+        confirmaciones: lecturas seguidas por debajo del umbral antes de
+          parar (evita parar por un pico de ruido).
+        retroceso_um: al encontrar el tope, se aleja esto en sentido
+          contrario y queda ahi.
+        solo_medir: no busca el tope; recorre `recorrido_max_um` y
+          devuelve las lecturas. Sirve para ver cuanto da SG_RESULT con el
+          motor libre antes de probar el homing de verdad.
+
+        Si encuentra el tope, desde ahi `position` es absoluta: 0 en el
+        tope y el retroceso del lado contrario, y `referenciado` queda en
+        True. Devuelve un dict con el resultado y las lecturas.
+        """
+        if direction not in (1, -1):
+            raise ValueError("direction tiene que ser 1 o -1")
+        if microsteps not in MRES_MAP:
+            raise ValueError(f"microsteps invalido: {microsteps}")
+        um_por_paso = UM_POR_PASO_COMPLETO / microsteps
+        medio_periodo = um_por_paso / float(velocidad_um_s) / 2
+        pasos_max = int(recorrido_max_um / um_por_paso)
+        pasos_ignorar = int(ignorar_um / um_por_paso)
+
+        self.stop_jog()
+        lecturas = []                     # (um recorridos, SG_RESULT)
+        estado = {"pasos": 0, "parado_por": None, "umbral": umbral,
+                  "base": None}
+        parar = threading.Event()
+
+        def vigilar():
+            bajos = 0
+            ventana = []
+            while not parar.is_set():
+                time.sleep(intervalo_s)
+                try:
+                    sg = self.leer_stallguard()
+                except TMCUartError as e:
+                    estado["parado_por"] = f"error de UART: {e}"
+                    parar.set()
+                    return
+                lecturas.append((round(estado["pasos"] * um_por_paso, 1), sg))
+                if solo_medir or estado["pasos"] < pasos_ignorar:
+                    continue
+                if estado["umbral"] is None:
+                    ventana.append(sg)
+                    if len(ventana) >= 10:
+                        base = sorted(ventana)[len(ventana) // 2]
+                        estado["base"] = base
+                        estado["umbral"] = base * fraccion_umbral
+                    continue
+                if sg <= estado["umbral"]:
+                    bajos += 1
+                    if bajos >= confirmaciones:
+                        estado["parado_por"] = "tope"
+                        parar.set()
+                        return
+                else:
+                    bajos = 0
+
+        anterior_ms = self.microsteps
+        anterior_corriente = getattr(self, "_corriente_pedida", None)
+        duracion = 0.0
+        with self._lock:
+            try:
+                self.set_microsteps(microsteps)
+                self.set_current(irun_ma=irun_ma)
+                self._uart.write(REG_TCOOLTHRS, 0xFFFFF)
+                self.enable()
+                GPIO.output(self.dir_pin, GPIO.HIGH if direction > 0 else GPIO.LOW)
+                time.sleep(0.001)
+                hilo = threading.Thread(target=vigilar, daemon=True)
+                hilo.start()
+                paso256 = (256 // microsteps) * direction
+                t0 = time.monotonic()
+                try:
+                    while not parar.is_set() and estado["pasos"] < pasos_max:
+                        GPIO.output(self.step_pin, GPIO.HIGH)
+                        time.sleep(medio_periodo)
+                        GPIO.output(self.step_pin, GPIO.LOW)
+                        time.sleep(medio_periodo)
+                        self._pos256 += paso256
+                        estado["pasos"] += 1
+                finally:
+                    duracion = time.monotonic() - t0
+                    parar.set()
+                    hilo.join(timeout=2.0)
+
+                encontrado = estado["parado_por"] == "tope"
+                if encontrado:
+                    atras = int(round(retroceso_um / um_por_paso))
+                    self.move_steps(atras, direction=-direction, delay=0.0015)
+                    # El tope es el cero; el retroceso queda del otro lado.
+                    self._pos256 = -direction * atras * (256 // microsteps)
+                    self.referenciado = True
+            finally:
+                try:
+                    self._uart.write(REG_TCOOLTHRS, 0)
+                finally:
+                    if self.microsteps != anterior_ms:
+                        self.set_microsteps(anterior_ms)
+                    if anterior_corriente is not None:
+                        self.set_current(*anterior_corriente)
+                    self.reposo()
+
+        recorrido = estado["pasos"] * um_por_paso
+        utiles = [sg for um, sg in lecturas if um >= ignorar_um]
+        if solo_medir:
+            ok, motivo = estado["parado_por"] is None, (
+                estado["parado_por"] or f"medicion de {recorrido:.0f} um terminada")
+        elif encontrado:
+            ok, motivo = True, f"tope encontrado tras {recorrido:.0f} um"
+        elif estado["parado_por"]:
+            ok, motivo = False, estado["parado_por"]
+        else:
+            ok, motivo = False, (f"no detecto el tope en {recorrido:.0f} um; "
+                                 f"la referencia no cambio")
+        # No mas de ~400 lecturas en la respuesta.
+        salto = max(1, len(lecturas) // 400)
+        return {
+            "ok": ok,
+            "motivo": motivo,
+            "referenciado": self.referenciado,
+            "recorrido_um": round(recorrido, 1),
+            "velocidad_um_s_real": round(recorrido / duracion, 1) if duracion else 0.0,
+            "umbral": estado["umbral"],
+            "linea_base": estado["base"],
+            "sg_min": min(utiles) if utiles else None,
+            "sg_mediana": sorted(utiles)[len(utiles) // 2] if utiles else None,
+            "sg_max": max(utiles) if utiles else None,
+            "lecturas": lecturas[::salto],
+            "posicion_um": round(self.posicion_um, 2),
+        }
 
     # =============================
     # JOG CONTINUO (joystick de la interfaz web)
