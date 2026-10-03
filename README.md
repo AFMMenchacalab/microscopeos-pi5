@@ -202,7 +202,7 @@ Cómo regenerarlo si cambia la interfaz: [docs/instructivo/LEEME.md](docs/instru
   centro al gris del fondo y un umbral de brillo cuenta los dos lóbulos
   por separado. Distingue un campo vacío (o la luz apagada) de un cultivo
   confluente. El vivo necesita iluminación oblicua: en campo claro una
-  célula sin teñir se anula justo en el foco (medido sobre 40 células:
+  célula sin teñir se anula justo en el foco (en simulación, con 40 células de fase:
   campo claro **0**, media apertura **40**, DPC **40**), así que el
   conteo pone la matriz en media apertura para medir.
 

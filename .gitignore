@@ -22,3 +22,11 @@ venv/
 **/profiles/flat_cam*.npy
 # Fotos y experimentos
 codigo/MicroscopeOS/datos/
+
+# LaTeX (docs/articulo): solo se versionan el .tex, el .bib y el PDF
+docs/articulo/*.aux
+docs/articulo/*.bbl
+docs/articulo/*.blg
+docs/articulo/*.log
+docs/articulo/*.out
+docs/articulo/*.spl
