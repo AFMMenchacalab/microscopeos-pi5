@@ -15,6 +15,8 @@ from core.respaldo_nas import RespaldoNAS
 from core.experimentos import Experimentos
 from core.optica import Optica
 from core.metadatos import Contexto
+from core.alertas import Alertas
+from core.usuarios import Usuarios
 from server.api import create_app
 import uvicorn
 
@@ -126,11 +128,28 @@ timelapse = TimelapseManager(camera, illuminations, autofocus=autofocus,
 # Si la Pi se apago (corte de luz) con un timelapse a medias, seguirlo.
 # Corre en un hilo: espera a que la hora venga de la red y a que aparezca
 # la carpeta, sin demorar el arranque de la pagina.
+# Alertas por Telegram/correo (se configuran en la pagina, Ajustes).
+# Va antes de reanudar para que un timelapse reanudado tambien avise.
+try:
+    from temperature_controller import temperature_controller as _incubadora
+except Exception:
+    _incubadora = None
+alertas = Alertas(incubadora=_incubadora,
+                  espacio=lambda: experimentos.espacio()["libre_bytes"],
+                  timelapse_corriendo=timelapse.is_running)
+timelapse.alertas = alertas
+alertas.iniciar()
+
 timelapse.reanudar_pendiente()
+
+# Quien esta conectado, quien tiene el control y la bitacora
+# (datos/bitacora.jsonl).
+usuarios = Usuarios(bitacora=experimentos.raiz / "bitacora.jsonl")
 
 app = create_app(camera, illuminations, timelapse,
                  motores=motores, autofocus=autofocus, conteo=conteo,
                  usb=usb, enviador=enviador, respaldo_nas=respaldo_nas,
-                 experimentos=experimentos, optica=optica)
+                 experimentos=experimentos, optica=optica,
+                 alertas=alertas, usuarios=usuarios)
 print("Servidor en http://0.0.0.0:8000")
 uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

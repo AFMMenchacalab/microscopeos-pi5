@@ -89,6 +89,46 @@ def _escribir_json(carpeta, datos):
     os.replace(tmp, p)
 
 
+ARCHIVO_NOTAS = "notas.csv"
+CARPETA_EXPORTADOS = "exportados"
+CAMPOS_NOTA = ["hora", "ciclo", "tipo", "autor", "texto"]
+
+
+def agregar_nota(carpeta, texto, autor="", ciclo=None, tipo="nota", hora=None):
+    """Agrega una nota con hora a notas.csv del experimento.
+
+    tipo: "nota" (escrita por alguien), "pausa" o "reanudar" (las pone el
+    timelapse solo). Devuelve la nota como dict."""
+    import csv
+    texto = " ".join(str(texto or "").split())[:500]
+    if not texto:
+        raise ValueError("La nota está vacía")
+    nota = {"hora": (hora or datetime.now()).isoformat(timespec="seconds"),
+            "ciclo": "" if ciclo is None else int(ciclo), "tipo": tipo,
+            "autor": str(autor or "")[:120], "texto": texto}
+    ruta = Path(carpeta) / ARCHIVO_NOTAS
+    nuevo = not ruta.is_file() or ruta.stat().st_size == 0
+    with open(ruta, "a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=CAMPOS_NOTA)
+        if nuevo:
+            w.writeheader()
+        w.writerow(nota)
+    return nota
+
+
+def leer_notas(carpeta):
+    """Las notas de notas.csv, en orden, o [] si no hay."""
+    import csv
+    ruta = Path(carpeta) / ARCHIVO_NOTAS
+    if not ruta.is_file():
+        return []
+    try:
+        with open(ruta, newline="", encoding="utf-8") as f:
+            return [dict(r) for r in csv.DictReader(f)]
+    except (OSError, csv.Error):
+        return []
+
+
 def escribir_leeme(carpeta, datos):
     """LEEME.txt: lo que es cada cosa, para quien abra la carpeta en una
     computadora sin saber nada del microscopio."""
@@ -141,12 +181,15 @@ def escribir_leeme(carpeta, datos):
                 lineas.append("                   Las 4 fotos originales se borraron después de comprobar el resultado.")
         lineas += [
             "timelapse.log      Lo que pasó en cada ciclo (foco, errores).",
-            "temperatura.csv    Temperatura de la incubadora en cada ciclo.",
+            "temperatura.csv    Temperatura, CO2 y humedad de la incubadora en cada ciclo.",
             "autofoco.csv       Cuánto se movió el foco en cada ciclo, en micras.",
+            "notas.csv          Notas con hora que se escribieron durante el experimento",
+            "                   (\"agregué el fármaco\") y las pausas.",
         ]
     else:
         lineas.append("                   Nombre: fecha _ hora. Ej.: 2026-10-02_10-30-00.tif")
     lineas += [
+        "exportados/        Videos y OME-TIFF que se generaron desde la página (si hay).",
         "experimento.json   Los mismos datos de arriba, para programas.",
         "",
         "Cada foto lleva adentro (sin que se vea) la escala en micras por píxel, el",
@@ -245,8 +288,10 @@ class Experimentos:
             raiz = nombre[:-4]
             suf = raiz[-2:] if raiz[-2:] in orden else ""
             return (carpeta_rel, raiz[:len(raiz) - len(suf)], orden.get(suf, -1))
-        return sorted((str(p.relative_to(carpeta)).replace(os.sep, "/")
-                       for p in carpeta.rglob("*.tif") if p.is_file()), key=clave)
+        # exportados/ (videos, OME-TIFF) no son fotos del experimento.
+        return sorted((rel for rel in (str(p.relative_to(carpeta)).replace(os.sep, "/")
+                                       for p in carpeta.rglob("*.tif") if p.is_file())
+                       if not rel.startswith(CARPETA_EXPORTADOS + "/")), key=clave)
 
     def ruta_imagen(self, ident, rel):
         carpeta = self.resolver(ident)

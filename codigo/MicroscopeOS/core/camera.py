@@ -36,6 +36,13 @@ PREVIEW_SIZE = (640, 480)
 # este modo el vivo y las capturas ven el MISMO campo.
 PREVIEW_RAW_SIZE = (1640, 1232)
 
+# Indicador de saturacion del vivo: un canal >= este valor (de 255) cuenta
+# como saturado. Se pinta en magenta porque es el mismo color en RGB y en
+# BGR (no depende del orden de canales de picamera2) y casi no aparece en
+# una muestra de microscopio.
+UMBRAL_SATURADO = 250
+COLOR_SATURADO = (255, 0, 255)
+
 # TODO-HW: formato raw. En Pi 4 (Unicam) "SBGGR10" devolvia un buffer que
 # .view(np.uint16) interpretaba correctamente. El Pi 5 usa PiSP/CFE y puede
 # entregar el mismo stream como SBGGR10_CSI2P (empaquetado 10-bit en 5 bytes
@@ -108,6 +115,12 @@ class CameraController:
         self._colour_gains = {}
         self._flat = {}
         self._flat_cache = {}
+        # Saturacion e histograma del vivo (ver _estadisticas_vivo):
+        #   _marcar_saturados: camaras que pintan en magenta lo saturado
+        #   _estadisticas[n]:  ultimo histograma y % saturado de esa camara
+        self._marcar_saturados = set()
+        self._estadisticas = {}
+        self._t_estadisticas = {}
 
     # =============================
     # CICLO DE VIDA DE LAS INSTANCIAS
@@ -412,16 +425,69 @@ class CameraController:
                     self._modes.get(camera_num) != "preview":
                 return None
             frame = self._cams[camera_num].capture_array("main")
+        # La saturacion se mide ANTES del flat-field y de las anotaciones:
+        # lo que importa es si el sensor llego al tope, no si el
+        # flat-field estiro un pixel hasta 255.
+        saturados = self._estadisticas_vivo(camera_num, frame)
         if anotar is not None:
             try:
                 frame = anotar(camera_num, frame)
             except Exception:
                 pass
         frame = self._aplicar_flat(camera_num, frame)
+        if saturados is not None:
+            frame = frame.copy()
+            frame[saturados] = COLOR_SATURADO
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ok:
             return None
         return buf.tobytes()
+
+    # =============================
+    # SATURACION E HISTOGRAMA DEL VIVO
+    # =============================
+    def marcar_saturados(self, camera_num, activo):
+        """Pinta (o deja de pintar) en magenta los pixeles saturados del
+        vivo de esa camara."""
+        if activo:
+            self._marcar_saturados.add(camera_num)
+        else:
+            self._marcar_saturados.discard(camera_num)
+
+    def estadisticas_vivo(self):
+        """{camara: {saturados_pct, histograma, media, marcar, hora}} con
+        lo ultimo que se midio en el vivo de cada camara."""
+        return {n: dict(e, marcar=n in self._marcar_saturados)
+                for n, e in self._estadisticas.items()}
+
+    def _estadisticas_vivo(self, camera_num, frame):
+        """Histograma y % de pixeles saturados del frame, como mucho dos
+        veces por segundo y sobre una copia chica (no frena el vivo).
+        Saturado = cualquier canal >= UMBRAL_SATURADO: en el vivo el ISP
+        entrega 8 bits y lo que llego al tope del sensor queda en 255.
+
+        Devuelve la mascara de saturados a resolucion completa si esa
+        camara los tiene que marcar, o None."""
+        try:
+            ahora = time.monotonic()
+            if ahora - self._t_estadisticas.get(camera_num, 0) >= 0.5:
+                self._t_estadisticas[camera_num] = ahora
+                chico = frame[::8, ::8]
+                tope = chico.max(axis=2) if chico.ndim == 3 else chico
+                gris = chico.mean(axis=2) if chico.ndim == 3 else chico
+                hist, _ = np.histogram(gris, bins=32, range=(0, 256))
+                self._estadisticas[camera_num] = {
+                    "saturados_pct": round(float((tope >= UMBRAL_SATURADO).mean() * 100), 2),
+                    "histograma": [int(v) for v in hist],
+                    "media": round(float(gris.mean()), 1),
+                    "hora": time.time(),
+                }
+            if camera_num in self._marcar_saturados:
+                tope = frame.max(axis=2) if frame.ndim == 3 else frame
+                return tope >= UMBRAL_SATURADO
+        except Exception:
+            pass
+        return None
 
     def get_focus_frame(self, camera_num, descartar=1):
         """Frame gris de baja resolucion para medir nitidez (autofoco).

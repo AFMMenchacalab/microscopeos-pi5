@@ -186,10 +186,12 @@ class AutofocoIA:
             for _ in range(max(1, int(iteraciones))):
                 getattr(luz, metodo_a)()
                 time.sleep(settle)
-                a = autofocus._frame(camera_num, roi)
+                # Campo completo, sin la zona del usuario: el modelo se
+                # entrena con pilas de foco de campo completo.
+                a = autofocus._frame(camera_num, roi, usar_zona=False)
                 getattr(luz, metodo_b)()
                 time.sleep(settle)
-                b = autofocus._frame(camera_num, roi)
+                b = autofocus._frame(camera_num, roi, usar_zona=False)
 
                 um = self.predecir(a, b)
                 # Tope duro: sin finales de carrera (TODO_HW.md 1.5) una
