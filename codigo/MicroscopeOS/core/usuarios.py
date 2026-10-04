@@ -58,6 +58,10 @@ CON_CONTROL = (
     "/api/analisis/foto", "/api/actualizar", "/api/optica", "/profiles/",
     "/api/marca", "/api/alertas/config", "/api/usb/expulsar",
 )
+# Los que no se anotan solos en la bitacora: o son internos de la pagina
+# o los anota este modulo con un texto mas claro (tomar el control,
+# reservar).
+NO_REGISTRAR = ("/api/control/", "/api/reservas")
 # Los que se juntan en la bitacora (llegan muchos seguidos).
 RUIDOSOS = ("/api/focus/jog", "/light/set", "/brightness", "/light/colores",
             "/api/focus/move")
@@ -136,6 +140,8 @@ class Usuarios:
             if anterior and anterior != usuario["id"]:
                 self.tomado_por_otro[anterior] = usuario["nombre"]
                 self.registrar(usuario, "control", f"tomó el control (lo tenía {self.nombre(anterior)})")
+            elif anterior != usuario["id"]:
+                self.registrar(usuario, "control", "tomó el control")
             self.controlador = usuario["id"]
             self._ultima_accion = time.time()
             self.tomado_por_otro.pop(usuario["id"], None)
@@ -145,6 +151,7 @@ class Usuarios:
         with self._lock:
             if self._control() == usuario["id"]:
                 self.controlador = None
+                self.registrar(usuario, "control", "soltó el control")
             return self.estado(usuario)
 
     def estado(self, usuario):
@@ -167,7 +174,9 @@ class Usuarios:
             self.tomado_por_otro.pop(usuario["id"], None)
 
     # ---------- bitacora ----------
-    def registrar(self, usuario, ruta, detalle=""):
+    def registrar(self, usuario, ruta, detalle="", forzar=False):
+        if not forzar and ruta.startswith(NO_REGISTRAR):
+            return
         ahora = time.time()
         with self._lock:
             u = self._ultimo_log

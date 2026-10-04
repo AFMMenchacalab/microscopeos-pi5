@@ -470,7 +470,9 @@ check("ana ve quien controla y que se lo quitaron",
       and {c["id"] for c in est["conectados"]} >= {"ana@lab.mx", "beto@lab.mx"})
 bit = cl.get("/api/bitacora").json()["bitacora"]
 check("la bitacora tiene las acciones con su autor",
-      any(x["usuario"] == "beto@lab.mx" and x["accion"] == "/api/control/tomar" for x in bit))
+      any(x["usuario"] == "beto@lab.mx" and x["accion"] == "control"
+          and "lo tenía ana@lab.mx" in x["detalle"] for x in bit)
+      and not any(x["accion"].startswith("/api/control/") for x in bit))
 
 r = cl.post("/api/vivo/saturacion", json={"camera": 0, "marcar": True}, headers=BETO).json()
 check("marcar saturacion por la API", r["marcar"] and cam_api.marcados == {0: True})
