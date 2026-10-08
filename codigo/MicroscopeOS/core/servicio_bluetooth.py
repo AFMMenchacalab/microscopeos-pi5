@@ -44,7 +44,7 @@ RUTA_AGENTE = RUTA_APP + "/agente"
 BLUEZ = "org.bluez"
 
 
-def iniciar(configuracion, adaptador="hci0", modo_pi=True):
+def iniciar(configuracion, adaptador="hci0", modo_pi=True, agente=None):
     """Arranca el servicio en un hilo propio. Devuelve el hilo, o None si
     no hay con qué (sin dbus-next)."""
     try:
@@ -52,22 +52,23 @@ def iniciar(configuracion, adaptador="hci0", modo_pi=True):
     except ImportError:
         print("[bluetooth] sin el paquete dbus-next: configuración por Bluetooth apagada")
         return None
-    hilo = threading.Thread(target=_correr, args=(configuracion, adaptador, modo_pi), daemon=True,
+    hilo = threading.Thread(target=_correr, args=(configuracion, adaptador, modo_pi, modo_pi if agente is None else agente), daemon=True,
                             name="servicio-bluetooth")
     hilo.start()
     return hilo
 
 
-def _correr(configuracion, adaptador, modo_pi):
+def _correr(configuracion, adaptador, modo_pi, agente):
     try:
-        asyncio.run(ServicioBluetooth(configuracion, adaptador, modo_pi).correr())
+        asyncio.run(ServicioBluetooth(configuracion, adaptador, modo_pi, agente).correr())
     except Exception as e:
         print(f"[bluetooth] apagado: {e}")
 
 
 class ServicioBluetooth:
-    def __init__(self, configuracion, adaptador="hci0", modo_pi=True):
+    def __init__(self, configuracion, adaptador="hci0", modo_pi=True, agente=None):
         self.cfg = configuracion
+        self.agente = modo_pi if agente is None else agente
         # En la Pi el adaptador se llama como el microscopio y este
         # servicio acepta los emparejamientos. En una computadora de prueba
         # no se toca su nombre ni se le quita el agente al escritorio.
@@ -127,7 +128,7 @@ class ServicioBluetooth:
 
         raiz = bus.get_proxy_object(BLUEZ, "/org/bluez", await bus.introspect(BLUEZ, "/org/bluez"))
         gestor_agentes = raiz.get_interface("org.bluez.AgentManager1")
-        if self.modo_pi:
+        if self.agente:
             await gestor_agentes.call_register_agent(RUTA_AGENTE, "NoInputNoOutput")
             try:
                 await gestor_agentes.call_request_default_agent(RUTA_AGENTE)

@@ -12,7 +12,10 @@ computadora, pero con:
 
 Necesita Bluetooth en la computadora y el paquete dbus-next. No cambia el
 nombre Bluetooth de la computadora ni su agente de emparejamiento: al
-emparejar, el escritorio puede pedir que lo confirmes.
+emparejar, el escritorio puede pedir que lo confirmes. Si la computadora no
+tiene un agente de Bluetooth (nadie contesta el «¿Vincular?»), agregar
+--agente: mientras corre, acepta los emparejamientos sin preguntar, como la
+Raspberry.
 Sin --simular no hace nada (para no cambiar la red de la Pi por error).
 """
 import socket
@@ -75,7 +78,7 @@ if __name__ == "__main__":
         sys.exit(1)
     cfg = CR.ConfiguracionRed(RedSimulada(), CR.MostradorColores({0: LuzTerminal()}),
                               nombre="MicroscopeOS-PRUEBA")
-    if SB.iniciar(cfg, modo_pi=False) is None:
+    if SB.iniciar(cfg, modo_pi=False, agente='--agente' in sys.argv) is None:
         sys.exit(1)
     print("Busca «MOS-PRUE» desde la app (Microscopios → Buscar por Bluetooth). Ctrl+C para salir.")
     try:
