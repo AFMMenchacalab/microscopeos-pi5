@@ -263,6 +263,7 @@ check("deja el driver en reposo al soltar",
 check("la posicion refleja exactamente los pulsos del jog",
       motores[0].position == pos_pre + parado)
 
+time.sleep(motores[0].JOG_GRACIA_S + 0.05)   # pasa la gracia despues del stop
 gpio.reset_pulsos()
 motores[0].start_jog(direction=-1, delay=0.0005, watchdog=0.25)
 time.sleep(0.7)   # nadie refresca: es el caso "se cayo el WiFi apretado"
@@ -270,6 +271,52 @@ check("el watchdog corta solo si dejan de llegar pedidos",
       not motores[0].jog_activo())
 n = gpio.pulsos.get(21, 0); time.sleep(0.1)
 check("no sigue moviendose despues del corte", gpio.pulsos.get(21, 0) == n)
+
+print("\n=== STOP INMEDIATO AUNQUE EL MOTOR ESTE OCUPADO ===")
+# Como el joystick: refresca cada 250 ms desde otro hilo, a la velocidad
+# real (delay 0.003). Antes, start_jog y stop_jog esperaban el mismo lock
+# que el hilo del motor toma en cada tanda: el stop tardaba hasta 1.5 s.
+m = motores[0]
+demoras = []
+for _ in range(15):
+    time.sleep(m.JOG_GRACIA_S + 0.05)
+    m.start_jog(direction=1, delay=0.003, watchdog=1.5)
+    sigue = threading.Event()
+
+    def refrescar():
+        while not sigue.wait(0.25):
+            m.start_jog(direction=1, delay=0.003, watchdog=1.5)
+
+    hilo = threading.Thread(target=refrescar, daemon=True)
+    hilo.start()
+    time.sleep(0.6)
+    t0 = time.monotonic()
+    m.stop_jog()
+    demoras.append(time.monotonic() - t0)
+    sigue.set()
+    hilo.join()
+    if m.jog_activo():
+        break
+check("stop_jog deja el motor parado", not m.jog_activo())
+check("stop_jog tarda menos de 0.15 s aunque el motor este ocupado (15 veces)",
+      max(demoras) < 0.15, f"peor {max(demoras) * 1000:.0f} ms")
+
+print("\n=== UN JOG ATRASADO NO VUELVE A ARRANCAR EL MOTOR ===")
+time.sleep(m.JOG_GRACIA_S + 0.05)
+m.start_jog(direction=1, delay=0.0005, watchdog=1.5)
+time.sleep(0.1)
+m.stop_jog()
+gpio.reset_pulsos()
+check("el pedido que llega justo despues del stop se ignora",
+      m.start_jog(direction=1, delay=0.0005, watchdog=1.5) is False)
+time.sleep(0.2)
+check("y el motor sigue quieto", not m.jog_activo() and gpio.pulsos.get(21, 0) == 0)
+time.sleep(m.JOG_GRACIA_S)
+check("pasada la gracia, volver a apretar si arranca",
+      m.start_jog(direction=1, delay=0.0005, watchdog=0.3) is True)
+time.sleep(0.1)
+check("y se mueve", gpio.pulsos.get(21, 0) > 0)
+m.stop_jog()
 
 print("\n=== ESTADO PARA LA INTERFAZ ===")
 est = motores[1].estado_completo()

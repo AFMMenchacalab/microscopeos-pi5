@@ -280,6 +280,12 @@ class FocusMotorController:
     # que stop_jog() y las lecturas de estado se intercalen rapido, y
     # suficientemente grande para no pagar el lock en cada paso.
     _JOG_CHUNK = 8
+    # Un start_jog que llega menos de esto despues de un stop_jog se
+    # ignora: es un pedido del joystick que salio ANTES de soltar y llego
+    # tarde (las peticiones HTTP no llegan en orden garantizado). Sin
+    # esto volvia a arrancar el motor despues del stop, hasta el watchdog.
+    # Volver a apretar enseguida solo demora el arranque este tiempo.
+    JOG_GRACIA_S = 0.5
 
     def __init__(self, step_pin=21, dir_pin=20, en_pin=16,
                  uart_port="/dev/ttyAMA0", uart_address=0, rsense=0.11,
@@ -338,6 +344,14 @@ class FocusMotorController:
         self._pos256 = 0
 
         self._lock = threading.RLock()
+        # Estado del jog (direccion, plazo, hilo) con un lock PROPIO que
+        # nunca se retiene mientras el motor se mueve. Antes start_jog y
+        # stop_jog esperaban self._lock, que el hilo del jog suelta y
+        # vuelve a tomar enseguida en cada tanda: los locks de Python no
+        # son justos, y un stop llego a esperar 1.5 s (el watchdog entero)
+        # con el motor girando.
+        self._jog_estado = threading.Lock()
+        self._jog_parado_en = float("-inf")
         self._jog_thread = None
         self._jog_stop = threading.Event()
         self._jog_dir = 1
@@ -681,25 +695,35 @@ class FocusMotorController:
     # llega. Sin watchdog el motor seguiria bajando la plataforma contra
     # la muestra indefinidamente.
     def start_jog(self, direction=1, delay=0.003, watchdog=1.5):
-        with self._lock:
+        """Devuelve False si el pedido se ignoro por llegar justo despues
+        de un stop (ver JOG_GRACIA_S)."""
+        with self._jog_estado:
+            ahora = time.monotonic()
+            if ahora - self._jog_parado_en < self.JOG_GRACIA_S:
+                return False
             self._jog_dir = 1 if direction > 0 else -1
             self._jog_delay = delay
-            self._jog_deadline = time.monotonic() + watchdog
+            self._jog_deadline = ahora + watchdog
             if self._jog_thread is not None and self._jog_thread.is_alive():
-                return  # ya corriendo: alcanza con haber corrido el deadline
+                return True  # ya corriendo: alcanza con haber corrido el deadline
             self._jog_stop = threading.Event()
             self._jog_thread = threading.Thread(
                 target=self._jog_loop, args=(self._jog_stop,), daemon=True)
             self._jog_thread.start()
+            return True
 
     def _jog_loop(self, stop_event):
         try:
             self.enable()
             while not stop_event.is_set():
-                with self._lock:
+                with self._jog_estado:
                     if time.monotonic() >= self._jog_deadline:
                         break
                     direction, delay = self._jog_dir, self._jog_delay
+                with self._lock:
+                    # El stop pudo llegar mientras se esperaba el lock.
+                    if stop_event.is_set():
+                        break
                     self.move_steps(self._JOG_CHUNK, direction=direction,
                                     delay=delay)
         finally:
@@ -710,7 +734,10 @@ class FocusMotorController:
         return t is not None and t.is_alive()
 
     def stop_jog(self):
-        with self._lock:
+        # Sin esperar al hilo del motor para avisarle: se detiene al
+        # terminar la tanda en curso (_JOG_CHUNK micropasos, ~50 ms).
+        with self._jog_estado:
+            self._jog_parado_en = time.monotonic()
             stop_event = self._jog_stop
             thread = self._jog_thread
         if stop_event is not None:
