@@ -53,7 +53,8 @@ JUNTAR_S = 10            # misma accion de la misma persona: una sola linea
 CON_CONTROL = (
     "/light/", "/capture/", "/exposure", "/brightness", "/timelapse/start",
     "/timelapse/stop", "/timelapse/pausar", "/timelapse/continuar",
-    "/api/temperature/setpoint", "/api/focus/", "/camera/calibrar",
+    "/api/temperature/setpoint", "/api/temperature/co2_setpoint", "/api/focus/",
+    "/camera/calibrar",
     "/camera/calibracion/borrar", "/api/analisis/config", "/api/analisis/medir",
     "/api/analisis/foto", "/api/actualizar", "/api/optica", "/profiles/",
     "/api/marca", "/api/alertas/config", "/api/usb/expulsar",
