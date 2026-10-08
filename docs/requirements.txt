@@ -25,6 +25,10 @@ uvicorn==0.40.0
 # Respaldo en NAS por SMB (core/respaldo_nas.py). Sin esto, el modo
 # "carpeta montada" sigue funcionando.
 smbprotocol>=1.15
+# Configurar la red desde el teléfono por Bluetooth (core/servicio_bluetooth.py).
+# Sin esto, el microscopio funciona igual y la app no lo encuentra por Bluetooth.
+# Ver docs/CONFIGURACION_BLUETOOTH.md.
+dbus-next==0.2.3
 
 # [PI5] PyQt6 SIN version fijada. PyQt6 6.10.2 no tiene garantia de wheel
 # aarch64 para el Python de Bookworm/Trixie, y compilarlo en la Pi tarda

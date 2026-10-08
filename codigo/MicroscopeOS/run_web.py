@@ -146,6 +146,25 @@ timelapse.reanudar_pendiente()
 # (datos/bitacora.jsonl).
 usuarios = Usuarios(bitacora=experimentos.raiz / "bitacora.jsonl")
 
+# Configurar la red desde el teléfono por Bluetooth (microscopio nuevo o
+# que cambió de IP). Ver core/configuracion_red.py y
+# docs/CONFIGURACION_BLUETOOTH.md. Si no hay Bluetooth o falta dbus-next,
+# no pasa nada: el microscopio funciona igual.
+try:
+    from core import configuracion_red, servicio_bluetooth
+    configuracion = configuracion_red.ConfiguracionRed(
+        configuracion_red.RedNM(),
+        configuracion_red.MostradorColores(illuminations),
+        nombre=configuracion_red.nombre_del_equipo(),
+        timelapse_corriendo=timelapse.is_running,
+        # time.monotonic() en Linux cuenta desde que arrancó la Pi: los 10
+        # minutos son desde que se encendió, no desde que arrancó este
+        # programa (reiniciar el servicio no vuelve a abrir la ventana).
+        arranque=0.0)
+    servicio_bluetooth.iniciar(configuracion)
+except Exception as e:
+    print(f"[bluetooth] configuración por Bluetooth apagada: {e}")
+
 app = create_app(camera, illuminations, timelapse,
                  motores=motores, autofocus=autofocus, conteo=conteo,
                  usb=usb, enviador=enviador, respaldo_nas=respaldo_nas,
