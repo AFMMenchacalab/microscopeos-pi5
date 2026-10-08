@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.responses import HTMLResponse, Response, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ import asyncio
 import json
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
 # Raiz del proyecto, deducida de la ubicacion de este archivo.
@@ -36,6 +38,9 @@ from core import metadatos as metadatos_mod
 from core import dpc
 from core.optica import Optica, OBJETIVOS
 from core.actualizar import Actualizador, ErrorActualizar, reiniciar
+from core import exportar
+from core.experimentos import agregar_nota, leer_notas, CARPETA_EXPORTADOS
+from core.usuarios import Usuarios, requiere_control
 
 # ===============================
 # Galeria de archivos: solo lectura, con nombres validados por regex
@@ -153,6 +158,9 @@ class TimelapseReq(BaseModel):
     modo: str = "blanco"
     interval: int = 300
     duration: int = 3600
+    # Alternativa a `duration`: fecha y hora de termino (ISO, hora local,
+    # p. ej. "2026-10-06T09:00"). Si viene, pisa a duration.
+    fin: str | None = None
     stabilization: float = 0.3
     nombre: str = ""
     camaras: list = [0, 1]
@@ -281,6 +289,51 @@ class AutofocusReq(BaseModel):
     # barrido, promediar cada uno ademas lo hace demasiado lento).
     repeticiones: int | None = None
 
+class NotaReq(BaseModel):
+    texto: str
+
+
+class VideoReq(BaseModel):
+    camara: int = 0
+    canal: str | None = None      # sufijo (""/_dpcLR/_suma/...); None = el preferido
+    formato: str = "mp4"          # mp4 | gif
+    fps: int = 10
+    ancho: int = 1280
+    rotulos: bool = True
+
+
+class OmeReq(BaseModel):
+    camara: int = 0
+    canal: str | None = None
+    reducir: int = 1              # 1 = resolucion completa, 2 = la mitad...
+
+
+class SaturacionReq(BaseModel):
+    camera: int = 0
+    marcar: bool = True
+
+
+class AlertasConfigReq(BaseModel):
+    config: dict
+
+
+class TelegramChatsReq(BaseModel):
+    token: str | None = None
+
+
+class ReservaReq(BaseModel):
+    inicio: str
+    fin: str
+    nota: str = ""
+
+
+class ZonaReq(BaseModel):
+    camera: int = 0
+    # [x0, y0, x1, y1] en fracciones de la imagen (0-1); None = sin zona,
+    # el autofoco vuelve al recorte centrado de siempre.
+    zona: list | None = None
+
+
 class PilaFocoReq(BaseModel):
     """Grabacion de una pila de foco (dataset para el autofoco IA).
 
@@ -350,7 +403,7 @@ class CalibrarDpcReq(BaseModel):
 def create_app(camera, illuminations, timelapse, motores=None,
                autofocus=None, motor=None, conteo=None, usb=None,
                enviador=None, respaldo_nas=None, experimentos=None, optica=None,
-               actualizador=None):
+               actualizador=None, alertas=None, usuarios=None, trabajos=None):
     """motores: {numero_de_camara: FocusMotorController}. `motor` se
     acepta todavia como un solo eje suelto (compatibilidad con la
     version de un motor) y se mapea a la camara 0.
@@ -361,7 +414,41 @@ def create_app(camera, illuminations, timelapse, motores=None,
     optica = optica or Optica()
     actualizador = actualizador or Actualizador()
 
+    usuarios = usuarios or Usuarios()
+    trabajos = trabajos or exportar.Trabajos()
     app = FastAPI()
+
+    # ===============================
+    # Quien usa el microscopio (core/usuarios.py): identifica cada pedido,
+    # deja que solo quien tiene el control cambie el equipo y anota cada
+    # accion en la bitacora.
+    # ===============================
+    def _usuario(request):
+        u = getattr(request.state, "usuario", None)
+        if u is None:
+            ip = request.client.host if request.client else None
+            u = usuarios.identificar(request.headers, ip)
+        return u
+
+    @app.middleware("http")
+    async def _quien(request: Request, call_next):
+        u = _usuario(request)
+        request.state.usuario = u
+        ruta = request.url.path
+        if not ruta.startswith(("/live/stream", "/files/thumb", "/api/exp/")) \
+                or request.method == "POST":
+            usuarios.visto(u)
+        if requiere_control(request.method, ruta):
+            ok, quien = usuarios.puede(u)
+            if not ok:
+                return JSONResponse(status_code=423, content={
+                    "error": f"Ahora controla el microscopio {quien}. "
+                             f"Toca «Tomar el control» si lo necesitas.",
+                    "control": quien})
+        if request.method == "POST":
+            usuarios.registrar(u, ruta, request.url.query or "")
+        return await call_next(request)
+
     if motores is None:
         motores = {0: motor} if motor is not None else {}
     # "luz": ultimo modo aplicado a cada matriz, para poder restaurarlo
@@ -375,6 +462,12 @@ def create_app(camera, illuminations, timelapse, motores=None,
     # Serializa el autofoco: mueve motor Y camara a la vez, asi que dos
     # corridas simultaneas se pisarian el modo de la camara.
     autofocus_lock = threading.Lock()
+
+    def _ocupado_por_timelapse():
+        """True si hay un timelapse tomando fotos. En PAUSA no: se puede
+        mirar el vivo, prender la luz y enfocar (para eso es la pausa)."""
+        en_pausa = getattr(timelapse, "en_pausa", None)
+        return timelapse.is_running() and not (en_pausa and en_pausa())
 
     def _preview_png(camera_num):
         # Un archivo temporal por camara: con las dos vistas en vivo/foto
@@ -392,7 +485,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
     # ===============================
     @app.get("/preview/{camera_num}")
     def preview(camera_num: int):
-        if timelapse.is_running():
+        if _ocupado_por_timelapse():
             return Response(status_code=409)
         # Solo para la camara pedida: la Pi 5 puede tener la otra en vivo
         # al mismo tiempo, y una foto suelta no debe cortarle el stream.
@@ -406,7 +499,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
     # ===============================
     @app.post("/live/start/{camera_num}")
     def live_start(camera_num: int):
-        if timelapse.is_running():
+        if _ocupado_por_timelapse():
             return {"error": "Timelapse en curso"}
         camera.start_preview(camera_num)
         return {"status": "live", "cam": camera_num}
@@ -503,7 +596,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
         """Enciende un modo de iluminacion (campo claro/DPC/campo oscuro/
         Rheinberg) en las matrices indicadas. Reemplaza a /light/on para
         control desde la vista en vivo -- ese endpoint solo sabia FULL."""
-        if timelapse.is_running():
+        if _ocupado_por_timelapse():
             return {"error": "Timelapse en curso"}
         if req.modo != "rheinberg" and req.modo not in _METODOS_LUZ:
             return {"error": f"Modo invalido: {req.modo}"}
@@ -544,7 +637,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
         """Color del campo claro y/o del relieve DPC de las matrices
         indicadas (cada camara puede tener los suyos). Si la matriz esta
         encendida en ese modo, cambia al momento."""
-        if timelapse.is_running():
+        if _ocupado_por_timelapse():
             return {"error": "Timelapse en curso"}
         try:
             with luz_lock:
@@ -580,7 +673,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
 
     @app.post("/light/on")
     def light_on():
-        if timelapse.is_running():
+        if _ocupado_por_timelapse():
             return {"error": "Timelapse en curso"}
         _luz_aplicar(estado["camara_activa"], "full")
         return {"status": "on"}
@@ -837,6 +930,18 @@ def create_app(camera, illuminations, timelapse, motores=None,
     def start_timelapse(req: TimelapseReq):
         if timelapse.is_running():
             return {"error": "Ya hay un timelapse corriendo"}
+        if req.fin:
+            try:
+                fin = datetime.fromisoformat(req.fin)
+            except ValueError:
+                return {"error": "La hora de término no es válida"}
+            if fin.tzinfo is not None:
+                fin = fin.astimezone().replace(tzinfo=None)
+            segundos = int((fin - datetime.now()).total_seconds())
+            if segundos < max(60, req.interval):
+                return {"error": "La hora de término tiene que ser al menos un "
+                        "intervalo después de ahora"}
+            req.duration = segundos
         if getattr(timelapse, "reanudando", None):
             return {"error": "Se está reanudando el timelapse que cortó la luz; "
                     "espera a que arranque (tarda hasta 3 minutos) y, si no lo "
@@ -980,7 +1085,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
         calibracion, pila, timelapse), los controles manuales no pueden
         tocarlo: un paso a mano o un cambio de resolucion a mitad de un
         barrido lo arruina."""
-        if timelapse.is_running():
+        if _ocupado_por_timelapse():
             return "Timelapse en curso"
         if autofocus_lock.locked():
             return "Autofoco en curso, espera a que termine"
@@ -1082,7 +1187,7 @@ def create_app(camera, illuminations, timelapse, motores=None,
         nitidez completa para poder ver el barrido en la interfaz."""
         if autofocus is None:
             return {"error": "Autofoco no disponible (sin motores)"}
-        if timelapse.is_running():
+        if _ocupado_por_timelapse():
             return {"error": "Timelapse en curso"}
         if not autofocus.disponible(req.camera):
             return {"error": f"cam{req.camera} no tiene motor de enfoque"}
@@ -1107,6 +1212,26 @@ def create_app(camera, illuminations, timelapse, motores=None,
             return {"error": str(e)}
         finally:
             autofocus_lock.release()
+
+    @app.get("/api/focus/zona")
+    def focus_zona_get():
+        """Zona del autofoco de cada camara ({} si ninguna tiene)."""
+        if autofocus is None:
+            return {"zonas": {}}
+        return {"zonas": {str(k): v for k, v in autofocus.zonas.items()}}
+
+    @app.post("/api/focus/zona")
+    def focus_zona_set(req: ZonaReq):
+        """Fija o borra la zona del autofoco de una camara. La usan el
+        autofoco manual, la calibracion y el del timelapse."""
+        if autofocus is None:
+            return {"error": "Autofoco no disponible (sin motores)"}
+        if req.zona is not None and len(req.zona) != 4:
+            return {"error": "la zona son 4 numeros: x0, y0, x1, y1"}
+        zona = autofocus.set_zona(req.camera, req.zona)
+        if req.zona is not None and zona is None:
+            return {"error": "La zona es demasiado chica: dibuja un recuadro más grande"}
+        return {"status": "ok", "camera": req.camera, "zona": zona}
 
     @app.post("/api/focus/calibrar")
     def focus_calibrar(req: CalibrarDpcReq):
@@ -1673,7 +1798,15 @@ def create_app(camera, illuminations, timelapse, motores=None,
         p = experimentos.ruta_imagen(ident, rel)
         if p is None:
             return {"error": "no existe"}
-        return {"metadatos": metadatos_mod.leer(p), "bytes": p.stat().st_size}
+        alto = ancho = None
+        try:
+            with tifffile.TiffFile(str(p)) as t:
+                forma = t.pages[0].shape
+            alto, ancho = int(forma[0]), int(forma[1])
+        except Exception:
+            pass
+        return {"metadatos": metadatos_mod.leer(p), "bytes": p.stat().st_size,
+                "ancho_px": ancho, "alto_px": alto}
 
     def _compartir_bytes(p, formato="jpg", ancho_max=None):
         img = tifffile.imread(str(p))
@@ -1866,6 +1999,226 @@ def create_app(camera, illuminations, timelapse, motores=None,
 
     # La pagina nueva es la principal: la anterior ya no muestra las
     # fotos guardadas en datos/. Queda en /clasica por si hace falta.
+    # ===============================
+    # Pausa y notas del timelapse en curso
+    # ===============================
+    @app.post("/timelapse/pausar")
+    def timelapse_pausar(request: Request):
+        if not timelapse.is_running():
+            return {"error": "No hay un timelapse en curso"}
+        if not timelapse.pausar(autor=_usuario(request)["nombre"]):
+            return {"error": "Ya estaba en pausa"}
+        return {"status": "pausado"}
+
+    @app.post("/timelapse/continuar")
+    def timelapse_continuar(request: Request):
+        if not timelapse.continuar(autor=_usuario(request)["nombre"]):
+            return {"error": "El timelapse no estaba en pausa"}
+        return {"status": "continuando"}
+
+    @app.post("/timelapse/nota")
+    def timelapse_nota(req: NotaReq, request: Request):
+        try:
+            return {"nota": timelapse.agregar_nota(req.texto, autor=_usuario(request)["nombre"])}
+        except ValueError as e:
+            return {"error": str(e)}
+
+    @app.get("/api/exp/{ident}/notas")
+    def exp_notas(ident: str):
+        try:
+            return {"notas": leer_notas(_exp(ident))}
+        except ValueError as e:
+            return {"error": str(e)}
+
+    @app.post("/api/exp/{ident}/nota")
+    def exp_nota(ident: str, req: NotaReq, request: Request):
+        """Nota en cualquier experimento. Si es el que esta corriendo, va
+        con el numero de ciclo."""
+        try:
+            c = _exp(ident)
+            autor = _usuario(request)["nombre"]
+            if c == _en_curso():
+                return {"nota": timelapse.agregar_nota(req.texto, autor=autor)}
+            return {"nota": agregar_nota(c, req.texto, autor=autor)}
+        except ValueError as e:
+            return {"error": str(e)}
+
+    # ===============================
+    # Condiciones del experimento (temperatura, CO2, foco) para la grafica
+    # ===============================
+    @app.get("/api/exp/{ident}/ambiente")
+    def exp_ambiente(ident: str):
+        try:
+            return exportar.leer_ambiente(_exp(ident))
+        except ValueError as e:
+            return {"error": str(e)}
+
+    # ===============================
+    # Reproductor y exportaciones (core/exportar.py)
+    # ===============================
+    @app.get("/api/exp/{ident}/cuadros")
+    def exp_cuadros(ident: str, camara: int = 0, canal: str | None = None):
+        try:
+            c = _exp(ident)
+        except ValueError as e:
+            return {"error": str(e)}
+        imgs = experimentos.imagenes(c)
+        canal, lista = exportar.cuadros(imgs, camara, canal)
+        return {"camara": camara, "canal": canal,
+                "canales": {str(k): [{"id": x, "nombre": exportar.NOMBRE_CANAL.get(x, x)}
+                                     for x in v]
+                            for k, v in exportar.canales(imgs).items()},
+                "cuadros": lista, "notas": leer_notas(c)}
+
+    @app.post("/api/exp/{ident}/video")
+    def exp_video(ident: str, req: VideoReq):
+        try:
+            c = _exp(ident)
+        except ValueError as e:
+            return {"error": str(e)}
+        if req.formato not in ("mp4", "gif"):
+            return {"error": "Formato inválido (mp4 o gif)"}
+        return trabajos.lanzar("video", exportar.exportar_video, carpeta=c,
+                               imagenes=experimentos.imagenes(c), cam=req.camara,
+                               canal=req.canal, formato=req.formato,
+                               fps=max(1, min(int(req.fps), 60)),
+                               ancho=int(req.ancho), rotulos=req.rotulos)
+
+    @app.post("/api/exp/{ident}/ome")
+    def exp_ome(ident: str, req: OmeReq):
+        try:
+            c = _exp(ident)
+        except ValueError as e:
+            return {"error": str(e)}
+        info = experimentos.info(c)
+        return trabajos.lanzar("ome", exportar.exportar_ome, carpeta=c,
+                               imagenes=experimentos.imagenes(c), cam=req.camara,
+                               canal=req.canal, reducir=max(1, min(int(req.reducir), 8)),
+                               nombre=info.get("nombre") or "",
+                               intervalo_s=info.get("intervalo_s"))
+
+    @app.get("/api/trabajos/{tid}")
+    def trabajo_estado(tid: str):
+        t = trabajos.estado(tid)
+        if t is None:
+            return {"error": "Ese trabajo ya no existe"}
+        if t.get("archivo"):
+            t["nombre"] = Path(t["archivo"]).name
+        t.pop("archivo", None)
+        return t
+
+    @app.get("/api/exp/{ident}/exportados")
+    def exp_exportados(ident: str):
+        try:
+            return {"exportados": exportar.listar_exportados(_exp(ident))}
+        except ValueError as e:
+            return {"error": str(e)}
+
+    _EXPORTADO_RE = re.compile(r"^[A-Za-z0-9_.\-]+\.(mp4|gif|tif)$")
+
+    @app.get("/api/exp/{ident}/exportado/{nombre}")
+    def exp_exportado(ident: str, nombre: str):
+        try:
+            c = _exp(ident)
+        except ValueError:
+            return Response(status_code=404)
+        if not _EXPORTADO_RE.match(nombre) or ".parcial." in nombre:
+            return Response(status_code=404)
+        p = (c / CARPETA_EXPORTADOS / nombre).resolve()
+        if p.parent != (c / CARPETA_EXPORTADOS).resolve() or not p.is_file():
+            return Response(status_code=404)
+        tipo = {"mp4": "video/mp4", "gif": "image/gif"}.get(p.suffix[1:], "image/tiff")
+        return FileResponse(str(p), media_type=tipo, filename=nombre)
+
+    # ===============================
+    # Saturacion e histograma del vivo
+    # ===============================
+    @app.get("/api/vivo/estadisticas")
+    def vivo_estadisticas():
+        f = getattr(camera, "estadisticas_vivo", None)
+        return {"camaras": {str(k): v for k, v in (f() if f else {}).items()}}
+
+    @app.post("/api/vivo/saturacion")
+    def vivo_saturacion(req: SaturacionReq):
+        f = getattr(camera, "marcar_saturados", None)
+        if f is None:
+            return {"error": "No disponible"}
+        f(req.camera, req.marcar)
+        return {"status": "ok", "camera": req.camera, "marcar": req.marcar}
+
+    # ===============================
+    # Alertas (core/alertas.py)
+    # ===============================
+    @app.get("/api/alertas")
+    def alertas_get():
+        if alertas is None:
+            return {"error": "Alertas no disponibles"}
+        return alertas.publico()
+
+    @app.post("/api/alertas/config")
+    def alertas_config(req: AlertasConfigReq):
+        if alertas is None:
+            return {"error": "Alertas no disponibles"}
+        try:
+            return alertas.actualizar(req.config)
+        except (TypeError, ValueError) as e:
+            return {"error": f"Valor inválido: {e}"}
+
+    @app.post("/api/alertas/probar")
+    def alertas_probar():
+        if alertas is None:
+            return {"error": "Alertas no disponibles"}
+        return alertas.probar()
+
+    @app.post("/api/alertas/telegram_chats")
+    def alertas_telegram_chats(req: TelegramChatsReq):
+        if alertas is None:
+            return {"error": "Alertas no disponibles"}
+        return alertas.buscar_chats_telegram(req.token)
+
+    # ===============================
+    # Quien esta conectado, control, bitacora y reservas (core/usuarios.py)
+    # ===============================
+    @app.get("/api/control")
+    def control_estado(request: Request):
+        return usuarios.estado(_usuario(request))
+
+    @app.post("/api/control/tomar")
+    def control_tomar(request: Request):
+        return usuarios.tomar(_usuario(request))
+
+    @app.post("/api/control/soltar")
+    def control_soltar(request: Request):
+        return usuarios.soltar(_usuario(request))
+
+    @app.post("/api/control/visto_aviso")
+    def control_visto(request: Request):
+        usuarios.visto_aviso(_usuario(request))
+        return {"status": "ok"}
+
+    @app.get("/api/bitacora")
+    def bitacora(n: int = 200):
+        return {"bitacora": usuarios.bitacora(max(1, min(int(n), 2000)))}
+
+    @app.get("/api/reservas")
+    def reservas_listar():
+        return {"reservas": usuarios.reservas(), "actual": usuarios.reserva_actual()}
+
+    @app.post("/api/reservas")
+    def reservas_agregar(req: ReservaReq, request: Request):
+        try:
+            return {"reserva": usuarios.reservar(_usuario(request), req.inicio, req.fin, req.nota)}
+        except ValueError as e:
+            return {"error": str(e)}
+
+    @app.post("/api/reservas/{rid}/cancelar")
+    def reservas_cancelar(rid: str, request: Request):
+        try:
+            usuarios.cancelar_reserva(_usuario(request), rid)
+            return {"status": "ok"}
+        except ValueError as e:
+            return {"error": str(e)}
+
     @app.get("/clasica", response_class=HTMLResponse)
     def index_clasica():
         with open(STATIC_DIR / "index.html", "r") as f:

@@ -155,7 +155,20 @@ Cómo regenerarlo si cambia la interfaz: [docs/instructivo/LEEME.md](docs/instru
 - **Se reanuda solo después de un corte de luz**: al volver a arrancar,
   espera a que la hora se sincronice y a que aparezca la carpeta (una
   memoria USB tarda en montarse) y sigue donde iba.
-- Vista de la última foto de cada cámara mientras corre.
+- Vista de la última foto de cada cámara mientras corre, con la
+  temperatura y el CO₂ desde que empezó.
+- **Termina cuando tú digas**: «durante N horas» o «hasta el lunes a las
+  9:00».
+- **Pausa sin cortar el experimento**: deja de tomar fotos para abrir la
+  incubadora, agregar un fármaco o cambiar el medio; durante la pausa se
+  puede mirar el vivo, prender la luz y enfocar. Al seguir toma una foto
+  enseguida (con autofoco). La hora de término no cambia.
+- **Notas con hora**: «14:30 agregué el fármaco» queda en `notas.csv`
+  con el número de foto y quién la escribió, y aparece en la gráfica, en
+  el reproductor y en el video.
+- Si algo inesperado tumba el timelapse, queda cerrado con el motivo
+  (y se avisa por las alertas) en vez de quedar «en curso» sin tomar
+  fotos.
 
 **Enfoque**
 
@@ -183,6 +196,11 @@ Cómo regenerarlo si cambia la interfaz: [docs/instructivo/LEEME.md](docs/instru
   ±rango/2 de donde arrancó, y todo movimiento final se alcanza desde el
   mismo sentido para no arrastrar el juego mecánico del husillo.
 
+  **Zona del autofoco**: en la imagen ampliada se dibuja un recuadro
+  donde están las células y el autofoco (el manual, la calibración y el
+  del timelapse) mide solo ahí, no sobre el vidrio vacío o una burbuja.
+  Se guarda por cámara.
+
   Hay una tercera vía **opcional y todavía sin entrenar**: un regresor
   que estima el desenfoque directamente del par de medias aperturas. La
   inferencia y la grabación del dataset están implementadas
@@ -205,6 +223,47 @@ Cómo regenerarlo si cambia la interfaz: [docs/instructivo/LEEME.md](docs/instru
   célula sin teñir se anula justo en el foco (medido sobre 40 células:
   campo claro **0**, media apertura **40**, DPC **40**), así que el
   conteo pone la matriz en media apertura para medir.
+
+**Mirar y medir**
+
+- **Indicador de saturación** en el vivo: «Saturado 2 %» sobre la
+  imagen, un histograma en la vista ampliada y la opción de pintar en
+  magenta los píxeles saturados (medidos en el sensor, antes del
+  flat-field). Una zona saturada arruina el DPC sin avisar.
+- **Regla y área** sobre el vivo y sobre cualquier foto guardada: se
+  arrastra para medir una distancia o se dibuja un contorno para el
+  área (con el diámetro del círculo equivalente), en micras, con la
+  escala de la óptica o la que trae la foto.
+
+**Después del experimento** (en «Fotos guardadas», al abrir uno)
+
+- **Reproducir** el timelapse en la página: las dos cámaras lado a lado
+  y sincronizadas, a la velocidad que quieras, con las notas marcadas en
+  la barra de tiempo.
+- **Condiciones**: gráficas de temperatura, CO₂, humedad y deriva del
+  foco de todo el experimento, con las pausas y las notas marcadas.
+- **Exportar video** MP4 (H.264, se abre en PowerPoint) o GIF, con el
+  tiempo desde el inicio, la hora, la barra de escala y las notas, y el
+  mismo contraste en todos los cuadros (`core/exportar.py`).
+- **Exportar OME-TIFF**: un solo archivo por cámara con todo el
+  timelapse (pila T-Y-X), la escala en micras y la hora real de cada
+  cuadro. Es el formato abierto de microscopía: Fiji (Bio-Formats),
+  napari y QuPath lo abren con las unidades bien puestas. Con los datos
+  originales, a resolución completa o reducida.
+
+**Avisos y equipo compartido**
+
+- **Alertas al teléfono** por Telegram o correo (`core/alertas.py`): la
+  incubadora fuera de rango más de N minutos, sin datos del Arduino, poco
+  espacio, el autofoco que falla varias veces seguidas, una captura que
+  falla o un timelapse que se detiene; y un segundo mensaje cuando se
+  resuelve. Se configuran en Ajustes, con un botón de prueba.
+- **Quién usa el microscopio** (`core/usuarios.py`): quién está
+  conectado (por el correo del login de Cloudflare, o la IP en la red
+  del laboratorio), **una persona a la vez tiene el control** de foco,
+  luz y timelapse (las demás miran y escriben notas; se libera solo si
+  quien lo tiene deja la página, y otra persona lo puede tomar), una
+  **bitácora** de quién hizo qué y **turnos reservados**.
 
 **Datos y red**
 
@@ -348,6 +407,12 @@ documenta solo en `/docs`.
 | USB, PC y NAS | `GET /api/usb/estado` · `POST /api/usb/expulsar` · `/copiar` · `GET /api/envio/estado` · `POST /api/envio/config` · `/buscar` · `/probar` · `/reenviar` · lo mismo en `/api/nas/…` |
 | Programa | `GET /api/version` · `GET /api/actualizacion` · `POST /api/actualizar` · `/profiles/list` · `/profiles/load/{n}` · `/profiles/save` · `/profiles/delete/{n}` |
 | Archivos (versión anterior) | `GET /files/list` · `/files/thumb/…` · `/files/raw/…` · `/files/zip/…` |
+| Pausa y notas | `POST /timelapse/pausar` · `/timelapse/continuar` · `/timelapse/nota` · `GET /api/exp/{id}/notas` · `POST /api/exp/{id}/nota` |
+| Zona del autofoco | `GET/POST /api/focus/zona` |
+| Vivo | `GET /api/vivo/estadisticas` (histograma, % saturado) · `POST /api/vivo/saturacion` |
+| Reproducir y exportar | `GET /api/exp/{id}/cuadros` · `/ambiente` · `POST /api/exp/{id}/video` · `/ome` · `GET /api/trabajos/{t}` · `GET /api/exp/{id}/exportados` · `/exportado/{nombre}` |
+| Alertas | `GET /api/alertas` · `POST /api/alertas/config` · `/probar` · `/telegram_chats` |
+| Usuarios | `GET /api/control` · `POST /api/control/tomar` · `/soltar` · `GET /api/bitacora` · `GET/POST /api/reservas` · `POST /api/reservas/{id}/cancelar` |
 
 ## Dónde se guardan las fotos
 
@@ -365,12 +430,15 @@ datos/
 │   ├── cam0/0001_..._dpcTB.tif            #               DPC arriba-abajo
 │   ├── cam0/0001_..._suma.tif             #               campo claro reducido
 │   ├── cam1/...
-│   ├── temperatura.csv                    # telemetría por ciclo
+│   ├── temperatura.csv                    # temperatura, CO₂ y humedad por ciclo
+│   ├── notas.csv                          # notas con hora, pausas
+│   ├── exportados/                        # videos y OME-TIFF hechos desde la página
 │   ├── autofoco.csv                       # con reenfoque: deriva del foco
 │   ├── conteo.csv · poblacion.png         # con conteo: células por ciclo y curva
 │   ├── eventos.csv                        # ciclos con saltos, caídas o pérdida de foco
 │   └── timelapse.log
 ├── 2026-10-02_Fotos_sueltas/              # «Tomar foto» sin nombre
+├── bitacora.jsonl                         # quién hizo qué
 └── .papelera/                             # lo borrado, 7 días
 ```
 
@@ -383,7 +451,7 @@ Formato y fórmula para volver al valor físico en el docstring de
 
 | Ruta | Contenido |
 |---|---|
-| `codigo/MicroscopeOS/core/` | Cámara, iluminación, timelapse, enfoque, autofoco, DPC, análisis de imagen, experimentos, metadatos, óptica, marca de agua, USB, envío a la PC, NAS, actualización |
+| `codigo/MicroscopeOS/core/` | Cámara, iluminación, timelapse, enfoque, autofoco, DPC, análisis de imagen, experimentos, metadatos, óptica, marca de agua, USB, envío a la PC, NAS, actualización, exportar (video y OME-TIFF), alertas, usuarios |
 | `codigo/MicroscopeOS/server/` | API FastAPI + páginas web (`index_uiux.html` en `/ui`, `index.html` en `/clasica`) |
 | `codigo/MicroscopeOS/interfaces/` | GUI de escritorio en PyQt6 (no usada en producción; el modo activo es la web) |
 | `codigo/extras/ia/` | Entrenamiento del autofoco aprendido (corre fuera de la Pi) |
@@ -405,7 +473,7 @@ bajo media apertura, y objetos de fase que se anulan en campo claro).
 ```bash
 cd tests
 for t in test_migracion test_motores test_analisis test_dpc \
-         test_archivos test_reanudar test_actualizar; do
+         test_archivos test_reanudar test_actualizar test_mejoras; do
   SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 $t.py
 done
 ```

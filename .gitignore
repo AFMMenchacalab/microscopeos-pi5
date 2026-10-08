@@ -20,5 +20,10 @@ venv/
 **/profiles/logo.png
 **/profiles/calibracion_imagen.json
 **/profiles/flat_cam*.npy
+**/profiles/autofoco_zona.json
+# Alertas: token del bot de Telegram y contraseña del correo
+**/profiles/alertas.json
+# Turnos reservados del equipo
+**/profiles/reservas.json
 # Fotos y experimentos
 codigo/MicroscopeOS/datos/

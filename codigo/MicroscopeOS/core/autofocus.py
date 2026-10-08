@@ -90,6 +90,46 @@ import numpy as np
 ARCHIVO_CALIBRACION = (Path(__file__).resolve().parent.parent /
                        "profiles" / "autofoco_dpc.json")
 
+# Zona del autofoco por camara: el rectangulo que el usuario dibuja sobre
+# el vivo, en fracciones de la imagen [x0, y0, x1, y1]. Sin zona se usa
+# el recorte centrado de siempre (`roi`). Sirve cuando las celulas
+# ocupan solo una parte del campo: medir sobre el vidrio vacio o sobre
+# una burbuja no dice nada del foco de las celulas.
+ARCHIVO_ZONA = (Path(__file__).resolve().parent.parent /
+                "profiles" / "autofoco_zona.json")
+# Lado minimo de la zona, en fraccion de la imagen: por debajo la
+# correlacion de fase no tiene textura suficiente para engancharse.
+ZONA_LADO_MINIMO = 0.08
+
+
+def normalizar_zona(zona):
+    """[x0, y0, x1, y1] en fracciones, ordenado, dentro de [0, 1] y con
+    un lado minimo. Devuelve None si no hay zona o no tiene sentido."""
+    if not zona:
+        return None
+    try:
+        x0, y0, x1, y1 = (float(v) for v in zona)
+    except (TypeError, ValueError):
+        return None
+    x0, x1 = sorted((min(max(x0, 0.0), 1.0), min(max(x1, 0.0), 1.0)))
+    y0, y1 = sorted((min(max(y0, 0.0), 1.0), min(max(y1, 0.0), 1.0)))
+    if x1 - x0 < ZONA_LADO_MINIMO or y1 - y0 < ZONA_LADO_MINIMO:
+        return None
+    return [round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)]
+
+
+def recortar(gray, roi=None, zona=None):
+    """Recorta la imagen a la zona (si hay) o al `roi` centrado."""
+    h, w = gray.shape[:2]
+    if zona:
+        x0, y0, x1, y1 = zona
+        return np.ascontiguousarray(
+            gray[int(y0 * h):int(round(y1 * h)), int(x0 * w):int(round(x1 * w))])
+    if roi and 0 < roi < 1:
+        dh, dw = int(h * (1 - roi) / 2), int(w * (1 - roi) / 2)
+        return np.ascontiguousarray(gray[dh:h - dh, dw:w - dw])
+    return gray
+
 # Pares de iluminacion de media apertura y el eje de la imagen en el que
 # se manifiesta su corrimiento.
 EJES_DPC = {
@@ -185,7 +225,7 @@ def tenengrad(img):
     return float(np.mean(gx * gx + gy * gy))
 
 
-def medir_nitidez(gray, roi=0.6):
+def medir_nitidez(gray, roi=0.6, zona=None):
     """Varianza del Laplaciano sobre la imagen CRUDA.
 
     Solo es valida para muestras que absorben (tenidas, pigmentadas,
@@ -193,10 +233,7 @@ def medir_nitidez(gray, roi=0.6):
     ver el encabezado del modulo. Queda disponible como metrica
     alternativa (metrica="bruta"), no como la de por defecto.
     """
-    if roi and 0 < roi < 1:
-        h, w = gray.shape[:2]
-        dh, dw = int(h * (1 - roi) / 2), int(w * (1 - roi) / 2)
-        gray = gray[dh:h - dh, dw:w - dw]
+    gray = recortar(gray, roi, zona)
     lap = cv2.Laplacian(gray.astype(np.float32), cv2.CV_32F)
     return float(lap.var())
 
@@ -324,6 +361,8 @@ class Autofocus:
         self.ultimo = {}        # camera_num -> resultado del ultimo enfoque
         self.calibracion = {}   # camera_num -> constantes del metodo DPC
         self._cargar_calibracion()
+        self.zonas = {}         # camera_num -> [x0, y0, x1, y1] (ver ARCHIVO_ZONA)
+        self._cargar_zonas()
 
     def disponible(self, camera_num):
         return camera_num in self.motores
@@ -364,6 +403,37 @@ class Autofocus:
         except Exception as e:
             print(f"[autofoco] no se pudo guardar la calibracion: {e}")
 
+    # =============================
+    # ZONA DEL AUTOFOCO (persistida)
+    # =============================
+    def _cargar_zonas(self):
+        try:
+            with open(ARCHIVO_ZONA) as f:
+                datos = json.load(f)
+            self.zonas = {int(k): z for k, z in
+                          ((k, normalizar_zona(v)) for k, v in datos.items()) if z}
+        except FileNotFoundError:
+            self.zonas = {}
+        except Exception as e:
+            print(f"[autofoco] zona ilegible ({e}), se ignora")
+            self.zonas = {}
+
+    def set_zona(self, camera_num, zona):
+        """Fija (o borra, con zona=None) la zona de una camara y la
+        guarda. Devuelve la zona que quedo."""
+        zona = normalizar_zona(zona)
+        if zona is None:
+            self.zonas.pop(camera_num, None)
+        else:
+            self.zonas[camera_num] = zona
+        try:
+            ARCHIVO_ZONA.parent.mkdir(parents=True, exist_ok=True)
+            with open(ARCHIVO_ZONA, "w") as f:
+                json.dump({str(k): v for k, v in self.zonas.items()}, f, indent=2)
+        except Exception as e:
+            print(f"[autofoco] no se pudo guardar la zona: {e}")
+        return zona
+
     def _micropasos_por_pixel(self, camera_num, motor):
         """La calibracion se guarda junto con la resolucion a la que se
         midio: si despues se cambia el microstepping, un pixel de
@@ -376,13 +446,12 @@ class Autofocus:
     # =============================
     # MEDICION SOBRE EL PAR DE MEDIAS APERTURAS
     # =============================
-    def _frame(self, camera_num, roi):
+    def _frame(self, camera_num, roi, usar_zona=True):
+        """Frame en gris recortado a la zona de esa camara si la hay (y
+        usar_zona), o al `roi` centrado si no."""
         gray = self.camera.get_focus_frame(camera_num).astype(np.float32)
-        if roi and 0 < roi < 1:
-            h, w = gray.shape[:2]
-            dh, dw = int(h * (1 - roi) / 2), int(w * (1 - roi) / 2)
-            gray = np.ascontiguousarray(gray[dh:h - dh, dw:w - dw])
-        return gray
+        zona = self.zonas.get(camera_num) if usar_zona else None
+        return recortar(gray, roi, zona)
 
     @staticmethod
     def _para_correlacion(gray, ventana):
@@ -900,7 +969,8 @@ class Autofocus:
         if luz is not None and patron:
             getattr(luz, patron)()
         time.sleep(settle)
-        return medir_nitidez(self.camera.get_focus_frame(camera_num), roi=roi)
+        return medir_nitidez(self.camera.get_focus_frame(camera_num), roi=roi,
+                             zona=self.zonas.get(camera_num))
 
     def _barrido(self, camera_num, motor, centro, rango, puntos, metrica,
                  eje, delay, settle, roi, backlash, patron, repeticiones=1):

@@ -89,6 +89,34 @@ centradas en el foco, y el lazo completo medir → predecir → mover →
 ajuste fino con un predictor inyectado, incluido el tope que impide que
 una predicción disparatada mande la plataforma contra el objetivo.
 
+## Funciones de uso diario (`test_mejoras.py`)
+
+    SP=$PWD PROY=$PWD/../codigo/MicroscopeOS python3 test_mejoras.py
+
+Requiere además `fastapi`, `httpx`, `Pillow` y `ffmpeg` (para el MP4;
+sin ffmpeg el video sale por OpenCV). 112 comprobaciones de:
+
+- **Zona del autofoco**: se normaliza, se guarda y se carga, el autofoco
+  y la métrica de nitidez miden solo ahí, y el autofoco IA sigue con el
+  campo completo.
+- **Alertas** con el envío reemplazado: no avisan apagadas, esperan los
+  minutos configurados antes de avisar, no repiten enseguida, mandan
+  «Resuelto», no vigilan la incubadora sin timelapse (salvo el disco),
+  cuentan los autofocos fallidos seguidos y nunca devuelven el token ni
+  la contraseña.
+- **Timelapse**: pausa (no toma fotos, al seguir toma una ya), notas con
+  ciclo y autor, CO₂ y humedad en `temperatura.csv`, y que si el hilo se
+  cae el experimento queda cerrado con el motivo.
+- **Exportar**: canales por cámara, cuadros en orden con su hora, MP4 con
+  un cuadro por ciclo, GIF, OME-TIFF con la escala, el intervalo y el
+  tiempo de cada cuadro y los datos originales sin tocar, y los trabajos
+  en segundo plano.
+- **Usuarios** (también por la API): identidad por Cloudflare Access o
+  IP, una persona con el control a la vez (423 para las demás), tomar el
+  control, liberación por inactividad, bitácora y reservas que no se
+  pisan.
+- **Hora de término**: la duración sale de la fecha elegida.
+
 **Qué NO validan:** nada de lo que está en `TODO_HW.md`. Los emuladores
 asumen que el formato raw, el patrón Bayer, el consumo de las matrices y el
 aislamiento óptico se comportan como en Pi 4 — que es exactamente lo que

@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
-from core.experimentos import Experimentos, nombre_foto
+from core.experimentos import Experimentos, nombre_foto, agregar_nota
 
 
 class TimelapseState(Enum):
@@ -47,6 +47,11 @@ ARCHIVO_REANUDAR = ".timelapse_en_curso.json"
 # hasta que la red la corrige) y a que aparezca la carpeta (una memoria
 # USB tarda en montarse).
 ESPERA_REANUDAR_S = 180
+
+# temperatura.csv: una fila por ciclo. Las columnas de CO2 y humedad se
+# agregaron despues; los lectores aceptan archivos viejos sin ellas.
+CABECERA_TEMP = ("timestamp,ciclo,temperatura,setpoint,pwm,"
+                 "co2_ppm,co2_setpoint_ppm,humedad\n")
 
 
 def reloj_sincronizado():
@@ -158,6 +163,17 @@ class TimelapseManager:
         # Ultimo ciclo guardado de cada camara: {cam: {ciclo, hora, rutas}}
         # para la vista previa de la pagina.
         self.ultimas = {}
+        # Pausa: mientras esta en pausa no se toman fotos, pero el
+        # experimento sigue abierto y la hora de termino no cambia (es
+        # la que se eligio al empezar). Sirve para abrir la incubadora y
+        # agregar un farmaco o cambiar el medio sin cortar el timelapse.
+        self.pausado = False
+        self.pausas = []              # [[inicio_iso, fin_iso|None], ...]
+        # core.alertas.Alertas, o None: avisa por correo/Telegram si el
+        # autofoco falla seguido, si una captura falla o si el timelapse
+        # se cae por un error.
+        self.alertas = None
+        self._fallos_af = {}
 
     def _log(self, mensaje):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -174,16 +190,22 @@ class TimelapseManager:
         """Lee temperatura del controlador y la loguea en temp.csv"""
         try:
             from temperature_controller import temperature_controller
-            temp = temperature_controller.temperature
-            sp   = temperature_controller.setpoint
-            pwm  = temperature_controller.pwm
+            tc = temperature_controller
+            temp = tc.temperature
+            sp   = tc.setpoint
+            pwm  = tc.pwm
             if temp is None:
                 return
-            linea = f"{timestamp},{ciclo},{temp:.2f},{sp:.1f},{pwm}\n"
-            with open(os.path.join(self.base_folder, "temperatura.csv"), "a") as f:
+            num = lambda v, fmt: "" if v is None else format(float(v), fmt)
+            linea = (f"{timestamp},{ciclo},{temp:.2f},{sp:.1f},{pwm},"
+                     f"{num(getattr(tc, 'co2', None), '.0f')},"
+                     f"{num(getattr(tc, 'co2_setpoint', None), '.0f')},"
+                     f"{num(getattr(tc, 'humidity', None), '.1f')}\n")
+            ruta = os.path.join(self.base_folder, "temperatura.csv")
+            with open(ruta, "a") as f:
                 # Escribir cabecera si el archivo es nuevo
-                if os.path.getsize(os.path.join(self.base_folder, "temperatura.csv")) == 0:
-                    f.write("timestamp,ciclo,temperatura,setpoint,pwm\n")
+                if os.path.getsize(ruta) == 0:
+                    f.write(CABECERA_TEMP)
                 f.write(linea)
             self._log(f"  temp: {temp:.2f}°C (sp={sp:.1f}, pwm={pwm})")
         except Exception as e:
@@ -284,8 +306,28 @@ class TimelapseManager:
                           + ("" if r.get("encontrado", not r.get("fuera_de_rango"))
                              else "  [NO ENCONTRO EL FOCO -- esta foto puede salir borrosa]"))
                 self._log_autofoco(ciclo, ts, cam, r, motor.posicion_um - ancla_um)
+                encontrado = r.get("encontrado", not r.get("fuera_de_rango"))
+                self._contar_fallo_af(cam, ciclo, None if encontrado else
+                                      r.get("aviso") or "no encontró el foco")
             except Exception as e:
                 self._log(f"  autofoco cam{cam}: ERROR -> {e}")
+                self._contar_fallo_af(cam, ciclo, f"error: {e}")
+
+    def _contar_fallo_af(self, cam, ciclo, motivo):
+        """Lleva la cuenta de autofocos fallidos seguidos por camara y
+        avisa a core.alertas cuando se acumulan (uno suelto es normal: un
+        campo vacio, una burbuja)."""
+        if motivo is None:
+            if self._fallos_af.get(cam) and self.alertas is not None:
+                self.alertas.resuelto(f"autofoco_cam{cam}",
+                                      f"El autofoco de la cámara {cam} volvió a encontrar el foco.")
+            self._fallos_af[cam] = 0
+            return
+        n = self._fallos_af.get(cam, 0) + 1
+        self._fallos_af[cam] = n
+        if self.alertas is not None:
+            self.alertas.autofoco_fallo(cam, n, ciclo, motivo,
+                                        getattr(self, "nombre_experimento", ""))
 
     def _log_autofoco(self, ciclo, ts, cam, r, deriva_um=None):
         try:
@@ -419,6 +461,7 @@ class TimelapseManager:
 
                 except Exception as e:
                     self._log(f"  cam{cam}{sufijo}: ERROR -> {e}")
+                    self._avisar_captura(cam, sufijo, e)
                 finally:
                     if luz is not None:
                         try:
@@ -426,6 +469,11 @@ class TimelapseManager:
                         except Exception:
                             pass
         return guardadas
+
+    def _avisar_captura(self, cam, sufijo, error):
+        if self.alertas is not None:
+            self.alertas.captura_fallo(cam, sufijo, error,
+                                       getattr(self, "nombre_experimento", ""))
 
     def _capturar_simultaneo(self, patrones, camaras, ts, stabilization_time):
         """Las dos camaras disparan a la vez, con las dos matrices encendidas.
@@ -466,6 +514,7 @@ class TimelapseManager:
 
             except Exception as e:
                 self._log(f"  cam*{sufijo}: ERROR -> {e}")
+                self._avisar_captura("*", sufijo, e)
             finally:
                 for luz in luces:
                     if luz is not None:
@@ -593,7 +642,8 @@ class TimelapseManager:
         datos = {"carpeta": os.path.abspath(self.base_folder),
                  "inicio_ts": self.inicio_wall, "ciclo": ciclo,
                  "ultimo_ts": time.time(), "reanudaciones": self.reanudaciones,
-                 "params": self.config}
+                 "params": self.config, "pausado": self.pausado,
+                 "pausas": self.pausas}
         try:
             self.archivo_estado.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.archivo_estado.with_name(self.archivo_estado.name + ".tmp")
@@ -726,6 +776,10 @@ class TimelapseManager:
                             if self.inicio_wall and p else None,
             "proxima": iso(self.proxima_wall),
             "reanudaciones": list(self.reanudaciones),
+            "ciclo": self.ciclo_actual,
+            "pausado": self.pausado,
+            "pausas": [list(x) for x in self.pausas],
+            "carpeta": os.path.basename(self.base_folder) if self.base_folder else None,
             "ultimas": {str(c): {"ciclo": u["ciclo"], "hora": u["hora"],
                                  "dpc": bool(u.get("dpc"))}
                         for c, u in sorted(self.ultimas.items())},
@@ -733,6 +787,38 @@ class TimelapseManager:
 
     # ---------- el timelapse ----------
     def _run(self, p, reanudar=None):
+        """Envoltorio de _run_interno: si algo inesperado tumba el hilo,
+        el experimento queda cerrado con el motivo, se avisa (alertas) y
+        el estado vuelve a parado, en vez de quedar "corriendo" para
+        siempre sin tomar fotos."""
+        try:
+            self._run_interno(p, reanudar)
+        except Exception as e:
+            import traceback
+            self._log(f"El timelapse se detuvo por un error: {e}\n{traceback.format_exc()}")
+            for luz in self.illuminations.values():
+                try:
+                    luz.off()
+                except Exception:
+                    pass
+            try:
+                if self.base_folder:
+                    self.experimentos.finalizar(
+                        self.base_folder, fin=datetime.now().isoformat(timespec="seconds"),
+                        estado=f"se detuvo por un error: {e}", ciclos=self.ciclo_actual)
+            except Exception:
+                pass
+            if self.alertas is not None:
+                self.alertas.timelapse_error(getattr(self, "nombre_experimento", ""), e)
+            self._borrar_estado()
+            self.proxima_wall = None
+            self.state = TimelapseState.ERROR
+        finally:
+            if self.alertas is not None and self.state != TimelapseState.ERROR:
+                self.alertas.timelapse_fin(getattr(self, "nombre_experimento", ""),
+                                           self.ciclo_actual, bool(getattr(self, "_detenido", False)))
+
+    def _run_interno(self, p, reanudar=None):
         modo = p["modo"]
         interval_seconds = p["interval_seconds"]
         duration_seconds = p["duration_seconds"]
@@ -757,12 +843,17 @@ class TimelapseManager:
             self.inicio_wall = time.time()
             self.reanudaciones = []
             self.ultimas = {}
+            self.pausado = False
+            self.pausas = []
         else:
             self.base_folder = reanudar["carpeta"]
             ciclo = int(reanudar.get("ciclo", 0))
             self.inicio_wall = float(reanudar["inicio_ts"])
             self.reanudaciones = list(reanudar.get("reanudaciones") or []) + [
                 datetime.now().isoformat(timespec="seconds")]
+            # Si estaba en pausa cuando se corto la luz, sigue en pausa.
+            self.pausado = bool(reanudar.get("pausado"))
+            self.pausas = [list(x) for x in reanudar.get("pausas") or []]
             # self.ultimas ya lo cargo _lanzar desde el disco
         self.nombre_experimento = self.experimentos.info(self.base_folder)["nombre"]
         self.ciclo_actual = ciclo
@@ -791,7 +882,7 @@ class TimelapseManager:
         csv_path = os.path.join(self.base_folder, "temperatura.csv")
         if reanudar is None or not os.path.exists(csv_path):
             with open(csv_path, "w") as f:
-                f.write("timestamp,ciclo,temperatura,setpoint,pwm\n")
+                f.write(CABECERA_TEMP)
 
         if autofocus and self.autofocus is None:
             self._log("Autofoco pedido pero no hay motores de enfoque "
@@ -802,6 +893,7 @@ class TimelapseManager:
         # Al reanudar se vuelve a tomar: los motores cuentan desde cero
         # despues de reiniciar.
         self._ancla_um = {}
+        self._fallos_af = {}
         if contar and self.contador is None:
             self._log("Conteo de celulas pedido pero no hay contador "
                       "disponible -- se continua sin conteo.")
@@ -852,11 +944,32 @@ class TimelapseManager:
         self.proxima_wall = time.time() + (next_capture_time - time.monotonic())
         self._guardar_estado(ciclo)
 
+        en_pausa = self.pausado
         while self.state == TimelapseState.RUNNING:
             current_time = time.monotonic()
 
             if current_time - start_time >= duration_seconds:
                 break
+
+            if self.pausado:
+                en_pausa = True
+                self.proxima_wall = None
+                time.sleep(0.2)
+                continue
+            if en_pausa:
+                # Recien sale de la pausa: una foto ya (con autofoco, por
+                # si movieron la placa) y despues cada intervalo desde ahi.
+                # Las anclas de deriva se reinician: si alguien enfoco a
+                # mano durante la pausa, esa es la referencia nueva.
+                en_pausa = False
+                try:
+                    self.camera.stop_preview()
+                except Exception:
+                    pass
+                next_capture_time = current_time
+                tras_reanudar = None
+                forzar_af = True
+                self._ancla_um = {}
 
             if current_time >= next_capture_time:
                 ciclo += 1
@@ -935,6 +1048,10 @@ class TimelapseManager:
             cola_dpc.put(None)
             hilo_dpc.join()
 
+        if self.pausas and self.pausas[-1][1] is None:
+            self.pausas[-1][1] = datetime.now().isoformat(timespec="seconds")
+            self._guardar_pausas()
+        self.pausado = False
         self._log(f"Timelapse finalizado. Ciclos completados: {ciclo}")
         self._graficar_temperatura()
         if contar:
@@ -1005,6 +1122,55 @@ class TimelapseManager:
              "dpc_opts": dict(dpc_opts) if dpc_opts is not None else None}
         self._lanzar(p)
 
+    # ---------- pausa y notas ----------
+    def pausar(self, autor=""):
+        """Deja de tomar fotos sin cerrar el experimento. Devuelve False
+        si no hay timelapse o ya estaba en pausa."""
+        if not self.is_running() or self.pausado:
+            return False
+        self.pausado = True
+        self.pausas.append([datetime.now().isoformat(timespec="seconds"), None])
+        self._log(f"En pausa{' (' + autor + ')' if autor else ''}")
+        self._nota_auto("pausa", "Timelapse en pausa", autor)
+        self._guardar_estado(self.ciclo_actual)
+        self._guardar_pausas()
+        return True
+
+    def continuar(self, autor=""):
+        """Sale de la pausa: toma una foto enseguida y sigue."""
+        if not self.is_running() or not self.pausado:
+            return False
+        if self.pausas and self.pausas[-1][1] is None:
+            self.pausas[-1][1] = datetime.now().isoformat(timespec="seconds")
+        self.pausado = False
+        self._log(f"Sale de la pausa{' (' + autor + ')' if autor else ''}")
+        self._nota_auto("reanudar", "Timelapse reanudado", autor)
+        self._guardar_estado(self.ciclo_actual)
+        self._guardar_pausas()
+        return True
+
+    def _guardar_pausas(self):
+        try:
+            self.experimentos.actualizar(self.base_folder, pausas=self.pausas)
+        except Exception:
+            pass
+
+    def _nota_auto(self, tipo, texto, autor):
+        try:
+            agregar_nota(self.base_folder, texto, autor=autor,
+                         ciclo=self.ciclo_actual, tipo=tipo)
+        except Exception as e:
+            self._log(f"No se pudo guardar la nota: {e}")
+
+    def agregar_nota(self, texto, autor=""):
+        """Nota con hora en el experimento en curso (notas.csv)."""
+        if not self.base_folder or not self.is_running():
+            raise ValueError("No hay un timelapse en curso")
+        nota = agregar_nota(self.base_folder, texto, autor=autor,
+                            ciclo=self.ciclo_actual)
+        self._log(f"Nota{' de ' + autor if autor else ''}: {nota['texto']}")
+        return nota
+
     def stop(self):
         if self.state == TimelapseState.RUNNING:
             self._detenido = True
@@ -1014,3 +1180,6 @@ class TimelapseManager:
 
     def is_running(self):
         return self.state == TimelapseState.RUNNING
+
+    def en_pausa(self):
+        return self.is_running() and self.pausado
