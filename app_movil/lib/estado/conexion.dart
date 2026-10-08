@@ -9,7 +9,7 @@ import 'preferencias.dart';
 final clienteProvider = Provider<ClienteMicroscopio?>((ref) {
   final actual = ref.watch(microscopiosProvider.select((e) => e.actual));
   if (actual == null) return null;
-  final c = ClienteMicroscopio(actual.uri);
+  final c = ClienteMicroscopio(actual.uri, sesionAcceso: actual.sesion);
   ref.onDispose(c.cerrar);
   return c;
 });

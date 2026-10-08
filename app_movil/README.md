@@ -17,7 +17,7 @@ iPhone está preparado, pero falta compilarlo desde una Mac (ver más abajo).
 - [Rutas de la API que usa](#rutas-de-la-api-que-usa)
 - [Lo que quedó fuera](#lo-que-quedó-fuera)
 - [iPhone](#iphone)
-- [Acceso desde internet (futuro)](#acceso-desde-internet-futuro)
+- [Acceso desde internet](#acceso-desde-internet)
 - [Pendientes del backend](#pendientes-del-backend)
 
 ---
@@ -26,12 +26,12 @@ iPhone está preparado, pero falta compilarlo desde una Mac (ver más abajo).
 
 | Pantalla | Qué hay |
 |---|---|
-| **Microscopios** | Lista de microscopios guardados, agregar uno por IP, «Probar conexión» (`/api/version`). Recuerda el último. |
+| **Microscopios** | Lista de microscopios guardados, agregar uno por IP (red del laboratorio) o `microscopio.lmimenchacalab.com` (internet, entrando con el correo), «Probar conexión» (`/api/version`). Recuerda el último. |
 | **Inicio** | Quién controla el microscopio (y «Tomar el control»); incubadora en vivo (temperatura y CO₂, verde/naranja/rojo con las mismas tolerancias que la web) y una hoja para cambiarlas; el timelapse en curso (foto N, progreso, próxima foto, última foto de cada cámara, pausar/seguir, anotar, detener con confirmación). |
-| **Vivo** | Video MJPEG de la cámara 0 o 1 con zoom y pantalla completa. Debajo, tres paneles: **Foco** (Subir/Bajar: un toque = un paso, mantener = movimiento continuo; paso de 1, 5 o 25 µm; altura; autofoco), **Luz** (encender, tipo de luz, brillo, misma luz en las dos cámaras) y **Foto** (nombre del experimento, campo claro / relieve DPC / fondo negro, esta cámara o las dos). Con un timelapse tomando fotos muestra la última foto de cada ciclo. |
-| **Nuevo timelapse** | Nombre, tipo de foto, cada cuánto, «durante N horas» o «hasta tal día y hora», cámaras, reenfocar; cuántas fotos se tomarán y cuánto espacio ocupará (igual que la web). |
+| **Vivo** | Video MJPEG de la cámara 0 o 1 con zoom y pantalla completa. Debajo, tres paneles: **Foco** (Subir/Bajar: un toque = un paso, mantener = movimiento continuo; paso de 1, 5 o 25 µm; altura; autofoco), **Luz** (encender, tipo de luz, brillo, colores del campo claro, del relieve y de Rheinberg —centro y anillo—, misma luz en las dos cámaras) y **Foto** (nombre del experimento, campo claro / relieve DPC / fondo negro / de colores, esta cámara o las dos). Con un timelapse tomando fotos muestra la última foto de cada ciclo. |
+| **Nuevo timelapse** | Nombre, tipo de foto, cada cuánto, «durante N horas» o «hasta tal día y hora», cámaras, reenfocar y, en relieve DPC, qué hacer con las 4 fotos (calcular el relieve, borrar las originales, guardar la foto normal, la fase, la vista JPG); cuántas fotos se tomarán y cuánto espacio ocupará (igual que la web y que el servidor). |
 | **Experimentos** | Lista con portada, fecha, fotos y tamaño → detalle con cuadrícula de miniaturas por cámara y notas → visor con zoom y **Compartir** (baja la copia JPEG con la marca de agua y abre el menú de compartir del teléfono). |
-| **Ajustes** | Microscopios, tema (oscuro por defecto, claro o automático), control, «Abrir en la web», versión de la app y del microscopio. |
+| **Ajustes** | Microscopios, cerrar la sesión de internet, tema (oscuro por defecto, claro o automático), control, «Abrir en la web», versión de la app y del microscopio. |
 
 Las capturas de cada pantalla están en [`docs/capturas/`](docs/capturas/).
 
@@ -134,6 +134,8 @@ Opciones:
 | `--con-timelapse` | arrancar con un timelapse corriendo (una foto cada 20 s) |
 | `--sin-incubadora` | el Arduino desconectado |
 | `--version-vieja` | un microscopio sin `POST /api/temperature/co2_setpoint` (404) |
+| `--cloudflare` | ponerse delante como Cloudflare Access: login (página falsa), cookie `CF_Authorization` HttpOnly, redirecciones y el correo de la persona al microscopio |
+| `--registrar` | con `--cloudflare`: imprimir cada pedido (sirve para ver qué manda la app) |
 | `--autofoco-s 20` | cuánto tarda el autofoco (por defecto 8 s) |
 | `--carpeta DIR` | guardar los datos en DIR en vez de una carpeta temporal |
 
@@ -141,6 +143,7 @@ Rutas que **solo** tiene el servidor falso (la Raspberry no):
 
 - `POST /dev/otra_persona`: «ana@lab.mx» toma el control (para ver el 423 y «Tomar el control»). `POST /dev/otra_persona/soltar` lo suelta.
 - `GET /dev/motores`: posición de cada motor y si el jog sigue activo.
+- `POST /dev/vencer_sesion`: con `--cloudflare`, vence todas las sesiones (para ver el aviso «Tu sesión venció»).
 
 Si la app alguna vez deja de mandar el stop del jog, el servidor imprime
 `⚠⚠⚠ motor camN: PARADO POR EL WATCHDOG`.
@@ -151,7 +154,7 @@ Si la app alguna vez deja de mandar el stop del jog, el servidor imprime
 
 ```bash
 flutter analyze        # sin errores
-flutter test           # 78 pruebas
+flutter test           # 95 pruebas
 ```
 
 - `test/api/cliente_api_test.dart`: el cliente contra respuestas falsas:
@@ -180,6 +183,18 @@ flutter drive -d emulator-5554 \
 Recorre todas las pantallas y guarda las capturas en `docs/capturas/`. Antes
 de empezar comprueba que el servidor tiene `/dev/motores` (o sea, que es el
 falso) y si no, se detiene.
+
+Y el **acceso desde internet**, contra el servidor falso en modo Cloudflare:
+
+```bash
+dev_server/.venv/bin/python dev_server/servidor_falso.py --puerto 8001 --cloudflare
+flutter drive -d emulator-5554 \
+  --driver=test_driver/integration_test.dart \
+  --target=integration_test/acceso_remoto_test.dart
+```
+
+Entra con el correo, usa la app (incluido el video), vence la sesión,
+comprueba el aviso y vuelve a entrar.
 
 ---
 
@@ -234,10 +249,10 @@ HTTPS. En iPhone sí existe esa excepción (`NSAllowsLocalNetworking`).
 | Control | `GET /api/control` · `POST /api/control/tomar` · `/soltar` · `/visto_aviso` |
 | Incubadora | `GET /api/temperature/stream` (SSE) · `GET /api/temperature/status` · `POST /api/temperature/setpoint` · `POST /api/temperature/co2_setpoint` |
 | Vivo | `POST /live/start/{cam}` · `GET /live/stream/{cam}` (MJPEG) · `POST /live/stop/{cam}` · `GET /timelapse/vista/{cam}` |
-| Luz | `GET /light/estado` · `POST /light/set` · `POST /light/off` |
+| Luz | `GET /light/estado` · `POST /light/set` (con `color_centro`/`color_anillo` en Rheinberg) · `POST /light/off` · `POST /light/colores` |
 | Foco | `GET /api/focus/status` · `POST /api/focus/jog` · `/jog/stop` · `/move` · `/config` · `/auto` |
 | Fotos | `POST /capture/{cam}/{modo}?nombre=` · `POST /capture/both/{modo}?nombre=` |
-| Timelapse | `POST /timelapse/start` · `/stop` · `/pausar` · `/continuar` · `/nota` |
+| Timelapse | `POST /timelapse/start` (con `dpc_*` en relieve) · `/stop` · `/pausar` · `/continuar` · `/nota` |
 | Experimentos | `GET /api/experimentos` · `GET /api/exp/{id}` · `/mini/{rel}` · `/compartir/{rel}` · `/notas` |
 
 `/api/focus/config` no estaba en la lista original: la web la usa para que
@@ -260,10 +275,8 @@ navegador del teléfono):
 - renombrar, borrar o recuperar experimentos;
 - reservas y bitácora;
 - en el timelapse: guardar en USB, contar células, enviar a la PC o al NAS,
-  opciones del relieve DPC, autofoco cada N fotos;
-- luz: colores del campo claro / relieve / Rheinberg (la app enciende
-  Rheinberg con los colores guardados);
-- foto suelta en modo «De colores» (sí está en el timelapse);
+  autofoco cada N fotos;
+- luz: un color totalmente libre (la app ofrece 16; la web, cualquiera);
 - temperatura pedida por encima de 45 °C (la web permite hasta 80; en la app
   se limitó a 45 para que un dedo no la mande a una temperatura que mata
   las células);
@@ -293,24 +306,48 @@ No se usó nada exclusivo de Android salvo `network_security_config.xml`.
 
 ---
 
-## Acceso desde internet (futuro)
+## Acceso desde internet
 
 Desde fuera del laboratorio el microscopio está en
 `https://microscopio.lmimenchacalab.com`, detrás de **Cloudflare Access**
-(código por correo en el navegador). Una app nativa no puede hacer ese
-login directamente, así que en esta versión no está. La pantalla de
-conexión ya acepta direcciones `https://` y todo el HTTP pasa por
-`lib/api/`, así que hay dos caminos:
+(código por correo). La app hace lo mismo que el navegador:
 
-- **(a) WebView de login:** abrir la página de Access en un WebView, dejar
-  que la persona ponga el código del correo, y guardar la cookie
-  `CF_Authorization` para mandarla en cada pedido (incluidos el MJPEG y el
-  SSE). Cada persona entra con su correo y el microscopio la reconoce por el
-  encabezado `Cf-Access-Authenticated-User-Email`, como en la web.
-- **(b) Tokens de servicio de Access:** un `CF-Access-Client-Id` y
-  `CF-Access-Client-Secret` por teléfono, configurados en Cloudflare. Más
-  simple de programar, pero el microscopio vería a todos como el mismo
-  «servicio» y no sabría quién es quién; habría que sumar algo propio.
+1. En **Microscopios → Desde fuera del laboratorio** se toca
+   `microscopio.lmimenchacalab.com` (o se escribe; sin `https://` la app lo
+   completa). Al probarlo, Cloudflare contesta con una redirección a su
+   página de login y la app ofrece **Entrar con mi correo**.
+2. Se abre la página de Cloudflare dentro de la app (`webview_flutter`, el
+   navegador integrado oficial de Flutter). La persona escribe su correo del
+   laboratorio y el código que le llega.
+3. Cloudflare deja la cookie `CF_Authorization` (HttpOnly) en el dominio del
+   microscopio. La app la lee del navegador integrado, **comprueba que el
+   microscopio la acepta** (una cookie vieja también estaría ahí) y la manda
+   en cada pedido, incluidos el video y la incubadora. El microscopio
+   reconoce a la persona por su correo, igual que en la web.
+4. Cuando la sesión vence (lo decide Cloudflare), Inicio muestra «Tu sesión
+   desde fuera del laboratorio venció» con un botón **Entrar**, y cualquier
+   acción ofrece entrar de nuevo y la repite. **Ajustes → Cerrar sesión de
+   internet** la olvida.
+
+**Seguridad del login:** el login empieza en `/api/version` (solo lee) y el
+navegador integrado **no abre ninguna página del microscopio** salvo esa y
+las de Cloudflare (`/cdn-cgi/`). Si cargara la interfaz web, esta mandaría
+órdenes al abrirse (p. ej. `POST /api/focus/config`, que además toma el
+control): se vio en las pruebas con el servidor falso y se bloqueó.
+
+Notas:
+
+- El token se guarda en las preferencias de la app (como la cookie del
+  navegador). Para mayor protección se podría pasar al llavero del sistema
+  (`flutter_secure_storage`).
+- Se probó con el servidor falso en modo `--cloudflare`, que imita lo que se
+  midió del Cloudflare real (redirección 302 a
+  `small-lake-1bcd.cloudflareaccess.com`, cookie HttpOnly). **Falta probarlo
+  con el Cloudflare real**: necesita que una persona ponga el código de su
+  correo.
+- La alternativa de **tokens de servicio** de Access no se usó: requiere
+  cambiar la configuración de Cloudflare y el microscopio no sabría quién es
+  quién.
 
 ---
 

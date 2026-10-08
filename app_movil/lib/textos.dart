@@ -41,6 +41,8 @@ abstract final class Textos {
       'No se pudo cambiar la temperatura. Tiene que estar entre 20 y 80 °C y la incubadora conectada.';
   static const errorCo2Rango = 'No se pudo cambiar el CO₂. Revisa que la incubadora esté conectada.';
   static const errorCo2NoSoportado = 'Esta versión del microscopio no permite cambiar el CO₂.';
+  static const errorNecesitaLogin = 'Este microscopio está protegido: hay que entrar con tu correo.';
+  static const errorSesionVencida = 'Tu sesión desde fuera del laboratorio venció. Entra de nuevo con tu correo.';
   static String errorServidor(int codigo) => 'El microscopio tuvo un problema (error $codigo).';
   static String errorSinControl(String quien) => 'Ahora controla el microscopio $quien.';
 
@@ -51,11 +53,10 @@ abstract final class Textos {
   static const conexionAgregar = 'Agregar microscopio';
   static const conexionNombre = 'Nombre';
   static const conexionNombreEjemplo = 'Microscopio 1';
-  static const conexionDireccion = 'Dirección IP';
+  static const conexionDireccion = 'Dirección';
   static const conexionDireccionEjemplo = '192.168.1.50';
   static const conexionAyuda =
-      'Escribe la IP de la Raspberry (la ves en la pantalla del microscopio o en tu router). '
-      'El teléfono tiene que estar en la red del laboratorio.';
+      'En el laboratorio, escribe la IP de la Raspberry (la ves en la pantalla del microscopio o en tu router).';
   static const conexionAyudaEmulador = 'En el emulador de Android, la PC es 10.0.2.2:8000.';
   static const conexionProbar = 'Probar conexión';
   static const conexionProbando = 'Probando…';
@@ -64,10 +65,22 @@ abstract final class Textos {
       'Esa dirección no sirve. Escribe una IP de la red local, por ejemplo 192.168.1.50.';
   static String conexionOk(String version) => 'Hay un MicroscopeOS ($version).';
   static const conexionRemotaTitulo = 'Desde fuera del laboratorio';
+  static const conexionDominio = 'microscopio.lmimenchacalab.com';
+  static const conexionNombreInternet = 'Microscopio (internet)';
+  static const conexionRemotaSub = 'Entrar con tu correo del laboratorio';
   static const conexionRemotaTexto =
-      'El acceso por internet (microscopio.lmimenchacalab.com) todavía no está disponible en la app. '
-      'Por ahora, úsalo desde el navegador.';
+      'Funciona desde cualquier red. Te llega un código a tu correo, como en el navegador, y la app '
+      'recuerda la sesión hasta que venza.';
+  static const conexionEntrarCorreo = 'Entrar con mi correo';
   static const conexionBorrarPregunta = '¿Quitar este microscopio de la lista?';
+
+  // ---------------------------------------------------------------- login remoto
+  static const loginTitulo = 'Entrar con tu correo';
+  static String loginAyuda(String host) =>
+      'Página de acceso de $host (Cloudflare). Escribe tu correo del laboratorio y el código que te llega.';
+  static const loginSinRed = 'No se pudo abrir la página de acceso. Revisa la conexión a internet.';
+  static const loginEntrar = 'Entrar';
+  static const loginPregunta = '¿Entrar de nuevo con tu correo?';
 
   // ---------------------------------------------------------------- control
   static const controlTuyo = 'Controlas tú el microscopio';
@@ -162,6 +175,31 @@ abstract final class Textos {
   static const luzRelieveAbj = 'Relieve DPC ↓';
   static const luzFondoNegro = 'Fondo negro';
   static const luzColores = 'De colores';
+  static const luzColorCampo = 'Color';
+  static const luzColorRelieve = 'Color del relieve';
+  static const luzColorRelieveNota =
+      'El verde es el recomendado: la fase depende del color y el objetivo está mejor corregido en verde.';
+  static const luzColorCentro = 'Centro';
+  static const luzColorAnillo = 'Anillo';
+  static const colorBlanco = 'Blanco';
+  static const colorVerde = 'Verde';
+  static const colorRojo = 'Rojo';
+  static const colorAzul = 'Azul';
+  static const colorNaranja = 'Naranja';
+  static const colorAmarillo = 'Amarillo';
+  static const colorLima = 'Lima';
+  static const colorVerdeAgua = 'Verde agua';
+  static const colorCian = 'Cian';
+  static const colorCeleste = 'Celeste';
+  static const colorMorado = 'Morado';
+  static const colorMagenta = 'Magenta';
+  static const colorRosa = 'Rosa';
+  static const colorSalmon = 'Salmón';
+  static const colorVerdeClaro = 'Verde claro';
+  static const colorLavanda = 'Lavanda';
+  static const colorOtro = 'Otro color';
+  static const colorOtroTitulo = 'Otro color';
+  static const colorRecomendado = '(recomendado)';
   static const bloqueadoTimelapse = 'Bloqueado mientras el timelapse toma fotos. Ponlo en pausa para usarlo.';
 
   static const focoAltura = 'Altura';
@@ -192,6 +230,7 @@ abstract final class Textos {
   static const fotoRelieve = 'Relieve DPC';
   static const fotoFondoNegro = 'Fondo negro';
   static const fotoColores = 'De colores';
+  static const fotoColoresNota = 'Luz Rheinberg con los colores elegidos en el panel Luz.';
   static const fotoDeQueCamara = '¿De qué cámara?';
   static const fotoEsta = 'Esta';
   static const fotoTomar = 'Tomar foto';
@@ -208,6 +247,14 @@ abstract final class Textos {
   static const nuevoTipoRelieve = 'Relieve DPC (4 fotos)';
   static const nuevoTipoFondo = 'Fondo negro (1 foto)';
   static const nuevoTipoColores = 'De colores (1 foto)';
+  static const relieveTitulo = 'Relieve DPC';
+  static const relieveProcesar = 'Calcular el relieve al terminar cada ciclo';
+  static const relieveBorrar = 'Borrar las 4 fotos originales (ahorra espacio)';
+  static const relieveSuma = 'Guardar también la foto normal, más chica (~3 MB)';
+  static const relieveFase = 'Guardar también la fase (en prueba)';
+  static const relieveJpg = 'Vista previa en color (JPG)';
+  static const relieveAyuda = 'Las 4 fotos se borran solo después de comprobar que el relieve quedó bien.';
+  static const relieveSinProcesar = 'Se guardan las 4 fotos sin procesar (64 MB por cámara y por ciclo).';
   static const nuevoCada = 'Una foto cada';
   static const nuevoHasta = '¿Hasta cuándo?';
   static const nuevoDurante = 'Durante';
@@ -253,6 +300,8 @@ abstract final class Textos {
   static const ajustesTitulo = 'Ajustes';
   static const ajustesMicroscopio = 'Microscopio';
   static const ajustesCambiar = 'Cambiar de microscopio';
+  static const ajustesCerrarSesion = 'Cerrar sesión de internet';
+  static const ajustesCerrarSesionDetalle = 'La próxima vez la app te pedirá el código del correo.';
   static const ajustesApariencia = 'Apariencia';
   static const ajustesOscuro = 'Oscuro';
   static const ajustesClaro = 'Claro';

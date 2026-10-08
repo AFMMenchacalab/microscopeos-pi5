@@ -413,3 +413,81 @@ class Segmentos<T extends Object> extends StatelessWidget {
     );
   }
 }
+
+/// Opciones grandes en una cuadrícula de dos columnas (cuatro en
+/// pantallas anchas): para cuando los nombres no caben en un control
+/// segmentado.
+class RejillaOpciones<T extends Object> extends StatelessWidget {
+  const RejillaOpciones({
+    super.key,
+    required this.opciones,
+    required this.valor,
+    required this.alCambiar,
+    this.habilitado = true,
+  });
+
+  final Map<T, String> opciones;
+  final T valor;
+  final ValueChanged<T> alCambiar;
+  final bool habilitado;
+
+  @override
+  Widget build(BuildContext context) {
+    final acento = CupertinoDynamicColor.resolve(Colores.acento, context);
+    return Opacity(
+      opacity: habilitado ? 1 : 0.45,
+      child: IgnorePointer(
+        ignoring: !habilitado,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final columnas = c.maxWidth > 520 ? 4 : 2;
+            final ancho = (c.maxWidth - 8 * (columnas - 1)) / columnas;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final e in opciones.entries)
+                  SizedBox(
+                    width: ancho,
+                    child: Semantics(
+                      selected: e.key == valor,
+                      button: true,
+                      child: GestureDetector(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          alCambiar(e.key);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          height: Medidas.toque,
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: e.key == valor
+                                ? acento.withValues(alpha: 0.18)
+                                : CupertinoDynamicColor.resolve(Colores.tarjeta, context),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: e.key == valor ? acento : const Color(0x00000000), width: 2),
+                          ),
+                          child: Text(
+                            e.value,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            style: Estilos.base(context).copyWith(
+                              fontSize: 15,
+                              fontWeight: e.key == valor ? FontWeight.w600 : FontWeight.w500,
+                              color: e.key == valor ? acento : null,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

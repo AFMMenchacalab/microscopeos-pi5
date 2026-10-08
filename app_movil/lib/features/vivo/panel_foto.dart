@@ -96,16 +96,21 @@ class _PanelFotoState extends ConsumerState<PanelFoto> {
         const SizedBox(height: Medidas.espacio),
         Text(Textos.fotoTipo, style: Estilos.encabezado(context)),
         const SizedBox(height: 6),
-        Segmentos<ModoFoto>(
+        RejillaOpciones<ModoFoto>(
           habilitado: !_tomando,
           valor: _modo,
           opciones: const {
             ModoFoto.blanco: Textos.fotoNormal,
             ModoFoto.dpc: Textos.fotoRelieve,
             ModoFoto.oscuro: Textos.fotoFondoNegro,
+            ModoFoto.rheinberg: Textos.fotoColores,
           },
           alCambiar: (m) => setState(() => _modo = m),
         ),
+        if (_modo == ModoFoto.rheinberg) ...[
+          const SizedBox(height: 6),
+          Text(Textos.fotoColoresNota, style: Estilos.nota(context)),
+        ],
         const SizedBox(height: Medidas.espacio),
         Text(Textos.fotoDeQueCamara, style: Estilos.encabezado(context)),
         const SizedBox(height: 6),

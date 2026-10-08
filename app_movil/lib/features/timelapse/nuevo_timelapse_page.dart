@@ -38,6 +38,7 @@ class _NuevoTimelapsePageState extends ConsumerState<NuevoTimelapsePage> {
   late DateTime _fin = _finPorDefecto();
   final Set<int> _camaras = {0, 1};
   bool _autofoco = true;
+  OpcionesRelieve _relieve = const OpcionesRelieve();
   bool _enviando = false;
 
   /// Como la web: dentro de 48 h, en punto.
@@ -79,6 +80,7 @@ class _NuevoTimelapsePageState extends ConsumerState<NuevoTimelapsePage> {
       nombre: _nombre.text.trim(),
       camaras: _camaras.toList()..sort(),
       autofoco: _autofoco,
+      relieve: _relieve,
     );
     final ok = await ejecutar(context, ref, (c) async {
       await c.iniciarTimelapse(pedido);
@@ -102,6 +104,31 @@ class _NuevoTimelapsePageState extends ConsumerState<NuevoTimelapsePage> {
       Textos.nuevoSigueSolo,
     ];
     return partes.join(' ');
+  }
+
+  /// Qué hacer con las 4 fotos del relieve en cada ciclo (como la web).
+  Widget _seccionRelieve() {
+    Widget fila(String titulo, bool valor, OpcionesRelieve Function(bool) cambiar, {String? detalle}) =>
+        CupertinoListTile(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          title: Text(titulo, maxLines: 2),
+          subtitle: detalle == null ? null : Text(detalle, maxLines: 2),
+          trailing: CupertinoSwitch(value: valor, onChanged: (v) => setState(() => _relieve = cambiar(v))),
+        );
+    final r = _relieve;
+    return CupertinoListSection.insetGrouped(
+      header: const Text(Textos.relieveTitulo),
+      footer: Text(r.procesar ? Textos.relieveAyuda : Textos.relieveSinProcesar),
+      children: [
+        fila(Textos.relieveProcesar, r.procesar, (v) => r.copiar(procesar: v)),
+        if (r.procesar) ...[
+          fila(Textos.relieveBorrar, r.borrarCrudas, (v) => r.copiar(borrarCrudas: v)),
+          fila(Textos.relieveSuma, r.suma, (v) => r.copiar(suma: v)),
+          fila(Textos.relieveFase, r.fase, (v) => r.copiar(fase: v)),
+          fila(Textos.relieveJpg, r.jpg, (v) => r.copiar(jpg: v)),
+        ],
+      ],
+    );
   }
 
   Future<void> _elegirFin() async {
@@ -150,6 +177,7 @@ class _NuevoTimelapsePageState extends ConsumerState<NuevoTimelapsePage> {
       duracionS: _duracionS,
       camaras: _camaras.length,
       libreBytes: libre,
+      relieve: _relieve,
     );
 
     return CupertinoPageScaffold(
@@ -202,6 +230,7 @@ class _NuevoTimelapsePageState extends ConsumerState<NuevoTimelapsePage> {
                   ),
               ],
             ),
+            if (_modo == ModoFoto.dpc) _seccionRelieve(),
             CupertinoListSection.insetGrouped(
               header: const Text(Textos.nuevoCada),
               children: [

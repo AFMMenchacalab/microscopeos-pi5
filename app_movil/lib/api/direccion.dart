@@ -5,12 +5,19 @@
 /// «https://microscopio.lmimenchacalab.com» -> la misma (acceso remoto,
 ///   que en esta versión todavía no funciona: ver README).
 ///
+/// «microscopio.lmimenchacalab.com» -> https://microscopio.lmimenchacalab.com
+///
 /// Devuelve null si no se entiende o si es HTTP sin cifrar fuera de la
 /// red local.
 Uri? normalizarDireccion(String entrada) {
   var t = entrada.trim();
   if (t.isEmpty) return null;
-  if (!t.contains('://')) t = 'http://$t';
+  if (!t.contains('://')) {
+    // Sin esquema: HTTP en la red local, HTTPS para todo lo demás
+    // (microscopio.lmimenchacalab.com).
+    final host = Uri.tryParse('http://$t')?.host ?? '';
+    t = '${esRedLocal(host) ? 'http' : 'https'}://$t';
+  }
   final u = Uri.tryParse(t);
   if (u == null || u.host.isEmpty || !(u.scheme == 'http' || u.scheme == 'https')) return null;
   if (u.scheme == 'http' && !esRedLocal(u.host)) return null;

@@ -10,17 +10,28 @@ final preferenciasProvider = Provider<SharedPreferences>(
 
 /// Un microscopio guardado: nombre que eligió la persona y su dirección.
 class MicroscopioGuardado {
-  const MicroscopioGuardado({required this.nombre, required this.url});
+  const MicroscopioGuardado({required this.nombre, required this.url, this.sesion});
 
-  factory MicroscopioGuardado.desdeJson(Map<String, dynamic> j) =>
-      MicroscopioGuardado(nombre: '${j['nombre'] ?? ''}', url: '${j['url'] ?? ''}');
+  factory MicroscopioGuardado.desdeJson(Map<String, dynamic> j) => MicroscopioGuardado(
+    nombre: '${j['nombre'] ?? ''}',
+    url: '${j['url'] ?? ''}',
+    sesion: j['sesion'] is String ? j['sesion'] as String : null,
+  );
 
   final String nombre;
   final String url;
 
+  /// Token de Cloudflare Access (cookie CF_Authorization) si se entra
+  /// desde internet con el correo; null en la red del laboratorio.
+  final String? sesion;
+
   Uri get uri => Uri.parse(url);
 
-  Map<String, dynamic> aJson() => {'nombre': nombre, 'url': url};
+  bool get esRemoto => uri.scheme == 'https' || sesion != null;
+
+  MicroscopioGuardado conSesion(String? s) => MicroscopioGuardado(nombre: nombre, url: url, sesion: s);
+
+  Map<String, dynamic> aJson() => {'nombre': nombre, 'url': url, 'sesion': ?sesion};
 }
 
 class EstadoMicroscopios {
@@ -62,6 +73,14 @@ class Microscopios extends Notifier<EstadoMicroscopios> {
   }
 
   Future<void> usar(MicroscopioGuardado m) => _guardar(state.lista, m);
+
+  /// Después de volver a entrar con el correo: la sesión nueva reemplaza
+  /// a la vencida, sin cambiar de pantalla.
+  Future<void> guardarSesion(String url, String? sesion) async {
+    final lista = [for (final m in state.lista) m.url == url ? m.conSesion(sesion) : m];
+    final actual = state.actual?.url == url ? state.actual!.conSesion(sesion) : state.actual;
+    await _guardar(lista, actual);
+  }
 
   /// Vuelve a la pantalla de conexión sin borrar nada.
   Future<void> desconectar() => _guardar(state.lista, null);

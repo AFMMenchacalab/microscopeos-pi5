@@ -1,12 +1,14 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../api/errores.dart';
 import '../../estado/datos.dart';
 import '../../estado/preferencias.dart';
 import '../../textos.dart';
 import '../../ui/barra_control.dart';
 import '../../ui/componentes.dart';
 import '../../ui/tema.dart';
+import '../conexion/login_acceso_page.dart';
 import 'tarjeta_incubadora.dart';
 import 'tarjeta_timelapse.dart';
 
@@ -41,7 +43,16 @@ class InicioPage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(Medidas.margen, 4, Medidas.margen, 32),
             sliver: SliverList.list(
               children: [
-                if (sinConexion) ...[
+                if (estado.error is ErrorNecesitaLogin) ...[
+                  Franja(
+                    texto: (estado.error as ErrorNecesitaLogin).mensaje,
+                    icono: CupertinoIcons.lock_fill,
+                    color: Colores.acento,
+                    accion: Textos.loginEntrar,
+                    alTocar: () => volverAEntrar(context, ref),
+                  ),
+                  const SizedBox(height: Medidas.espacio),
+                ] else if (sinConexion) ...[
                   Franja(
                     texto: '${Textos.sinConexion}. ${estado.error}',
                     icono: CupertinoIcons.wifi_slash,

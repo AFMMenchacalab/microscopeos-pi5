@@ -7,12 +7,15 @@ import '../api/modelos.dart';
 import '../estado/avisos.dart';
 import '../estado/conexion.dart';
 import '../estado/datos.dart';
+import '../features/conexion/login_acceso_page.dart';
 import '../textos.dart';
 
 /// Ejecuta una acción sobre el microscopio y se encarga de lo común:
 ///
 /// - si otra persona tiene el control (423), pregunta «¿Tomar el
 ///   control?» y, si dice que sí, lo toma y repite la acción una vez;
+/// - si la sesión de Cloudflare Access venció (acceso desde internet),
+///   ofrece entrar de nuevo con el correo y repite la acción una vez;
 /// - cualquier otro error se muestra tal cual (los mensajes del
 ///   microscopio ya están pensados para personas);
 /// - si sale bien y hay [exito], lo avisa.
@@ -25,10 +28,11 @@ Future<T?> ejecutar<T>(
   String? exito,
   String Function(T resultado)? exitoCon,
 }) async {
-  final c = ref.read(clienteProvider);
-  if (c == null) return null;
   final avisos = ref.read(avisosProvider.notifier);
   for (var intento = 0; intento < 2; intento++) {
+    // Se lee en cada intento: al volver a entrar, el cliente es otro.
+    final c = ref.read(clienteProvider);
+    if (c == null) return null;
     try {
       final r = await accion(c);
       final texto = exitoCon != null ? exitoCon(r) : exito;
@@ -50,6 +54,14 @@ Future<T?> ejecutar<T>(
         avisos.error(e2.mensaje);
         return null;
       }
+    } on ErrorNecesitaLogin catch (e) {
+      if (intento > 0 || !context.mounted) {
+        avisos.error(e.mensaje);
+        return null;
+      }
+      final entrar = await confirmar(context, titulo: e.mensaje, accion: Textos.loginEntrar);
+      if (!entrar || !context.mounted) return null;
+      if (!await volverAEntrar(context, ref)) return null;
     } on ErrorApi catch (e) {
       avisos.error(e.mensaje);
       return null;

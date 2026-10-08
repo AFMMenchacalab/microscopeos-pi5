@@ -10,6 +10,7 @@ import '../../ui/acciones.dart';
 import '../../ui/formato.dart';
 import '../../ui/tema.dart';
 import '../conexion/conexion_page.dart';
+import '../conexion/login_acceso_page.dart';
 
 /// Abre la interfaz web del microscopio en el navegador del teléfono,
 /// para todo lo que la app todavía no hace.
@@ -53,6 +54,23 @@ class AjustesPage extends ConsumerWidget {
                         Navigator.of(context)
                             .push(CupertinoPageRoute<void>(builder: (_) => const ConexionPage(desdeAjustes: true))),
                   ),
+                  if (actual?.sesion != null)
+                    CupertinoListTile(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      title: const Text(Textos.ajustesCerrarSesion, style: TextStyle(color: Colores.mal)),
+                      subtitle: const Text(Textos.ajustesCerrarSesionDetalle),
+                      onTap: () async {
+                        final si = await confirmar(
+                          context,
+                          titulo: Textos.ajustesCerrarSesion,
+                          detalle: Textos.ajustesCerrarSesionDetalle,
+                          accion: Textos.ajustesCerrarSesion,
+                          destructiva: true,
+                        );
+                        if (!si) return;
+                        await cerrarSesionRemota(ref);
+                      },
+                    ),
                 ],
               ),
               CupertinoListSection.insetGrouped(

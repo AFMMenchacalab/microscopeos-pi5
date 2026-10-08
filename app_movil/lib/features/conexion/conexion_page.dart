@@ -11,6 +11,7 @@ import '../../ui/acciones.dart';
 import '../../ui/componentes.dart';
 import '../../ui/formato.dart';
 import '../../ui/tema.dart';
+import 'login_acceso_page.dart';
 
 /// Lista de microscopios guardados y alta de uno nuevo por IP.
 ///
@@ -26,13 +27,16 @@ class ConexionPage extends ConsumerStatefulWidget {
   ConsumerState<ConexionPage> createState() => _ConexionPageState();
 }
 
-enum _Prueba { nada, probando, ok, error }
+enum _Prueba { nada, probando, ok, login, error }
 
 class _ConexionPageState extends ConsumerState<ConexionPage> {
   final _nombre = TextEditingController();
   final _direccion = TextEditingController();
   _Prueba _prueba = _Prueba.nada;
   String? _resultado;
+
+  /// Token de Cloudflare Access, si este microscopio pide entrar con el correo.
+  String? _sesion;
 
   @override
   void dispose() {
@@ -54,7 +58,7 @@ class _ConexionPageState extends ConsumerState<ConexionPage> {
       _prueba = _Prueba.probando;
       _resultado = null;
     });
-    final c = ClienteMicroscopio(uri, reintentosLectura: 0);
+    final c = ClienteMicroscopio(uri, sesionAcceso: _sesion, reintentosLectura: 0);
     try {
       final v = await c.version(probar: true);
       final texto = [
@@ -68,6 +72,14 @@ class _ConexionPageState extends ConsumerState<ConexionPage> {
         _resultado = Textos.conexionOk(texto.isEmpty ? uri.toString() : texto);
       });
       return true;
+    } on ErrorNecesitaLogin {
+      // Detrás de Cloudflare Access: hay que entrar con el correo.
+      if (!mounted) return false;
+      setState(() {
+        _prueba = _Prueba.login;
+        _resultado = Textos.errorNecesitaLogin;
+      });
+      return false;
     } on ErrorApi catch (e) {
       if (!mounted) return false;
       setState(() {
@@ -80,13 +92,30 @@ class _ConexionPageState extends ConsumerState<ConexionPage> {
     }
   }
 
+  Future<void> _entrarConCorreo() async {
+    final uri = normalizarDireccion(_direccion.text);
+    if (uri == null) return;
+    final token = await entrarConCorreo(context, uri);
+    if (token == null || !mounted) return;
+    _sesion = token;
+    if (await _probar()) await _conectar();
+  }
+
+  void _usarInternet() {
+    HapticFeedback.selectionClick();
+    _direccion.text = Textos.conexionDominio;
+    if (_nombre.text.trim().isEmpty) _nombre.text = Textos.conexionNombreInternet;
+    _sesion = null;
+    _probar();
+  }
+
   Future<void> _conectar() async {
     if (_prueba != _Prueba.ok && !await _probar()) return;
     final uri = normalizarDireccion(_direccion.text)!;
     final nombre = _nombre.text.trim().isEmpty ? uri.host : _nombre.text.trim();
     await ref
         .read(microscopiosProvider.notifier)
-        .guardarYUsar(MicroscopioGuardado(nombre: nombre, url: uri.toString()));
+        .guardarYUsar(MicroscopioGuardado(nombre: nombre, url: uri.toString(), sesion: _sesion));
     if (mounted && widget.desdeAjustes) Navigator.of(context).pop();
   }
 
@@ -168,7 +197,10 @@ class _ConexionPageState extends ConsumerState<ConexionPage> {
                   keyboardType: TextInputType.url,
                   autocorrect: false,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  onChanged: (_) => setState(() => _prueba = _Prueba.nada),
+                  onChanged: (_) => setState(() {
+                    _prueba = _Prueba.nada;
+                    _sesion = null;
+                  }),
                   onFieldSubmitted: (_) => _probar(),
                 ),
               ],
@@ -183,10 +215,25 @@ class _ConexionPageState extends ConsumerState<ConexionPage> {
                   if (_resultado != null) ...[
                     Franja(
                       texto: _resultado!,
-                      icono: _prueba == _Prueba.ok
-                          ? CupertinoIcons.checkmark_circle_fill
-                          : CupertinoIcons.exclamationmark_triangle_fill,
-                      color: _prueba == _Prueba.ok ? Colores.bien : Colores.mal,
+                      icono: switch (_prueba) {
+                        _Prueba.ok => CupertinoIcons.checkmark_circle_fill,
+                        _Prueba.login => CupertinoIcons.lock_fill,
+                        _ => CupertinoIcons.exclamationmark_triangle_fill,
+                      },
+                      color: switch (_prueba) {
+                        _Prueba.ok => Colores.bien,
+                        _Prueba.login => Colores.acento,
+                        _ => Colores.mal,
+                      },
+                    ),
+                    const SizedBox(height: Medidas.espacio),
+                  ],
+                  if (_prueba == _Prueba.login) ...[
+                    BotonGrande(
+                      texto: Textos.conexionEntrarCorreo,
+                      icono: CupertinoIcons.envelope_fill,
+                      alto: Medidas.toqueGrande,
+                      alTocar: _entrarConCorreo,
                     ),
                     const SizedBox(height: Medidas.espacio),
                   ],
@@ -217,11 +264,15 @@ class _ConexionPageState extends ConsumerState<ConexionPage> {
           SliverToBoxAdapter(
             child: CupertinoListSection.insetGrouped(
               header: const Text(Textos.conexionRemotaTitulo),
-              children: const [
+              footer: const Text(Textos.conexionRemotaTexto),
+              children: [
                 CupertinoListTile(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  leading: Icon(CupertinoIcons.globe, color: Colores.textoSecundario),
-                  title: Text(Textos.conexionRemotaTexto, maxLines: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  leading: const Icon(CupertinoIcons.globe, color: Colores.acento),
+                  title: const Text(Textos.conexionDominio),
+                  subtitle: const Text(Textos.conexionRemotaSub),
+                  trailing: const CupertinoListTileChevron(),
+                  onTap: _usarInternet,
                 ),
               ],
             ),

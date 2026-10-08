@@ -123,9 +123,9 @@ void main() {
   });
 
   group('Conexión', () {
-    testWidgets('rechaza una dirección que no es de la red local', (tester) async {
+    testWidgets('rechaza HTTP sin cifrar fuera de la red local', (tester) async {
       await montar(tester, const ConexionPage());
-      await tester.enterText(find.byType(CupertinoTextField).at(1), '8.8.8.8');
+      await tester.enterText(find.byType(CupertinoTextField).at(1), 'http://8.8.8.8');
       await tester.tap(find.text(Textos.conexionProbar));
       await tester.pump();
       expect(find.text(Textos.conexionDireccionInvalida), findsOneWidget);

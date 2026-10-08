@@ -286,7 +286,8 @@ void main() {
     });
 
     test('HTTP sin cifrar solo en la red local', () {
-      expect(normalizarDireccion('8.8.8.8'), isNull);
+      expect(normalizarDireccion('http://8.8.8.8'), isNull);
+      expect(normalizarDireccion('8.8.8.8').toString(), 'https://8.8.8.8', reason: 'fuera de la red local, HTTPS');
       expect(normalizarDireccion('http://microscopio.lmimenchacalab.com'), isNull);
       expect(
         normalizarDireccion('https://microscopio.lmimenchacalab.com').toString(),

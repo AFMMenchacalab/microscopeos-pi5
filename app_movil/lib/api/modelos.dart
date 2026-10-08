@@ -292,13 +292,26 @@ enum ModoLuz {
 
 /// Cada matriz de GET /light/estado.
 class MatrizLuz {
-  const MatrizLuz({this.encendida = false, this.modo = ModoLuz.full, this.porcentaje});
+  const MatrizLuz({
+    this.encendida = false,
+    this.modo = ModoLuz.full,
+    this.porcentaje,
+    this.colorCampo = 'FFFFFF',
+    this.colorRelieve = 'FFFFFF',
+    this.rheinberg = const ('0000FF', 'FF6A00'),
+  });
 
-  factory MatrizLuz.desdeJson(Map<String, dynamic> j) => MatrizLuz(
-    encendida: _bool(j['encendida']),
-    modo: ModoLuz.desdeId(_str(j['modo'])) ?? ModoLuz.full,
-    porcentaje: _num(j['percent'])?.round(),
-  );
+  factory MatrizLuz.desdeJson(Map<String, dynamic> j) {
+    final rh = _lista(j['rheinberg']).map((e) => '$e'.toUpperCase()).toList();
+    return MatrizLuz(
+      encendida: _bool(j['encendida']),
+      modo: ModoLuz.desdeId(_str(j['modo'])) ?? ModoLuz.full,
+      porcentaje: _num(j['percent'])?.round(),
+      colorCampo: (_str(j['color_campo']) ?? 'FFFFFF').toUpperCase(),
+      colorRelieve: (_str(j['color_dpc']) ?? 'FFFFFF').toUpperCase(),
+      rheinberg: rh.length == 2 ? (rh[0], rh[1]) : const ('0000FF', 'FF6A00'),
+    );
+  }
 
   final bool encendida;
 
@@ -306,10 +319,28 @@ class MatrizLuz {
   final ModoLuz modo;
   final int? porcentaje;
 
-  MatrizLuz copiar({bool? encendida, ModoLuz? modo, int? porcentaje}) => MatrizLuz(
+  /// Colores RRGGBB de cada matriz ("FFFFFF" = blanco). Cada cámara
+  /// tiene los suyos y el servidor los guarda (profiles/iluminacion.json).
+  final String colorCampo;
+  final String colorRelieve;
+
+  /// Rheinberg: (centro, anillo).
+  final (String, String) rheinberg;
+
+  MatrizLuz copiar({
+    bool? encendida,
+    ModoLuz? modo,
+    int? porcentaje,
+    String? colorCampo,
+    String? colorRelieve,
+    (String, String)? rheinberg,
+  }) => MatrizLuz(
     encendida: encendida ?? this.encendida,
     modo: modo ?? this.modo,
     porcentaje: porcentaje ?? this.porcentaje,
+    colorCampo: colorCampo ?? this.colorCampo,
+    colorRelieve: colorRelieve ?? this.colorRelieve,
+    rheinberg: rheinberg ?? this.rheinberg,
   );
 }
 
@@ -412,6 +443,51 @@ class ResultadoCaptura {
 }
 
 // ---------------------------------------------------------------- timelapse
+/// Qué hacer con las 4 fotos de un relieve DPC al terminar cada ciclo
+/// (dpc_* de TimelapseReq; ver core/dpc.py). Los valores por defecto son
+/// los del servidor y los de la web.
+class OpcionesRelieve {
+  const OpcionesRelieve({
+    this.procesar = true,
+    this.borrarCrudas = true,
+    this.suma = true,
+    this.fase = false,
+    this.jpg = true,
+  });
+
+  /// Calcular el relieve al terminar cada ciclo. Sin esto, solo se
+  /// guardan las 4 fotos crudas (y las demás opciones no aplican).
+  final bool procesar;
+
+  /// Borrar las 4 fotos originales después de comprobar el resultado.
+  final bool borrarCrudas;
+
+  /// Guardar también la foto normal (campo claro), más chica.
+  final bool suma;
+
+  /// Guardar también la fase (en prueba).
+  final bool fase;
+
+  /// Vista previa en color (JPG).
+  final bool jpg;
+
+  OpcionesRelieve copiar({bool? procesar, bool? borrarCrudas, bool? suma, bool? fase, bool? jpg}) => OpcionesRelieve(
+    procesar: procesar ?? this.procesar,
+    borrarCrudas: borrarCrudas ?? this.borrarCrudas,
+    suma: suma ?? this.suma,
+    fase: fase ?? this.fase,
+    jpg: jpg ?? this.jpg,
+  );
+
+  Map<String, dynamic> aJson() => {
+    'dpc_procesar': procesar,
+    'dpc_borrar_crudas': borrarCrudas,
+    'dpc_suma': suma,
+    'dpc_fase': fase,
+    'dpc_jpg': jpg,
+  };
+}
+
 /// Lo mínimo de TimelapseReq; el resto queda con los valores por defecto
 /// del servidor.
 class PedidoTimelapse {
@@ -423,6 +499,7 @@ class PedidoTimelapse {
     this.nombre = '',
     this.camaras = const [0, 1],
     this.autofoco = true,
+    this.relieve = const OpcionesRelieve(),
   }) : assert(duracionS != null || fin != null);
 
   final ModoFoto modo;
@@ -435,6 +512,9 @@ class PedidoTimelapse {
   final List<int> camaras;
   final bool autofoco;
 
+  /// Solo se manda en modo relieve DPC.
+  final OpcionesRelieve relieve;
+
   Map<String, dynamic> aJson() => {
     'modo': modo.id,
     'interval': intervaloS,
@@ -443,6 +523,7 @@ class PedidoTimelapse {
     'nombre': nombre,
     'camaras': camaras,
     'autofocus': autofoco,
+    if (modo == ModoFoto.dpc) ...relieve.aJson(),
   };
 }
 

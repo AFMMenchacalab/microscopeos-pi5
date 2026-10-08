@@ -47,6 +47,15 @@ class ErrorDatosInvalidos extends ErrorApi {
   final Object? detalle;
 }
 
+/// El microscopio está detrás de Cloudflare Access (acceso desde
+/// internet) y hay que entrar con el correo: nunca se entró ([vencida]
+/// false) o la sesión guardada ya no sirve ([vencida] true).
+class ErrorNecesitaLogin extends ErrorApi {
+  const ErrorNecesitaLogin({this.vencida = false})
+    : super(vencida ? Textos.errorSesionVencida : Textos.errorNecesitaLogin);
+  final bool vencida;
+}
+
 /// Sin red, el microscopio apagado o tardó demasiado en contestar.
 class ErrorDeRed extends ErrorApi {
   const ErrorDeRed({this.tiempoAgotado = false})

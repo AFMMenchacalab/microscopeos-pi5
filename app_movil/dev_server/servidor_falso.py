@@ -26,11 +26,13 @@ Desde el emulador de Android la PC es http://10.0.2.2:8000.
 """
 
 import argparse
+import html
 import asyncio
 import contextlib
 import math
 import os
 import random
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -38,6 +40,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 import cv2
 import numpy as np
@@ -549,6 +552,104 @@ class ActualizadorFalso:
 
 
 # ======================================================================
+# Cloudflare Access falso (--cloudflare)
+# ======================================================================
+PAGINA_LOGIN = """<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acceso (falso)</title>
+<style>body{font-family:system-ui,sans-serif;background:#f4f5f7;margin:0;padding:32px 20px;color:#222}
+.c{max-width:420px;margin:auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 4px 20px #0001}
+h1{font-size:20px}input{width:100%;box-sizing:border-box;font-size:17px;padding:12px;border:1px solid #ccc;border-radius:10px}
+button{margin-top:16px;width:100%;font-size:17px;padding:14px;border:0;border-radius:10px;background:#f38020;color:#fff}
+p{color:#666;font-size:14px}</style></head><body><div class="c">
+<h1>Cloudflare Access (servidor falso)</h1>
+<p>En el de verdad aquí se pide el correo y luego el código que llega. Este es solo para probar la app.</p>
+<form method="post"><input type="hidden" name="redirect_url" value="__VOLVER__">
+<input name="correo" type="email" value="tu.correo@lmimenchacalab.com">
+<button type="submit">Entrar</button></form></div></body></html>"""
+
+
+class AccesoFalso:
+    """Se pone DELANTE de la app y se porta como Cloudflare Access:
+    sin la cookie CF_Authorization (o el encabezado cf-access-token)
+    redirige a /cdn-cgi/access/login/...; al "entrar" deja la cookie
+    HttpOnly y, en cada pedido válido, agrega el encabezado
+    cf-access-authenticated-user-email, que es como core/usuarios.py
+    reconoce a la persona."""
+
+    def __init__(self, app, registrar=False):
+        self.app = app
+        self.registrar = registrar  # imprimir cada pedido (para depurar)
+        self.sesiones = {}          # token -> correo
+
+    async def _responder(self, send, codigo, cuerpo=b"", encabezados=()):
+        await send({"type": "http.response.start", "status": codigo,
+                    "headers": [(k.encode(), v.encode()) for k, v in encabezados]})
+        await send({"type": "http.response.body", "body": cuerpo})
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        ruta, metodo = scope["path"], scope["method"]
+        if self.registrar:
+            log(f"acceso falso: {metodo} {ruta}")
+        if ruta == "/dev/vencer_sesion":
+            self.sesiones.clear()
+            log("acceso falso: todas las sesiones vencidas")
+            return await self._responder(send, 200, b'{"status":"ok"}', [("content-type", "application/json")])
+        if ruta.startswith("/dev/"):
+            return await self.app(scope, receive, send)
+        if ruta.startswith("/cdn-cgi/access/login"):
+            if metodo == "POST":
+                cuerpo = b""
+                while True:
+                    m = await receive()
+                    cuerpo += m.get("body", b"")
+                    if not m.get("more_body"):
+                        break
+                from urllib.parse import parse_qs
+                datos = parse_qs(cuerpo.decode())
+                correo = datos.get("correo", ["tu.correo@lmimenchacalab.com"])[0]
+                volver = datos.get("redirect_url", ["/"])[0] or "/"
+                token = "falso." + secrets.token_urlsafe(24)
+                self.sesiones[token] = correo
+                log(f"acceso falso: entró {correo}")
+                return await self._responder(send, 302, encabezados=[
+                    ("location", f"/cdn-cgi/access/authorized?token={token}&redirect_url={quote(volver)}")])
+            from urllib.parse import parse_qs
+            volver = parse_qs(scope.get("query_string", b"").decode()).get("redirect_url", ["/"])[0]
+            pagina = PAGINA_LOGIN.replace("__VOLVER__", html.escape(volver, quote=True))
+            return await self._responder(send, 200, pagina.encode(),
+                                         [("content-type", "text/html; charset=utf-8")])
+        if ruta == "/cdn-cgi/access/authorized":
+            from urllib.parse import parse_qs
+            q = parse_qs(scope.get("query_string", b"").decode())
+            token = q.get("token", [""])[0]
+            volver = q.get("redirect_url", ["/"])[0]
+            if not volver.startswith("/"):
+                volver = "/"
+            # Como el de verdad: deja la cookie y vuelve a donde se empezó.
+            return await self._responder(send, 302, encabezados=[
+                ("set-cookie", f"CF_Authorization={token}; Path=/; HttpOnly; SameSite=Lax"),
+                ("location", volver)])
+        encabezados = {k.decode().lower(): v.decode() for k, v in scope["headers"]}
+        token = encabezados.get("cf-access-token", "")
+        for parte in encabezados.get("cookie", "").split(";"):
+            k, _, v = parte.strip().partition("=")
+            if k == "CF_Authorization":
+                token = token or v
+        correo = self.sesiones.get(token)
+        if correo is None:
+            return await self._responder(send, 302, encabezados=[
+                ("location", f"/cdn-cgi/access/login/microscopio-falso?redirect_url={ruta}"),
+                ("www-authenticate", 'Cloudflare-Access resource_metadata="falso"')])
+        scope = dict(scope, headers=[(k, v) for k, v in scope["headers"]
+                                     if k.lower() != b"cf-access-authenticated-user-email"]
+                     + [(b"cf-access-authenticated-user-email", correo.encode())])
+        return await self.app(scope, receive, send)
+
+
+# ======================================================================
 # Experimentos de ejemplo
 # ======================================================================
 def _tif(ruta, img01, meta):
@@ -634,6 +735,9 @@ def main():
                     help="como si el Arduino de la incubadora no estuviera conectado")
     ap.add_argument("--version-vieja", action="store_true",
                     help="sin POST /api/temperature/co2_setpoint (responde 404), como antes del PR #4")
+    ap.add_argument("--cloudflare", action="store_true",
+                    help="ponerse delante como Cloudflare Access (login con correo, cookie CF_Authorization)")
+    ap.add_argument("--registrar", action="store_true", help="con --cloudflare: imprimir cada pedido")
     ap.add_argument("--autofoco-s", type=float, default=8.0,
                     help="cuanto tarda el autofoco falso (en la Pi, 15-30 s)")
     args = ap.parse_args()
@@ -715,7 +819,10 @@ def main():
     log(f"MicroscopeOS falso en http://{args.host}:{args.puerto} "
         f"(desde el emulador de Android: http://10.0.2.2:{args.puerto})")
     import uvicorn
-    uvicorn.run(app, host=args.host, port=args.puerto, log_level="warning")
+    if args.cloudflare:
+        log("modo Cloudflare Access: hay que entrar con el correo (POST /dev/vencer_sesion la vence)")
+    uvicorn.run(AccesoFalso(app, args.registrar) if args.cloudflare else app, host=args.host, port=args.puerto,
+                log_level="warning")
 
 
 if __name__ == "__main__":

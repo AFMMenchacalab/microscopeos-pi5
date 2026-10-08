@@ -34,6 +34,7 @@ class ClienteMicroscopio {
   ClienteMicroscopio(
     this.base, {
     Dio? dio,
+    this.sesionAcceso,
     this.reintentosLectura = 2,
     this.esperaReintento = const Duration(milliseconds: 700),
   }) : _dio =
@@ -48,10 +49,26 @@ class ClienteMicroscopio {
     _dio.options
       ..baseUrl = base.toString()
       // Los códigos HTTP se interpretan a mano (ver _interpretar).
-      ..validateStatus = (_) => true;
+      ..validateStatus = ((_) => true)
+      // Cloudflare Access contesta con una redirección a su página de
+      // login: hay que verla, no seguirla.
+      ..followRedirects = false;
+    final s = sesionAcceso;
+    if (s != null && s.isNotEmpty) {
+      // La misma cookie que guarda el navegador después de entrar con el
+      // correo. Access también acepta el token en este encabezado.
+      _dio.options.headers['Cookie'] = '$cookieAcceso=$s';
+      _dio.options.headers['cf-access-token'] = s;
+    }
   }
 
+  /// Nombre de la cookie de sesión de Cloudflare Access.
+  static const cookieAcceso = 'CF_Authorization';
+
   final Uri base;
+
+  /// Token de Cloudflare Access (acceso desde internet); null en la red local.
+  final String? sesionAcceso;
   final Dio _dio;
   final int reintentosLectura;
   final Duration esperaReintento;
@@ -175,8 +192,9 @@ class ClienteMicroscopio {
   }
 
   // ================================================================ luz
-  Future<Map<int, MatrizLuz>> estadoLuz() async {
-    final j = await _json('GET', '/light/estado');
+  Future<Map<int, MatrizLuz>> estadoLuz() async => _matrices(await _json('GET', '/light/estado'));
+
+  static Map<int, MatrizLuz> _matrices(Map<String, dynamic> j) {
     final out = <int, MatrizLuz>{};
     final m = j['matrices'];
     if (m is Map) {
@@ -190,8 +208,26 @@ class ClienteMicroscopio {
     return out;
   }
 
-  Future<void> fijarLuz(ModoLuz modo, int porcentaje, List<int> camaras) =>
-      _json('POST', '/light/set', cuerpo: {'modo': modo.id, 'percent': porcentaje.clamp(0, 100), 'camaras': camaras});
+  /// [rheinberg] (centro, anillo) solo se usa en modo Rheinberg.
+  Future<void> fijarLuz(ModoLuz modo, int porcentaje, List<int> camaras, {(String, String)? rheinberg}) => _json(
+    'POST',
+    '/light/set',
+    cuerpo: {
+      'modo': modo.id,
+      'percent': porcentaje.clamp(0, 100),
+      'camaras': camaras,
+      if (modo == ModoLuz.rheinberg && rheinberg != null) ...{
+        'color_centro': rheinberg.$1,
+        'color_anillo': rheinberg.$2,
+      },
+    },
+  );
+
+  /// Color del campo claro y/o del relieve DPC (RRGGBB; "FFFFFF" =
+  /// blanco) de esas cámaras. Si la matriz está encendida en ese modo,
+  /// cambia al momento. Devuelve cómo quedaron las matrices.
+  Future<Map<int, MatrizLuz>> fijarColores(List<int> camaras, {String? campo, String? relieve}) async =>
+      _matrices(await _json('POST', '/light/colores', cuerpo: {'camaras': camaras, 'campo': ?campo, 'dpc': ?relieve}));
 
   Future<void> apagarLuz(List<int> camaras) => _json('POST', '/light/off', cuerpo: {'camaras': camaras});
 
@@ -406,7 +442,7 @@ class ClienteMicroscopio {
             contentType: cuerpo == null ? null : Headers.jsonContentType,
           ),
         );
-        _interpretar(r, si404: si404);
+        _interpretar(r, si404: si404, conSesion: sesionAcceso != null);
         return r;
       } on DioException catch (e) {
         final error = _deDio(e);
@@ -421,10 +457,25 @@ class ClienteMicroscopio {
     }
   }
 
+  /// Cloudflare Access pide entrar: redirige a su página de login
+  /// (`<equipo>.cloudflareaccess.com/cdn-cgi/access/login/...`) o, a
+  /// veces, contesta 401/403 con `WWW-Authenticate: Cloudflare-Access`.
+  static bool esPantallaDeAcceso(int codigo, String? location, String? wwwAuthenticate) {
+    if (wwwAuthenticate != null && wwwAuthenticate.toLowerCase().startsWith('cloudflare-access')) return true;
+    if (codigo >= 300 && codigo < 400 && location != null) {
+      final l = location.toLowerCase();
+      return l.contains('/cdn-cgi/access/') || (Uri.tryParse(l)?.host.endsWith('cloudflareaccess.com') ?? false);
+    }
+    return false;
+  }
+
   /// Códigos HTTP que usa MicroscopeOS (ver api.py y core/usuarios.py).
-  static void _interpretar(Response<dynamic> r, {String? si404}) {
+  static void _interpretar(Response<dynamic> r, {String? si404, bool conSesion = false}) {
     final codigo = r.statusCode ?? 0;
     if (codigo >= 200 && codigo < 300) return;
+    if (esPantallaDeAcceso(codigo, r.headers.value('location'), r.headers.value('www-authenticate'))) {
+      throw ErrorNecesitaLogin(vencida: conSesion);
+    }
     final cuerpo = _cuerpoComoMapa(r.data);
     switch (codigo) {
       case 423:
@@ -526,7 +577,10 @@ class ClienteMicroscopio {
           final codigo = r.statusCode ?? 0;
           if (codigo < 200 || codigo >= 300) {
             await r.data?.stream.drain<void>().catchError((_) {});
-            _interpretar(Response<dynamic>(requestOptions: r.requestOptions, statusCode: codigo));
+            _interpretar(
+              Response<dynamic>(requestOptions: r.requestOptions, statusCode: codigo, headers: r.headers),
+              conSesion: sesionAcceso != null,
+            );
           }
           final cuerpo = r.data;
           if (cuerpo == null) throw const ErrorInesperado(Textos.errorRespuestaRara);

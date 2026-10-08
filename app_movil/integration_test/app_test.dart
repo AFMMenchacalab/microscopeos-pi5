@@ -127,8 +127,16 @@ void main() {
     await tocar(find.text(Textos.panelLuz));
     await esperarA(find.text(Textos.luzBrillo));
     await tocar(find.text(Textos.luzRelieveIzq));
+    // Color del relieve: verde (el recomendado).
+    await tocar(find.bySemanticsLabel(Textos.colorVerde).first);
     await esperarReal(1500);
     await captura('06_vivo_luz');
+    // Rheinberg: centro y anillo.
+    await tocar(find.text(Textos.luzColores));
+    await tocar(find.bySemanticsLabel(Textos.colorVerde).last);
+    await esperarReal(1500);
+    await tester.scrollUntilVisible(find.text(Textos.luzColorAnillo), 200);
+    await captura('06b_vivo_luz_rheinberg');
     await tocar(find.text(Textos.luzCampoClaro));
 
     // ------------------------------------------------------------ Vivo: foto
@@ -161,6 +169,14 @@ void main() {
     await tester.enterText(find.byType(CupertinoTextField).first, 'Timelapse desde la app');
     FocusManager.instance.primaryFocus?.unfocus();
     // 5 min -> 2 min -> 1 min -> 30 s
+    // Opciones del relieve: aparecen al elegir relieve DPC.
+    await esperarReal(1200); // que termine de cerrarse el teclado
+    await tocar(find.text(Textos.nuevoTipoRelieve));
+    await esperarA(find.text(Textos.relieveProcesar));
+    await tester.scrollUntilVisible(find.text(Textos.relieveJpg), 200);
+    await captura('10b_nuevo_timelapse_relieve');
+    await tester.scrollUntilVisible(find.text(Textos.nuevoTipoNormal), -200);
+    await tocar(find.text(Textos.nuevoTipoNormal));
     for (var i = 0; i < 3; i++) {
       await tocar(find.byIcon(CupertinoIcons.minus_circle_fill).first);
     }
@@ -217,7 +233,8 @@ void main() {
     await esperarReal(1000);
     await captura('17_ajustes');
     await tester.scrollUntilVisible(find.text(Textos.ajustesVersionMicroscopio), 300);
-    await esperarA(find.textContaining('c97c29d').hitTestable(), segundos: 10);
+    // La versión del microscopio: un commit (7 caracteres) y su fecha.
+    await esperarA(find.textContaining(RegExp(r'^[0-9a-f]{7} · ')).hitTestable(), segundos: 10);
     await captura('18_ajustes_version');
 
     // ------------------------------------------------------------ detener
