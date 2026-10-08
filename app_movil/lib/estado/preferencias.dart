@@ -74,6 +74,13 @@ class Microscopios extends Notifier<EstadoMicroscopios> {
 
   Future<void> usar(MicroscopioGuardado m) => _guardar(state.lista, m);
 
+  /// Encontrado por Bluetooth: si ya estaba guardado con ese nombre (y
+  /// otra IP), se reemplaza en vez de quedar dos veces.
+  Future<void> guardarDeBluetooth(MicroscopioGuardado m) async {
+    final lista = [...state.lista.where((x) => x.url != m.url && x.nombre != m.nombre), m];
+    await _guardar(lista, m);
+  }
+
   /// Después de volver a entrar con el correo: la sesión nueva reemplaza
   /// a la vencida, sin cambiar de pantalla.
   Future<void> guardarSesion(String url, String? sesion) async {

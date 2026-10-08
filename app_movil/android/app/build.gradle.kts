@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.lmimenchacalab.microscopeos"
-    compileSdk = flutter.compileSdkVersion
+    // 37: lo exige flutter_reactive_ble (Bluetooth). Solo es la versión con la
+    // que se compila; la app sigue funcionando en Android viejos (minSdk).
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

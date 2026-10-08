@@ -43,6 +43,7 @@ dependencies:
   path_provider: ^2.1.6
   url_launcher: ^6.3.3
   webview_flutter: ^4.14.1
+  flutter_reactive_ble: ^5.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

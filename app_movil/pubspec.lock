@@ -160,6 +160,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_reactive_ble:
+    dependency: "direct main"
+    description:
+      name: flutter_reactive_ble
+      sha256: f343785fd824c3e08706e5d0f2327b3c1b03ada9505dae491fcb25ef8fbc42b9
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.6.0"
   flutter_riverpod:
     dependency: "direct main"
     description:
@@ -183,6 +191,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  functional_data:
+    dependency: transitive
+    description:
+      name: functional_data
+      sha256: "76d17dc707c40e552014f5a49c0afcc3f1e3f05e800cd6b7872940bfe41a5039"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.0"
   hooks:
     dependency: transitive
     description:
@@ -412,6 +428,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.6"
+  protobuf:
+    dependency: transitive
+    description:
+      name: protobuf
+      sha256: "13b6717366aa7ec3792dd62c19c7d33a785708224365f2db23c5ca01f1c1a0f2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.1.0"
   pub_semver:
     dependency: transitive
     description:
@@ -420,6 +444,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.1"
+  reactive_ble_mobile:
+    dependency: transitive
+    description:
+      name: reactive_ble_mobile
+      sha256: "1af5ff867926ff104fab763734db33fa18ac6c9d05e58988dc43879a56168d56"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.6.0"
+  reactive_ble_platform_interface:
+    dependency: transitive
+    description:
+      name: reactive_ble_platform_interface
+      sha256: b5c81a30be81b351c8e86b9520a1a9f267c5fcf0b51a2eee9139da404a18ed79
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.6.0"
   record_use:
     dependency: transitive
     description:

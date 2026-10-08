@@ -11,6 +11,7 @@ import '../../ui/acciones.dart';
 import '../../ui/componentes.dart';
 import '../../ui/formato.dart';
 import '../../ui/tema.dart';
+import '../configuracion/buscar_bluetooth_page.dart';
 import 'login_acceso_page.dart';
 
 /// Lista de microscopios guardados y alta de uno nuevo por IP.
@@ -175,6 +176,26 @@ class _ConexionPageState extends ConsumerState<ConexionPage> {
                 ],
               ),
             ),
+          SliverToBoxAdapter(
+            child: CupertinoListSection.insetGrouped(
+              header: const Text(Textos.conexionCerca),
+              children: [
+                CupertinoListTile(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  leading: const Icon(CupertinoIcons.bluetooth, color: Colores.acento),
+                  title: const Text(Textos.conexionBuscarBt),
+                  subtitle: const Text(Textos.conexionBuscarBtDetalle, maxLines: 2),
+                  trailing: const CupertinoListTileChevron(),
+                  onTap: () async {
+                    await BuscarBluetoothPage.abrir(context);
+                    if (context.mounted && widget.desdeAjustes && ref.read(microscopiosProvider).actual != null) {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
           SliverToBoxAdapter(
             child: CupertinoListSection.insetGrouped(
               header: const Text(Textos.conexionAgregar),

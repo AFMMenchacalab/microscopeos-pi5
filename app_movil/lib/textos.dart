@@ -56,7 +56,7 @@ abstract final class Textos {
   static const conexionDireccion = 'Dirección';
   static const conexionDireccionEjemplo = '192.168.1.50';
   static const conexionAyuda =
-      'En el laboratorio, escribe la IP de la Raspberry (la ves en la pantalla del microscopio o en tu router).';
+      'En el laboratorio, escribe la IP de la Raspberry (la ves en tu router) o búscalo por Bluetooth.';
   static const conexionAyudaEmulador = 'En el emulador de Android, la PC es 10.0.2.2:8000.';
   static const conexionProbar = 'Probar conexión';
   static const conexionProbando = 'Probando…';
@@ -73,6 +73,46 @@ abstract final class Textos {
       'recuerda la sesión hasta que venza.';
   static const conexionEntrarCorreo = 'Entrar con mi correo';
   static const conexionBorrarPregunta = '¿Quitar este microscopio de la lista?';
+
+  static const conexionCerca = 'Cerca de ti';
+  static const conexionBuscarBt = 'Buscar por Bluetooth';
+  static const conexionBuscarBtDetalle = 'Microscopio nuevo (configurarle el Wi-Fi) o que cambió de IP';
+
+  // ---------------------------------------------------------------- bluetooth
+  static const btTitulo = 'Microscopios cerca';
+  static const btBuscando = 'Buscando…';
+  static const btBuscandoDetalle =
+      'Acércate al microscopio (a unos metros). Aparece como «MOS-» y cuatro letras o números.';
+  static const btErrorBuscar = 'No se pudo buscar por Bluetooth.';
+  static const btErrorConexion = 'Se perdió la conexión Bluetooth con el microscopio. Acércate y vuelve a intentar.';
+  static const btApagado = 'El Bluetooth está apagado';
+  static const btApagadoDetalle = 'Enciéndelo en el teléfono para buscar el microscopio.';
+  static const btSinPermiso = 'Falta permiso para usar Bluetooth';
+  static const btSinPermisoDetalle = 'La app solo lo usa para encontrar y configurar microscopios cerca.';
+  static const btNoDisponible = 'Este teléfono no tiene Bluetooth de bajo consumo';
+  static const btConectando = 'Conectando con el microscopio…';
+  static String btSenal(int rssi) => rssi > -60 ? 'Muy cerca' : (rssi > -80 ? 'Cerca' : 'Lejos');
+  static String btConectadoA(String red, String ip) => 'Conectado a «$red» · $ip';
+  static const btSinRed = 'Sin red Wi-Fi';
+  static const btGuardarYUsar = 'Guardar y usar este microscopio';
+  static const btGuardarDetalle = 'Si ya lo tenías guardado con otra IP, se actualiza.';
+  static const btConfigurarWifi = 'Configurar el Wi-Fi';
+  static const btCambiarRed = 'Cambiar de red Wi-Fi';
+  static const btVincularAviso = 'Si el teléfono pregunta «¿Vincular?», acepta: así la contraseña viaja cifrada.';
+  static const btCodigoTitulo = 'Mira la luz del microscopio';
+  static const btCodigoDetalle =
+      'Muestra 3 colores seguidos y luego una pausa. Tócalos en el mismo orden. Así se comprueba que estás frente al microscopio.';
+  static const btBorrar = 'Borrar';
+  static const btOtroCodigo = 'Otros colores';
+  static const btElegirRed = 'Elige la red Wi-Fi';
+  static const btOtraRed = 'Otra red (escribe el nombre)';
+  static String btClaveTitulo(String red) => 'Contraseña de «$red»';
+  static const btClave = 'Contraseña del Wi-Fi';
+  static const btRedAbierta = 'Esta red no tiene contraseña.';
+  static const btConectarRed = 'Conectar';
+  static const btOtraRedVolver = 'Elegir otra red';
+  static String btConfigurando(String red) => 'Conectando el microscopio a «$red»… tarda unos segundos.';
+  static const btListo = 'El microscopio está en la red';
 
   // ---------------------------------------------------------------- login remoto
   static const loginTitulo = 'Entrar con tu correo';

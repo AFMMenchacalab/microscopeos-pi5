@@ -13,6 +13,9 @@
 	<!-- iOS 14+: permiso de "red local" que se le pide a la persona. -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>MicroscopeOS se conecta al microscopio por la red del laboratorio para ver la cámara y controlar la luz, el foco y la incubadora.</string>
+	<!-- Configurar un microscopio nuevo (o encontrarlo si cambió de IP) por Bluetooth. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>MicroscopeOS usa Bluetooth para configurar el Wi-Fi de un microscopio nuevo y para encontrarlo si cambió de dirección.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

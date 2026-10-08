@@ -18,6 +18,7 @@ iPhone está preparado, pero falta compilarlo desde una Mac (ver más abajo).
 - [Lo que quedó fuera](#lo-que-quedó-fuera)
 - [iPhone](#iphone)
 - [Acceso desde internet](#acceso-desde-internet)
+- [Microscopio nuevo o que cambió de IP (Bluetooth)](#microscopio-nuevo-o-que-cambió-de-ip-bluetooth)
 - [Pendientes del backend](#pendientes-del-backend)
 
 ---
@@ -154,7 +155,7 @@ Si la app alguna vez deja de mandar el stop del jog, el servidor imprime
 
 ```bash
 flutter analyze        # sin errores
-flutter test           # 95 pruebas
+flutter test           # 102 pruebas
 ```
 
 - `test/api/cliente_api_test.dart`: el cliente contra respuestas falsas:
@@ -348,6 +349,41 @@ Notas:
 - La alternativa de **tokens de servicio** de Access no se usó: requiere
   cambiar la configuración de Cloudflare y el microscopio no sabría quién es
   quién.
+
+---
+
+## Microscopio nuevo o que cambió de IP (Bluetooth)
+
+**Microscopios → Cerca de ti → Buscar por Bluetooth.** Necesita la parte
+del microscopio, que está en otra rama y otro PR
+(`feature/configuracion-bluetooth`, ver su `docs/CONFIGURACION_BLUETOOTH.md`):
+hasta que se instale en la Raspberry, la app no encuentra nada.
+
+- **Resincronizar:** la app encuentra el microscopio cerca, lee su red y su
+  IP y la guarda (si ya estaba guardado con otra IP, la reemplaza). Solo
+  lee: no cambia nada en el microscopio.
+- **Microscopio nuevo (o cambiar de red):** si no tiene red, o en los
+  primeros 10 minutos después de encenderlo, se puede configurar el Wi-Fi:
+  1. la luz del microscopio muestra **3 colores** seguidos; se tocan en el
+     mismo orden en la app (prueba que estás frente al microscopio);
+  2. se elige la red y se escribe la contraseña (viaja cifrada: el teléfono
+     se empareja con el microscopio y Android pregunta «¿Vincular?»);
+  3. el microscopio se conecta y la app guarda su nueva dirección.
+- Nunca con un timelapse corriendo. 3 errores en los colores bloquean 10
+  minutos.
+
+Paquete: `flutter_reactive_ble` (Philips Hue, licencia BSD). Se descartó
+`flutter_blue_plus`: su licencia pide pagar para uso comercial y al
+compilar manda datos de la app a su autor. Los permisos de Bluetooth de
+Android 12+ los pide `MainActivity.kt` (canal `microscopeos/permisos`).
+Exige compilar con Android 37 (`compileSdk = 37`); la app sigue
+funcionando en Android viejos.
+
+**Probar sin la Raspberry:** en una computadora con Bluetooth, en la rama
+del microscopio, `python3 codigo/MicroscopeOS/probar_bluetooth.py
+--simular` (no toca el Wi-Fi de la computadora; los colores salen en la
+terminal) y la app en un teléfono **de verdad** (el emulador de Android no
+tiene Bluetooth).
 
 ---
 
