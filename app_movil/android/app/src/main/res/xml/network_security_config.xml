@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MicroscopeOS se habla por HTTP sin cifrar dentro de la red del
+  laboratorio (http://<IP-de-la-Pi>:8000); desde internet, solo por HTTPS.
+
+  Android no permite expresar rangos de IP aquí (solo nombres exactos), así
+  que no se puede limitar a 192.168.x.x / 10.x.x.x en este archivo. Por eso:
+  - se permite HTTP sin cifrar en general,
+  - y la app misma rechaza cualquier dirección HTTP que no sea de red local
+    (ver lib/api/direccion.dart: esRedLocal / normalizarDireccion).
+  El dominio público queda obligado a HTTPS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">lmimenchacalab.com</domain>
+    </domain-config>
+</network-security-config>

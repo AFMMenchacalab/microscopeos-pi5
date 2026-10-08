@@ -1,0 +1,9 @@
+# Servidor falso de MicroscopeOS para desarrollar la app sin la Raspberry.
+# Lo mismo que necesita codigo/MicroscopeOS/server/api.py, sin el hardware.
+fastapi
+uvicorn
+numpy
+opencv-python-headless
+tifffile          # el REAL: el de tests/emuladores.py escribe archivos vacios
+pillow            # marca de agua de "Compartir"
+pyserial          # lo importa temperature_controller.py
