@@ -70,7 +70,7 @@ ANCHO_FOTO, ALTO_FOTO = 1024, 768
 
 
 def log(msg):
-    print(f"[{datetime.now():%H:%M:%S}] {msg}", flush=True)
+    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {msg}", flush=True)
 
 
 # ======================================================================
@@ -569,6 +569,20 @@ p{color:#666;font-size:14px}</style></head><body><div class="c">
 <button type="submit">Entrar</button></form></div></body></html>"""
 
 
+class RegistroPedidos:
+    """--registrar sin --cloudflare: imprime cada pedido con milisegundos
+    (para ver, por ejemplo, cada jog y el stop del foco)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and not scope["path"].startswith(("/live/stream", "/api/temperature/stream")):
+            t = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            print(f"[{t}] {scope['method']} {scope['path']}", flush=True)
+        return await self.app(scope, receive, send)
+
+
 class AccesoFalso:
     """Se pone DELANTE de la app y se porta como Cloudflare Access:
     sin la cookie CF_Authorization (o el encabezado cf-access-token)
@@ -737,7 +751,7 @@ def main():
                     help="sin POST /api/temperature/co2_setpoint (responde 404), como antes del PR #4")
     ap.add_argument("--cloudflare", action="store_true",
                     help="ponerse delante como Cloudflare Access (login con correo, cookie CF_Authorization)")
-    ap.add_argument("--registrar", action="store_true", help="con --cloudflare: imprimir cada pedido")
+    ap.add_argument("--registrar", action="store_true", help="imprimir cada pedido (para depurar)")
     ap.add_argument("--autofoco-s", type=float, default=8.0,
                     help="cuanto tarda el autofoco falso (en la Pi, 15-30 s)")
     args = ap.parse_args()
@@ -821,8 +835,11 @@ def main():
     import uvicorn
     if args.cloudflare:
         log("modo Cloudflare Access: hay que entrar con el correo (POST /dev/vencer_sesion la vence)")
-    uvicorn.run(AccesoFalso(app, args.registrar) if args.cloudflare else app, host=args.host, port=args.puerto,
-                log_level="warning")
+    final = AccesoFalso(app, args.registrar) if args.cloudflare else app
+    if args.registrar and not args.cloudflare:
+        final = RegistroPedidos(app)
+    uvicorn.run(final, host=args.host, port=args.puerto, log_level="warning")
+
 
 
 if __name__ == "__main__":
