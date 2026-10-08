@@ -184,6 +184,7 @@ class MotorFalso:
     avanza a la misma velocidad que en la Pi."""
 
     _JOG_CHUNK = 8
+    JOG_GRACIA_S = 0.5   # igual que el real desde el PR #7
 
     def __init__(self, cam, foco_um):
         self.nombre = f"cam{cam}"
@@ -194,6 +195,8 @@ class MotorFalso:
         self.foco_um = foco_um          # donde esta "de verdad" el plano enfocado
         self._habilitado = False
         self._lock = threading.RLock()
+        self._jog_estado = threading.Lock()
+        self._jog_parado_en = float("-inf")
         self._jog_thread = None
         self._jog_stop = None
         self._jog_deadline = 0.0
@@ -284,30 +287,40 @@ class MotorFalso:
             self.mover(abs(delta), direction=1 if delta > 0 else -1, delay=delay, mantener=mantener)
         return self.position
 
-    # ---- jog con watchdog, igual que el real ----
+    # ---- jog con watchdog, igual que el real (con el arreglo del PR #7:
+    # candado propio para el estado del jog y pedidos atrasados ignorados) ----
     def start_jog(self, direction=1, delay=0.003, watchdog=1.5):
-        with self._lock:
+        with self._jog_estado:
+            ahora = time.monotonic()
+            if ahora - self._jog_parado_en < self.JOG_GRACIA_S:
+                log(f"motor {self.nombre}: jog atrasado ignorado (llegó después del stop)")
+                return False
             self._jog_dir = 1 if direction > 0 else -1
             self._jog_delay = delay
-            self._jog_deadline = time.monotonic() + watchdog
+            self._jog_deadline = ahora + watchdog
             if self._jog_thread is not None and self._jog_thread.is_alive():
-                return
+                return True
             log(f"motor {self.nombre}: JOG {'↓ baja' if direction > 0 else '↑ sube'} (inicio)")
             self._jog_stop = threading.Event()
             self._jog_thread = threading.Thread(target=self._jog_loop, args=(self._jog_stop,),
                                                 daemon=True)
             self._jog_thread.start()
+            return True
 
     def _jog_loop(self, stop_event):
         por_watchdog = False
         try:
             self.enable()
             while not stop_event.is_set():
-                with self._lock:
+                with self._jog_estado:
                     if time.monotonic() >= self._jog_deadline:
                         por_watchdog = True
                         break
-                    self.move_steps(self._JOG_CHUNK, direction=self._jog_dir, delay=self._jog_delay)
+                    direction, delay = self._jog_dir, self._jog_delay
+                with self._lock:
+                    if stop_event.is_set():
+                        break
+                    self.move_steps(self._JOG_CHUNK, direction=direction, delay=delay)
         finally:
             self.reposo()
             if por_watchdog:
@@ -319,7 +332,8 @@ class MotorFalso:
         return t is not None and t.is_alive()
 
     def stop_jog(self):
-        with self._lock:
+        with self._jog_estado:
+            self._jog_parado_en = time.monotonic()
             stop_event, thread = self._jog_stop, self._jog_thread
         if thread is not None and thread.is_alive():
             log(f"motor {self.nombre}: STOP pedido (posición {self.posicion_um:+.1f} µm)")

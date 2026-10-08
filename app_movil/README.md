@@ -392,21 +392,18 @@ tiene Bluetooth).
 Cosas que convendría cambiar en el backend para la app. No se tocó el
 backend.
 
-0. **⚠ Seguridad: `stop_jog()` puede tardar hasta 1.5 s en parar el motor**
-   (`core/motor_focus.py`). Afecta igual a la web y a la app. El hilo del
-   jog (`_jog_loop`) suelta el candado `self._lock` y lo vuelve a tomar
-   enseguida, en cada tanda de 8 micropasos; `stop_jog()` necesita ese
-   mismo candado para leer `_jog_stop`, y como los candados de Python no
-   son «justos», a veces no consigue su turno hasta que vence el watchdog.
-   Medido con el `FocusMotorController` real y el GPIO de
-   `tests/emuladores.py`: mediana 100 ms, pero 5 de 30 veces más de 300 ms
-   y el peor caso **1.55 s**. Con el paso grueso (8 micropasos) eso son
-   ~150 µm de más después de soltar el botón. La app manda el stop al
-   instante (lo verifican sus pruebas); el arreglo es en el servidor:
-   `stop_jog()` tiene que marcar el `Event` de parada **sin** esperar el
-   candado (un `threading.Event` ya es seguro entre hilos), y el bucle ya
-   lo revisa en cada tanda. El servidor falso reproduce el mismo
-   comportamiento a propósito.
+0. **⚠ Seguridad: el motor seguía girando después de soltar el botón del
+   foco** (`core/motor_focus.py`, afecta igual a la web). **Arreglado en el
+   PR #7, sin fusionar.** Eran dos cosas: (a) `stop_jog()` esperaba el
+   mismo candado que el hilo del motor toma en cada tanda, y como los
+   candados de Python no respetan turnos tardaba hasta **1.55 s** (medido
+   con el controlador real y GPIO falso: mediana 100 ms); (b) un pedido de
+   jog que salió antes de soltar y llegó después del stop volvía a arrancar
+   el motor hasta el watchdog (con un teléfono real: **+40 µm** de más). La
+   app manda el stop al instante; el arreglo tenía que ser en el servidor.
+   Con el PR #7 el stop tarda ~10 ms y los jogs que llegan menos de 0.5 s
+   después de un stop se ignoran. El servidor falso ya se porta como el
+   arreglado.
 1. **Versionar la API** (`/api/v1/...`) y decir en `/api/version` qué versión
    de la API y qué funciones tiene. Hoy la única forma de saber si una ruta
    existe es probarla y recibir 404 (pasó con el CO₂).

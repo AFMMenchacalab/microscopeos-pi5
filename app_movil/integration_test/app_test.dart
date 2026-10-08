@@ -36,16 +36,16 @@ void main() {
       await tester.pump();
     }
 
+    var convertido = false;
     Future<void> esperarA(Finder f, {int segundos = 20}) async {
       for (var i = 0; i < segundos * 10; i++) {
         await esperarReal(100);
         if (f.evaluate().isNotEmpty) return;
       }
-      await binding.takeScreenshot('error_no_aparecio');
+      if (convertido) await binding.takeScreenshot('error_no_aparecio');
       fail('No apareció: $f');
     }
 
-    var convertido = false;
     Future<void> captura(String nombre) async {
       if (!convertido) {
         await binding.convertFlutterSurfaceToImage();
@@ -99,10 +99,9 @@ void main() {
     expect(durante['jog_activo'], isTrue);
     await g.up();
     // La app manda el stop al soltar (lo verifican test/widgets/vivo_test.dart
-    // y el log del servidor). Cuánto tarda el MOTOR en parar depende del
-    // backend: stop_jog() de core/motor_focus.py espera el mismo candado que
-    // el hilo del jog y a veces tarda hasta el watchdog (1.5 s). Ver
-    // «Pendientes del backend» en el README. Aquí se mide y se exige < 2 s.
+    // y el log del servidor). El servidor falso tiene el arreglo del PR #7
+    // (antes stop_jog() podía tardar hasta 1.5 s): se exige < 500 ms,
+    // contando lo que tarda el teléfono en preguntar.
     final soltado = DateTime.now();
     late Map<String, dynamic> despues;
     do {
@@ -112,7 +111,7 @@ void main() {
     final ms = DateTime.now().difference(soltado).inMilliseconds;
     debugPrint('El motor paró $ms ms después de soltar');
     expect(despues['jog_activo'], isFalse, reason: 'el motor tiene que haber parado');
-    expect(ms, lessThan(2000));
+    expect(ms, lessThan(500));
     expect(despues['posicion_um'] as num, greaterThan(antes), reason: 'bajó');
 
     // Autofoco: tarda (en el falso, 8 s) y deja la imagen nítida.
