@@ -113,6 +113,8 @@ abstract final class Textos {
   static const btOtraRedVolver = 'Elegir otra red';
   static String btConfigurando(String red) => 'Conectando el microscopio a «$red»… tarda unos segundos.';
   static const btListo = 'El microscopio está en la red';
+  static const btNoSeEnvio =
+      'No se pudo enviar al microscopio. Si el teléfono preguntó «¿Vincular?», acepta y vuelve a intentar.';
 
   // ---------------------------------------------------------------- login remoto
   static const loginTitulo = 'Entrar con tu correo';

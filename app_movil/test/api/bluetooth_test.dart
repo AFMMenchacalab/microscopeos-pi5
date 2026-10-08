@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,6 +54,14 @@ void main() {
       final s = SesionEquipo(eq, cadaCuantoLeer: const Duration(milliseconds: 20));
       final e = await s.pedirCodigo();
       expect(e.paso, 'codigo');
+    });
+
+    test('si el «¿Vincular?» no se acepta, la escritura no queda colgada', () async {
+      final s = SesionEquipo(_Colgado(), esperaEscritura: const Duration(milliseconds: 100));
+      await expectLater(
+        s.pedirCodigo(),
+        throwsA(isA<ErrorEquipo>().having((e) => e.mensaje, 'mensaje', contains('Vincular'))),
+      );
     });
 
     test('si no contesta, avisa en vez de quedarse esperando', () async {
@@ -133,6 +143,11 @@ void main() {
       await desmontar(tester);
     });
   });
+}
+
+class _Colgado extends EquipoFalso {
+  @override
+  Future<void> escribirComando(List<int> datos) => Completer<void>().future;
 }
 
 class _Mudo extends EquipoFalso {

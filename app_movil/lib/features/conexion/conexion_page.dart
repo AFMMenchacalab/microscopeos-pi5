@@ -187,8 +187,11 @@ class _ConexionPageState extends ConsumerState<ConexionPage> {
                   subtitle: const Text(Textos.conexionBuscarBtDetalle, maxLines: 2),
                   trailing: const CupertinoListTileChevron(),
                   onTap: () async {
+                    final antes = ref.read(microscopiosProvider).actual?.url;
                     await BuscarBluetoothPage.abrir(context);
-                    if (context.mounted && widget.desdeAjustes && ref.read(microscopiosProvider).actual != null) {
+                    // Solo si se guardó otro microscopio (no al cancelar).
+                    final despues = ref.read(microscopiosProvider).actual?.url;
+                    if (context.mounted && widget.desdeAjustes && despues != null && despues != antes) {
                       Navigator.of(context).pop();
                     }
                   },

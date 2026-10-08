@@ -28,7 +28,8 @@ class AjustesPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final actual = ref.watch(microscopiosProvider.select((e) => e.actual));
     final tema = ref.watch(temaProvider);
-    final control = ref.watch(controlProvider).value;
+    final controlAsync = ref.watch(controlProvider);
+    final control = controlAsync.value;
     final version = ref.watch(versionProvider);
 
     return CupertinoPageScaffold(
@@ -112,7 +113,7 @@ class AjustesPage extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     title: Text(
                       control == null
-                          ? Textos.cargando
+                          ? (controlAsync.hasError ? '${controlAsync.error}' : Textos.cargando)
                           : control.tengoControl
                           ? Textos.controlTuyo
                           : control.controlador != null

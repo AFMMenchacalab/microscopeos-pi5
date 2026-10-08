@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../../textos.dart';
+
 /// Protocolo Bluetooth (BLE) de MicroscopeOS para configurar la red.
 ///
 /// El otro lado está en codigo/MicroscopeOS/core/servicio_bluetooth.py
@@ -141,6 +143,7 @@ class SesionEquipo {
     this.esperaComando = const Duration(seconds: 15),
     this.esperaWifi = const Duration(seconds: 75),
     this.cadaCuantoLeer = const Duration(seconds: 1),
+    this.esperaEscritura = const Duration(seconds: 40),
   });
 
   final EnlaceEquipo _enlace;
@@ -149,6 +152,9 @@ class SesionEquipo {
 
   /// Por si una notificación se pierde: se relee el estado cada tanto.
   final Duration cadaCuantoLeer;
+
+  /// Escribir un comando, incluido el emparejamiento la primera vez.
+  final Duration esperaEscritura;
   int _id = DateTime.now().millisecondsSinceEpoch % 100000;
 
   static EstadoEquipo _estadoDe(List<int> datos) {
@@ -197,7 +203,11 @@ class SesionEquipo {
       } catch (_) {}
     });
     try {
-      await _enlace.escribirComando(utf8.encode(jsonEncode({'id': id, ...datos})));
+      // La primera escritura dispara el «¿Vincular?» del teléfono: si nadie
+      // lo acepta, la escritura no termina nunca. Se corta y se explica.
+      await _enlace
+          .escribirComando(utf8.encode(jsonEncode({'id': id, ...datos})))
+          .timeout(esperaEscritura, onTimeout: () => throw const ErrorEquipo(Textos.btNoSeEnvio));
       final e = await resultado.future.timeout(
         espera ?? esperaComando,
         onTimeout: () => throw const ErrorEquipo('El microscopio no respondió a tiempo'),
