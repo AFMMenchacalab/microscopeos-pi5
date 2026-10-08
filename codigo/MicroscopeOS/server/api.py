@@ -1064,6 +1064,18 @@ def create_app(camera, illuminations, timelapse, motores=None,
         ok = temperature_controller.set_target_temperature(payload.value)
         return {"ok": ok, "error": temperature_controller.error_msg}
 
+    @app.post("/api/temperature/co2_setpoint")
+    def co2_setpoint(payload: SetpointPayload):
+        """CO2 objetivo de la incubadora en ppm (40000 = 4 %). El Arduino
+        lo recibe como SET_CO2:<ppm> (ver temperature_controller.py)."""
+        if not (400 <= payload.value <= 100000):
+            # set_target_co2 devuelve False sin decir por que: sin este
+            # aviso la pagina mostraba "Error: null".
+            return {"ok": False, "error": "El CO₂ tiene que estar entre 400 y "
+                    "100000 ppm (0.04 % y 10 %)"}
+        ok = temperature_controller.set_target_co2(payload.value)
+        return {"ok": ok, "error": None if ok else temperature_controller.error_msg}
+
     @app.get("/api/temperature/stream")
     async def temp_stream():
         async def gen():

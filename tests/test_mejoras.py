@@ -379,6 +379,7 @@ check("requiere control: mirar o anotar no",
       and not U.requiere_control("POST", "/live/start/0")
       and not U.requiere_control("POST", "/timelapse/nota"))
 check("borrar un experimento si", U.requiere_control("POST", "/api/exp/x/borrar"))
+check("cambiar el CO2 si", U.requiere_control("POST", "/api/temperature/co2_setpoint"))
 u.visto(ana); u.visto(beto)
 check("el primero que hace algo toma el control", u.puede(ana) == (True, None))
 check("el segundo no puede", u.puede(beto) == (False, "ana@lab.mx"))
@@ -541,6 +542,18 @@ r = cl.post("/api/reservas", json={"inicio": manana.isoformat(), "fin": (manana 
                                    "nota": "x"}, headers=ANA).json()
 check("reservar por la API", r["reserva"]["usuario"] == "ana@lab.mx")
 check("listar reservas", len(cl.get("/api/reservas").json()["reservas"]) == 1)
+
+# CO2 de la incubadora: la pagina llamaba a esta ruta y daba 404
+r = cl.post("/api/temperature/co2_setpoint", json={"value": 50000}, headers=BETO)
+check("co2_setpoint existe y sin Arduino dice por que",
+      r.status_code == 200 and r.json()["ok"] is False
+      and r.json()["error"] == "Arduino no conectado", r.text)
+r = cl.post("/api/temperature/co2_setpoint", json={"value": 200000}, headers=BETO).json()
+check("co2_setpoint fuera de rango explica el rango",
+      r["ok"] is False and "400" in r["error"] and "100000" in r["error"], r)
+check("co2_setpoint pide el control",
+      cl.post("/api/temperature/co2_setpoint", json={"value": 50000},
+              headers=ANA).status_code == 423)
 
 shutil.rmtree(tmp, ignore_errors=True)
 print("\n" + "=" * 50)

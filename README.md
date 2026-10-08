@@ -401,7 +401,7 @@ documenta solo en `/docs`.
 | Timelapse | `POST /timelapse/start` · `/timelapse/stop` · `GET /status` · `GET /timelapse/vista/{cam}` |
 | Enfoque | `POST /api/focus/move` · `/jog` · `/jog/stop` (watchdog de 1,5 s) · `/config` · `/auto` · `/calibrar` · `/pila` · `GET /api/focus/status` |
 | Conteo de células | `GET /api/analisis/estado` · `POST /api/analisis/config` · `/medir` · `/foto` · `/timelapse` |
-| Incubadora | `GET /api/temperature/status` · `/stream` (SSE) · `POST /api/temperature/setpoint` |
+| Incubadora | `GET /api/temperature/status` · `/stream` (SSE) · `POST /api/temperature/setpoint` · `/co2_setpoint` (ppm) |
 | Experimentos y galería | `GET /api/experimentos` · `GET /api/exp/{id}` y sus `/mini`, `/original`, `/info`, `/compartir`, `/zip` · `POST /api/exp/{id}/renombrar` · `/borrar` · `/usb` · `POST /api/papelera/restaurar` |
 | Óptica y marca de agua | `GET/POST /api/optica` · `GET/POST /api/marca` · `GET /api/marca/vista` · `POST /api/marca/logo` · `/logo/quitar` |
 | USB, PC y NAS | `GET /api/usb/estado` · `POST /api/usb/expulsar` · `/copiar` · `GET /api/envio/estado` · `POST /api/envio/config` · `/buscar` · `/probar` · `/reenviar` · lo mismo en `/api/nas/…` |
